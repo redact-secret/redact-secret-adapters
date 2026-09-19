@@ -1,8 +1,5 @@
 # @redact-secret/adapter-otel
 
-> **Not yet published.** This package is `"private": true` until its real-host
-> test has run in CI at both ends of the declared SDK range.
-
 A redacting OpenTelemetry JS `SpanProcessor`, over the
 [Redact Secret](https://github.com/redact-secret/redact-secret) core.
 

@@ -26,8 +26,8 @@ hosts actually move at.
 | --- | --- | --- | --- |
 | `@redact-secret/adapter` | npm | — (shared base) | Beta |
 | `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | Beta |
-| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | **Not yet published** |
-| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | Beta (`logging` only) |
+| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | Beta |
+| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | Beta |
 
 Every package declares a compatibility range against `@redact-secret/core` /
 `redact-secret` and is tested against the host versions it claims. A package is
@@ -153,7 +153,7 @@ exercises, at both ends of the declared range.
 | `adapter-pino` | `pino ^10.0.0` | a real `pino` logger writing to a captured stream |
 | `adapter-otel` | `@opentelemetry/sdk-trace-base ^2.0.0` | a real span passed through `onEnd` |
 | `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger` with the filter attached |
-| `redact-secret-adapters[otel]` | to be set with its test | — |
+| `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | a real span passed through a real `TracerProvider` |
 
 pino `9.x` is deliberately **not** in the declared range. It may work; it is not
 tested, so it is not claimed.

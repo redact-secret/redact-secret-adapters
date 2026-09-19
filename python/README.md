@@ -50,13 +50,30 @@ langfuse = Langfuse(mask=mask_secrets)
 `DEFAULT_LIMITS`: `max_depth` 8, `max_array_length` 1000, `max_object_keys` 200,
 `max_string_length` 200000, `max_total_leaves` 5000.
 
-## OpenTelemetry (`[otel]` extra) — not working yet
+## OpenTelemetry (`[otel]` extra)
 
-`redact_secret_adapters.otel` is included but **does not work against a real
-SDK**: `opentelemetry-sdk` 1.44.0 freezes a span's attributes before `on_end`
-runs, so in-place redaction raises `TypeError`. `tests/test_otel_host.py`
-records this as a strict expected failure. The extra has no version range, and
-is not a supported integration, until that test passes.
+```python
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from redact_secret_adapters.otel import create_redacting_span_processor
+
+provider = TracerProvider()
+provider.add_span_processor(create_redacting_span_processor(BatchSpanProcessor(otlp_exporter)))
+```
+
+Every string and string-sequence attribute on a span and its events is
+redacted before the span reaches the next processor, including OpenInference
+and GenAI semantic-convention attributes, without hardcoding either
+convention's attribute list. `opentelemetry-sdk` never hands a processor a
+public, mutable view of a span's attributes; the adapter reaches into the
+private `_attributes` field, and past that into its backing `_dict` to get
+past the SDK's own immutability guard on frozen attribute bags. See
+`redact_secret_adapters.otel` for why that's the SDK's own accepted
+mechanism, not a version-specific hack.
+
+Supported range: `opentelemetry-sdk>=1.16.0,<2` — CI runs
+`tests/test_otel_host.py`, a real `TracerProvider`/exporter round trip, at
+both ends of that range on every run.
 
 ## Development
 

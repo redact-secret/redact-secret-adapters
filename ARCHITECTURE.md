@@ -128,6 +128,16 @@ fail-closed rules exist to prevent. The test suite asserts mutation actually
 took effect on a real span, at both ends of the declared SDK range. That
 assertion is not optional.
 
+The Python SDK makes the same assumption false by construction rather than by
+version drift: `opentelemetry-sdk`'s `BoundedAttributes` marks every event's
+attributes immutable unconditionally, and a span's attributes immutable once
+`Span.end()` runs, in every declared version — always before any processor
+hook fires. `redact_secret_adapters.otel` writes through `BoundedAttributes`'
+backing `_dict` instead of `__setitem__`, which is the same bypass
+`BoundedAttributes.__deepcopy__` uses internally, not a version-specific
+workaround. The real-host test is otherwise the same shape as the JS one, at
+both ends of the Python SDK's declared range.
+
 ### Python `logging`
 
 The filter walks the record's `msg`, `args` and any exception info through the
