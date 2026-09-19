@@ -42,7 +42,7 @@ Issues = "https://github.com/redact-secret/redact-secret-adapters/issues"
 packages = ["redact_secret_adapters"]
 
 [tool.hatch.build.targets.sdist]
-include = ["redact_secret_adapters", "README.md", "LICENSE"]
+include = ["redact_secret_adapters", "README.md", "LICENSE", "CHANGELOG.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
