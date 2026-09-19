@@ -2,21 +2,16 @@
 ``TracerProvider``, read back from a real in-memory exporter.
 
 ``ReadableSpan.attributes`` is a read-only ``MappingProxyType``; the
-processor reaches into the private ``_attributes`` field instead. If an SDK
-version renames that field or hands ``on_end`` a copy, the processor becomes
-a silent no-op and plaintext reaches the exporter with no error anywhere.
-The duck-typed tests in ``test_otel.py`` cannot see that; this one can.
+processor reaches into the private ``_attributes`` field instead, and past
+that into its backing ``_dict`` to get past the SDK's own immutability
+guard (see ``redact_secret_adapters.otel`` for why that's a real API, not a
+hack). If an SDK version restructures that field or hands ``on_end`` a
+copy, the processor becomes a silent no-op and plaintext reaches the
+exporter with no error anywhere. The duck-typed tests in ``test_otel.py``
+cannot see that; this one can.
 
-KNOWN FAILURE, recorded as a strict ``xfail``: against opentelemetry-sdk
-1.44.0 -- the version the original example claimed to be pinned against --
-``Span.end()`` sets ``self._attributes._immutable = True`` *before* calling
-``on_end``, so the processor's ``attributes[key] = ...`` raises ``TypeError``
-out of the host application's ``span.end()``. The example this module was
-ported from was only ever tested with plain-dict stand-ins. The ``otel``
-extra therefore does not work yet, and its version range in
-``pyproject.toml`` stays a TODO until this test passes at both ends of one.
-``strict=True`` makes the suite fail the moment this starts passing, so the
-marker cannot outlive the defect.
+CI runs this at both ends of the declared ``opentelemetry-sdk`` range.
+``adapter-otel`` stays ``"private": true`` until it does.
 
 Skipped when ``opentelemetry-sdk`` is not installed.
 """
@@ -37,11 +32,6 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from redact_secret_adapters.otel import RedactingSpanProcessorWith  # noqa: E402
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=TypeError,
-    reason="opentelemetry-sdk freezes Span._attributes before on_end; in-place redaction raises TypeError",
-)
 def test_a_real_spans_attributes_are_actually_mutated_before_the_exporter_sees_them() -> None:
     exporter = InMemorySpanExporter()
     provider = TracerProvider()

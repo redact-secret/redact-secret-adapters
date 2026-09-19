@@ -1,7 +1,4 @@
-"""NOT YET WORKING against a real SDK -- see "Known defect" below.
-
-A SpanProcessor (OpenTelemetry Python, pinned against
-opentelemetry-sdk==1.44.0:
+"""A SpanProcessor (OpenTelemetry Python,
 https://github.com/open-telemetry/opentelemetry-python/blob/main/opentelemetry-sdk/src/opentelemetry/sdk/trace/__init__.py)
 that redacts every string and string-sequence attribute -- including
 OpenInference and GenAI semantic-convention attributes -- on a span and
@@ -11,21 +8,26 @@ scanned, which covers any semantic convention without hardcoding it and
 without a dependency on either convention's attribute list.
 
 ``ReadableSpan.attributes`` returns a read-only ``MappingProxyType`` in
-the pinned SDK version -- there is no public mutation API before export.
-This reaches into the private ``_attributes`` field instead (and each
-event's ``_attributes``), which is the accepted workaround for OTel
+every declared SDK version -- there is no public mutation API before
+export. This reaches into the private ``_attributes`` field instead (and
+each event's ``_attributes``), which is the accepted workaround for OTel
 Python redaction processors absent a public API. If a future SDK version
 removes or renames that field, ``tests/test_otel_host.py``'s exporter
 assertion fails loudly instead of silently letting plaintext through --
 it does not assume the field is `None`-safe by construction.
 
-Known defect: opentelemetry-sdk 1.44.0's ``Span.end()`` marks
-``_attributes`` immutable *before* it calls ``on_end``, so the in-place
-assignment below raises ``TypeError`` out of the host's ``span.end()``. It
-fails loudly, not open -- no plaintext is exported by this processor's
-hand -- but it is not a usable integration. ``tests/test_otel_host.py``
-records this as a strict expected failure; the ``otel`` extra stays
-unranged and unadvertised until that test passes.
+The ``_attributes`` field is a ``BoundedAttributes`` -- a ``MutableMapping``
+that raises ``TypeError`` from ``__setitem__`` once its own ``_immutable``
+flag is set. Every SDK version in the declared range sets that flag
+unconditionally for event attributes (an event, once recorded, is meant to
+be immutable) and, from opentelemetry-sdk 1.43 onward, for span attributes
+too as of ``Span.end()`` -- in both cases *before* any processor hook runs,
+so there is no callback timing that reaches attributes while they are still
+mutable through ``__setitem__``. This writes through the backing
+``_dict`` instead, which ``BoundedAttributes.__deepcopy__`` itself uses for
+the same reason ("bypass the immutability guard in __setitem__"): it is the
+SDK's own accepted way to mutate a frozen bag, not a version-specific
+workaround, so it doesn't need gating by which SDK version is installed.
 
 This module does not import ``opentelemetry`` at all: ``SpanProcessor``'s
 ``on_start``/``on_end``/``shutdown``/``force_flush`` are plain (non-
@@ -77,14 +79,21 @@ def redact_attributes_with(
     policy: Optional[Any] = None,
     limits: Optional[dict] = None,
 ) -> None:
-    """Mutates `attributes` (a real, mutable dict) in place. A no-op for
-    `None`."""
+    """Mutates `attributes` in place. A no-op for `None`.
+
+    `attributes` is a plain dict in the duck-typed tests and a real SDK
+    `BoundedAttributes` against a live SpanProcessor; the latter is a
+    `MutableMapping` whose `__setitem__` raises once it's marked immutable
+    (every event's attributes, and every span's once `Span.end()` has run).
+    Writing through its backing `_dict` -- present only on that real type --
+    bypasses that guard instead of tripping it."""
     if attributes is None:
         return
     max_string_length = (limits or {}).get("max_string_length")
-    for key in list(attributes.keys()):
-        attributes[key] = _mask_attribute_value(
-            scan_and_redact, attributes[key], policy=policy, max_string_length=max_string_length
+    target = getattr(attributes, "_dict", attributes)
+    for key in list(target.keys()):
+        target[key] = _mask_attribute_value(
+            scan_and_redact, target[key], policy=policy, max_string_length=max_string_length
         )
 
 
@@ -117,10 +126,12 @@ class RedactingSpanProcessorWith:
 
     def _on_ending(self, span: "Span") -> None:
         # Not part of the duck-typed surface the original example assumed:
-        # opentelemetry-sdk 1.44.0 calls this private hook on every
+        # opentelemetry-sdk 1.40 and above call this private hook on every
         # registered processor, unconditionally, so a class without it
-        # raises AttributeError out of `Span.end()` -- found by
-        # tests/test_otel_host.py, the first test to use a real SDK.
+        # raises AttributeError out of `Span.end()` on those versions --
+        # found by tests/test_otel_host.py, the first test to use a real
+        # SDK. Versions below 1.40 never call it at all, so this is a no-op
+        # there, not a version check.
         on_ending = getattr(self._next, "_on_ending", None)
         if callable(on_ending):
             on_ending(span)

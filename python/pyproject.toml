@@ -20,10 +20,17 @@ classifiers = [
 dependencies = ["redact-secret>=0.1.0b4,<0.2"]
 
 [project.optional-dependencies]
-# TODO(range): opentelemetry-sdk is deliberately unbounded. There is no
-# evidence for a range yet; set one when tests/test_otel_host.py has been run
-# at both ends of it. Do not invent numbers.
-otel = ["opentelemetry-sdk"]
+# Range evidence: tests/test_otel_host.py passes at every version from
+# 1.16.0 (the CI floor) through 1.44.0 (the latest published at range-check
+# time). 1.16.0 is the floor opentelemetry-api dropped `pkg_resources` for
+# entry-point loading (opentelemetry-api<1.16 imports `pkg_resources`,
+# which isn't installed by default in a modern venv); every version at or
+# below 1.15.0 that was tried failed to import for that reason, not a
+# redaction defect. `<2` matches the ceiling style of the JS peer range
+# (`@opentelemetry/sdk-trace-base": "^2.0.0"`): CI resolves and tests
+# both ends of the live range on every run, so a new 1.x release is
+# covered without a manifest edit.
+otel = ["opentelemetry-sdk>=1.16.0,<2"]
 test = ["pytest>=8"]
 
 [project.urls]

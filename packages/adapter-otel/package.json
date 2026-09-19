@@ -5,7 +5,6 @@
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
-  "private": true,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
