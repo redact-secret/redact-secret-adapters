@@ -23,7 +23,9 @@
     "test": "vitest run",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "range-endpoint": "node scripts/install-range-endpoint.mjs"
+    "range-endpoint": "node scripts/install-range-endpoint.mjs",
+    "verify-pack-contents": "node scripts/verify-pack-contents.mjs",
+    "smoke-test": "node scripts/smoke-test-npm-packages.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
