@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Asserts the exact file list `npm pack` would ship for every workspace,
- * against `files: ["dist", "README.md", "LICENSE"]` in each package.json
- * (`package.json` itself is always included by npm and is allowed too).
+ * against `files: ["dist", "CHANGELOG.md", "README.md", "LICENSE"]` in each
+ * package.json (`package.json` itself is always included by npm and is
+ * allowed too).
  * Run after `npm run build`, so `dist` is populated the way a real publish
  * would see it — an empty or stale `dist` would otherwise pass silently.
  *
@@ -18,7 +19,7 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 
 const packagesDir = new URL("../packages/", import.meta.url);
-const allowedTopLevel = new Set(["README.md", "LICENSE", "package.json"]);
+const allowedTopLevel = new Set(["README.md", "LICENSE", "CHANGELOG.md", "package.json"]);
 
 function listFilesRecursive(dirUrl, prefix = "") {
   let out = [];
@@ -60,7 +61,7 @@ for (const dir of readdirSync(packagesDir)) {
   for (const expected of expectedDist) {
     if (!paths.includes(expected)) problems.push(`missing ${expected}`);
   }
-  for (const required of ["README.md", "LICENSE", "package.json"]) {
+  for (const required of ["README.md", "LICENSE", "CHANGELOG.md", "package.json"]) {
     if (!paths.includes(required)) problems.push(`missing ${required}`);
   }
 
