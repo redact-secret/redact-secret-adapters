@@ -1,0 +1,47 @@
+{
+  "name": "@redact-secret/adapter-pino",
+  "version": "0.1.0",
+  "description": "Value-based secret redaction for pino, via hooks.logMethod, over the Redact Secret core.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-adapters.git",
+    "directory": "packages/adapter-pino"
+  },
+  "homepage": "https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-pino#readme",
+  "bugs": {
+    "url": "https://github.com/redact-secret/redact-secret-adapters/issues"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@redact-secret/adapter": "^0.1.0",
+    "@redact-secret/core": "^0.1.0-beta.4"
+  },
+  "peerDependencies": {
+    "pino": "^10.0.0"
+  },
+  "devDependencies": {
+    "pino": "^10.0.0",
+    "quick-format-unescaped": "4.0.4"
+  }
+}

@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "redact-secret-adapters"
+version = "0.1.0"
+description = "Host integrations for Redact Secret: stdlib logging and OpenTelemetry adapters over the deterministic core."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+  "Topic :: System :: Logging",
+  "Typing :: Typed",
+]
+dependencies = ["redact-secret>=0.1.0b4,<0.2"]
+
+[project.optional-dependencies]
+# TODO(range): opentelemetry-sdk is deliberately unbounded. There is no
+# evidence for a range yet; set one when tests/test_otel_host.py has been run
+# at both ends of it. Do not invent numbers.
+otel = ["opentelemetry-sdk"]
+test = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/redact-secret/redact-secret-adapters"
+Repository = "https://github.com/redact-secret/redact-secret-adapters"
+Issues = "https://github.com/redact-secret/redact-secret-adapters/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["redact_secret_adapters"]
+
+[tool.hatch.build.targets.sdist]
+include = ["redact_secret_adapters", "README.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

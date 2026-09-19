@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22", "24"]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+
+  range-endpoints:
+    # A typecheck only covers the versions that are installed, so every
+    # declared range — each peerDependency and the core — is exercised at both
+    # ends. The tests run too: the real-host tests are what prove a host range.
+    name: Range endpoint (${{ matrix.end }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        end: [lowest, highest]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run range-endpoint -- ${{ matrix.end }}
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e "./python[otel,test]"
+      - run: pytest
+
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install ruff==0.16.8
+      - run: ruff check python
+      - run: ruff format --check python

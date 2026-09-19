@@ -1,0 +1,34 @@
+{
+  "name": "redact-secret-adapters",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Host integrations for Redact Secret: logging and tracing adapters over the deterministic core.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-adapters.git"
+  },
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "workspaces": [
+    "packages/adapter",
+    "packages/adapter-pino",
+    "packages/adapter-otel"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "vitest run",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "range-endpoint": "node scripts/install-range-endpoint.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@types/node": "^20.19.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
