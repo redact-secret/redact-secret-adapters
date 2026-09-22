@@ -22,12 +22,21 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ### Changed
 
+- `createRedactingSpanProcessor` loads `@redact-secret/core` on call, like
+  `@redact-secret/adapter`'s `createMaskSecrets`, so importing the injected
+  API never loads the native core. No API change.
+- `MaskLeafOptions` is re-exported for typing `options`.
 - `@redact-secret/core ^0.1.0-beta.6` moves from `dependencies` to
   `peerDependencies`, same range. As a regular dependency, a core version in
   the application outside that range installed a second, separately
   initialized copy of the native core. Now there is exactly one. npm 7+ and
   pnpm install a required peer automatically. Backed by the same range-endpoint
   CI jobs, which already resolved the core range from either field.
+
+### Deprecated
+
+- `RedactAttributesOptions`, an alias of `MaskLeafOptions` that adds nothing.
+  It still works and will be removed in a future major version.
 
 ### Fixed
 

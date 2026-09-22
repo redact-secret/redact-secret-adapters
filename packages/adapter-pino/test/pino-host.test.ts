@@ -48,14 +48,14 @@ test("ordinary formatting with no secret reaches the destination unchanged", () 
   expect(lines()).toEqual([{ level: 30, msg: "user alice logged in from 10.0.0.1" }]);
 });
 
-test("issue #361: a contextual assignment split across msg and an interpolation value is redacted before pino ever formats it", () => {
+test("a contextual assignment split across msg and an interpolation value is redacted before pino ever formats it", () => {
   const { logger, lines, raw } = capturingLogger();
   logger.info("api_key=%s", "SECRET_TOKEN_1");
   expect(lines()).toEqual([{ level: 30, msg: "api_key=<SECRET_1>" }]);
   expect(raw()).not.toContain("SECRET_TOKEN_1");
 });
 
-test("issue #361: a provider token split across two interpolation values is redacted", () => {
+test("a provider token split across two interpolation values is redacted", () => {
   const { logger, lines, raw } = capturingLogger();
   logger.info("token is %s%s", "SECRET_TOKEN_", "1");
   expect(lines()).toEqual([{ level: 30, msg: "token is <SECRET_1>" }]);
@@ -106,14 +106,14 @@ test("logger.error(err, fmt, ...values) formats the caller's message, not err.me
   expect(line.err.message).toBe("at 50%s");
 });
 
-test("issue #361: a block finding on the joined message replaces the whole message pino writes", () => {
+test("a block finding on the joined message replaces the whole message pino writes", () => {
   const { logger, lines, raw } = capturingLogger();
   logger.info("prefix %s suffix", "BLOCK_ME");
   expect(lines()).toEqual([{ level: 30, msg: "[REDACTED:BLOCKED]" }]);
   expect(raw()).not.toContain("BLOCK_ME");
 });
 
-test("issue #361: a scanner failure on the joined message fails closed in the destination bytes", () => {
+test("a scanner failure on the joined message fails closed in the destination bytes", () => {
   const { logger, lines, raw } = capturingLogger();
   logger.info("trigger %s here", "BOOM");
   expect(lines()).toEqual([{ level: 30, msg: "[REDACTED:ERROR]" }]);

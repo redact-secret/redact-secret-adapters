@@ -21,6 +21,12 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ### Changed
 
+- `createRedactingLogMethod` and `createRedactingStreamWrite` load
+  `@redact-secret/core` on call, like `@redact-secret/adapter`'s
+  `createMaskSecrets`, so importing the injected API never loads the native
+  core. No API change.
+- `formatPinoMessage` is marked `@internal`: still exported for
+  compatibility, but not a supported API.
 - `@redact-secret/core ^0.1.0-beta.6` moves from `dependencies` to
   `peerDependencies`, same range. As a regular dependency, a core version in
   the application outside that range installed a second, separately

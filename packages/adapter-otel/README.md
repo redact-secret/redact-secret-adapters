@@ -40,7 +40,8 @@ assertion is not optional.
 | `RedactingSpanProcessorWith` | `new (next, scanAndRedact, options?)` — injected scanner |
 | `redactAttributesWith(scanAndRedact, attributes, options?)` | Mutates one attribute bag in place; throws a `TypeError` (naming no value) if it cannot |
 
-`options` is `{ policy, maxStringLength }`. See
+`options` is `MaskLeafOptions` (`{ policy, maxStringLength }`), re-exported
+here; the older `RedactAttributesOptions` alias is deprecated. See
 [`@redact-secret/adapter`](../adapter#fail-closed-markers) for the markers.
 
 ## Supported SDK versions

@@ -7,8 +7,7 @@
  * from a real `BasicTracerProvider`, read back from a real exporter, can.
  *
  * CI runs this at both ends of the declared
- * `@opentelemetry/sdk-trace-base` peer range. `adapter-otel` stays
- * `"private": true` until it does.
+ * `@opentelemetry/sdk-trace-base` peer range.
  */
 
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";

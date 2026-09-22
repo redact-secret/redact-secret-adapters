@@ -31,9 +31,9 @@ import type { MaskLeafOptions, ScanAndRedact } from "@redact-secret/adapter";
 import { ERROR_MARKER, maskLeafWith } from "@redact-secret/adapter";
 
 /**
- * Options for the span processor: `policy` and `maxStringLength`, passed
- * straight to `maskLeafWith`. Attribute bags are flat, so no walk budget
- * applies.
+ * @deprecated Use `MaskLeafOptions` (`{ policy, maxStringLength }`), which
+ * this package re-exports; this alias adds nothing and will be removed in a
+ * future major version.
  */
 export type RedactAttributesOptions = MaskLeafOptions;
 
@@ -91,7 +91,7 @@ function redactBag(mask: Mask, bag: object | null | undefined, field: string): v
 export function redactAttributesWith(
   scanAndRedact: ScanAndRedact,
   attributes: object | null | undefined,
-  options: RedactAttributesOptions = {},
+  options: MaskLeafOptions = {},
 ): void {
   try {
     redactBag(maskerFor(scanAndRedact, options), attributes, "attributes");
@@ -129,7 +129,7 @@ export class RedactingSpanProcessorWith implements SpanProcessor {
   readonly #mask: Mask;
   #warned = false;
 
-  constructor(next: SpanProcessor, scanAndRedact: ScanAndRedact, options: RedactAttributesOptions = {}) {
+  constructor(next: SpanProcessor, scanAndRedact: ScanAndRedact, options: MaskLeafOptions = {}) {
     if (typeof next?.onEnd !== "function") {
       throw new TypeError("RedactingSpanProcessorWith: next must be a SpanProcessor");
     }

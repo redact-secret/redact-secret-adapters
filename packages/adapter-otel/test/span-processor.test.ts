@@ -9,7 +9,12 @@ import type { ScanAndRedact } from "@redact-secret/adapter";
 import { expect, test, vi } from "vitest";
 
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
-import { RedactingSpanProcessorWith, redactAttributesWith } from "../src/index.js";
+import {
+  type MaskLeafOptions,
+  type RedactAttributesOptions,
+  RedactingSpanProcessorWith,
+  redactAttributesWith,
+} from "../src/index.js";
 
 interface PlainSpan {
   name?: string;
@@ -194,6 +199,14 @@ test("onEnding is forwarded when the wrapped processor has it, and a no-op when 
 
   const without = new RedactingSpanProcessorWith(fakeNextProcessor([]).next, fakeScanAndRedact);
   expect(() => without.onEnding("span-2" as unknown as Span)).not.toThrow();
+});
+
+test("the deprecated RedactAttributesOptions alias still typechecks as MaskLeafOptions", () => {
+  const options: RedactAttributesOptions = { maxStringLength: 5 };
+  const same: MaskLeafOptions = options;
+  const attributes = { long: "SECRET_TOKEN_1" };
+  redactAttributesWith(fakeScanAndRedact, attributes, same);
+  expect(attributes.long).toBe("[REDACTED:LIMIT_EXCEEDED]");
 });
 
 test("redactAttributesWith is a no-op for undefined or null attributes", () => {

@@ -66,7 +66,7 @@ limits.
 | `createRedactingStreamWrite(options?)` | Live: awaits the core's `initialize()`, returns a `hooks.streamWrite` |
 | `createRedactingLogMethodWith(scanAndRedact, options?)` | The `logMethod` hook over an injected scanner |
 | `createRedactingStreamWriteWith(scanAndRedact, options?)` | The `streamWrite` hook over an injected scanner |
-| `formatPinoMessage(fmt, values)` | The port of pino's message formatter the hook joins with |
+| `formatPinoMessage(fmt, values)` | Internal: the port of pino's message formatter the hook joins with. Kept for compatibility, not a supported API |
 
 `options` is `{ policy, limits }`.
 
