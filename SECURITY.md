@@ -40,16 +40,17 @@ are not backported. A fix may require upgrading `@redact-secret/core` /
 against the core rather than vendoring it — the fix isn't complete until
 both sides of that range are upgraded.
 
-Before the first publish of a package, any reported issue is fixed directly
-on `main`; there is no "supported version" yet to patch separately.
+A security fix ships like any other change: a PR into `develop`, released
+by the next train ([RELEASING.md](./RELEASING.md)). A fix for a train that
+is still open can go in as a PR into its `rc/<train>` branch instead.
+Nothing is fixed on `main` directly; it only ever receives `release`.
 
 ## Reporting a vulnerability
 
 **Never include a real credential, token, or other live secret in a report**
-— in the report text, a reproduction, a fixture, a log, or a screenshot. Use
-unmistakably synthetic or already-revoked values only, the same standard
-this repository holds its own fixtures to (see
-[ARCHITECTURE.md § Security boundary](./ARCHITECTURE.md#security-boundary)).
+— in the text, a reproduction, a log, or a screenshot. Use synthetic or
+already-revoked values, as the repository's own fixtures do
+([ARCHITECTURE.md § Security boundary](./ARCHITECTURE.md#security-boundary)).
 
 Report suspected vulnerabilities privately through this repository's
 [GitHub security advisory form](https://github.com/redact-secret/redact-secret-adapters/security/advisories/new),
