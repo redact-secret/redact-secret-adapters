@@ -117,6 +117,17 @@ test("onStart, shutdown, and forceFlush delegate to the wrapped processor", asyn
   expect(await processor.forceFlush()).toBe("flushed");
 });
 
+test("onEnding is forwarded when the wrapped processor has it, and a no-op when it does not", () => {
+  const ending: unknown[] = [];
+  const { next } = fakeNextProcessor([]);
+  const withHook = Object.assign(next, { onEnding: (span: unknown) => ending.push(span) });
+  new RedactingSpanProcessorWith(withHook, fakeScanAndRedact).onEnding("span-1" as unknown as Span);
+  expect(ending).toEqual(["span-1"]);
+
+  const without = new RedactingSpanProcessorWith(fakeNextProcessor([]).next, fakeScanAndRedact);
+  expect(() => without.onEnding("span-2" as unknown as Span)).not.toThrow();
+});
+
 test("redactAttributesWith is a no-op for undefined or null attributes", () => {
   expect(() => redactAttributesWith(fakeScanAndRedact, undefined)).not.toThrow();
   expect(() => redactAttributesWith(fakeScanAndRedact, null)).not.toThrow();

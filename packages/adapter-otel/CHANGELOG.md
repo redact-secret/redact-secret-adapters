@@ -22,6 +22,8 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ### Fixed
 
+- The SDK's optional `onEnding` hook is now forwarded to the wrapped
+  processor. Before, a wrapped processor that relied on it never saw it.
 - The span name, every event's name, the status message, and every link's
   attributes are now redacted; before, only span and event attributes were.
 - A string-array attribute with a `null` or `undefined` element is now

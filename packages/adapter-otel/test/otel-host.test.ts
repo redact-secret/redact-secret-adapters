@@ -81,6 +81,27 @@ test("a real span's name, event name, status message, and link attributes are re
   await provider.shutdown();
 });
 
+test("the SDK's onEnding reaches the wrapped processor exactly when the SDK calls it at all", async () => {
+  const recorder = (into: string[]) => ({
+    onStart() {},
+    onEnding(span: { name: string }) {
+      into.push(span.name);
+    },
+    onEnd() {},
+    shutdown: () => Promise.resolve(),
+    forceFlush: () => Promise.resolve(),
+  });
+  const direct: string[] = [];
+  const wrapped: string[] = [];
+  const provider = new BasicTracerProvider({
+    spanProcessors: [recorder(direct), new RedactingSpanProcessorWith(recorder(wrapped), fakeScanAndRedact)],
+  });
+  provider.getTracer("adapter-otel-host-test").startSpan("ending-probe").end();
+  // sdk-trace-base 2.0.0 has no onEnding; later 2.x versions call it.
+  expect(wrapped).toEqual(direct);
+  await provider.shutdown();
+});
+
 test("the SDK hands onEnd mutable attribute bags — the assumption this adapter rests on", async () => {
   const frozen: boolean[] = [];
   const probe = new RedactingSpanProcessorWith(

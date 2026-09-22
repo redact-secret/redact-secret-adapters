@@ -25,7 +25,7 @@
  * plain object.
  */
 
-import type { ReadableSpan, SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { MaskLeafOptions, ScanAndRedact } from "@redact-secret/adapter";
 import { maskLeafWith } from "@redact-secret/adapter";
 
@@ -91,6 +91,15 @@ export class RedactingSpanProcessorWith implements SpanProcessor {
 
   onStart(...args: Parameters<SpanProcessor["onStart"]>): void {
     this.#next.onStart?.(...args);
+  }
+
+  /**
+   * Forwards the SDK's optional, experimental `onEnding` (called while the
+   * span is still writable). Typed structurally: it is absent from the
+   * `SpanProcessor` interface at the low end of the declared SDK range.
+   */
+  onEnding(span: Span): void {
+    (this.#next as { onEnding?: (span: Span) => void }).onEnding?.(span);
   }
 
   onEnd(span: ReadableSpan): void {
