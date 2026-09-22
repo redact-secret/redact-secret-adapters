@@ -6,13 +6,17 @@ scanner stands in for the core.
 from __future__ import annotations
 
 import json
+import re
 import unittest
+from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fake_scanner import fake_scan_and_redact
+from fake_scanner import RecordingScanner, fake_scan_and_redact
 
+import redact_secret_adapters
 from redact_secret_adapters.mask_leaf import BLOCK_MARKER, CYCLE_MARKER, ERROR_MARKER, LIMIT_MARKER
+from redact_secret_adapters.mask_log_value import mask_log_value_with
 from redact_secret_adapters.mask_secrets import mask_secrets_with
 
 FIXTURES_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "mask-secrets-cases.json"
@@ -58,6 +62,52 @@ class MaskSecretsWithTest(unittest.TestCase):
         self.assertIsNone(result["missing"])
         self.assertIs(result["when"], when)
 
+    def test_tuples_and_dict_list_subclasses_are_walked(self) -> None:
+        class TagList(list):
+            pass
+
+        data = {
+            "tuple": ("ok", "SECRET_TOKEN_1 a"),
+            "ordered": OrderedDict([("k", "SECRET_TOKEN_2 b")]),
+            "default": defaultdict(list, {"k": ["SECRET_TOKEN_3 c"]}),
+            "tags": TagList(["SECRET_TOKEN_4 d"]),
+        }
+        for mask in (mask_secrets_with, mask_log_value_with):
+            with self.subTest(mask=mask.__name__):
+                result = mask(fake_scan_and_redact, data)
+                self.assertEqual(
+                    result,
+                    {
+                        "tuple": ("ok", "<SECRET_1> a"),
+                        "ordered": {"k": "<SECRET_1> b"},
+                        "default": {"k": ["<SECRET_1> c"]},
+                        "tags": ["<SECRET_1> d"],
+                    },
+                )
+                # Subclasses come back as the plain container.
+                self.assertIs(type(result["tuple"]), tuple)
+                self.assertIs(type(result["ordered"]), dict)
+                self.assertIs(type(result["tags"]), list)
+
+    def test_exceptions_are_walked_by_the_masking_callback_too(self) -> None:
+        result = mask_secrets_with(fake_scan_and_redact, {"error": ValueError("SECRET_TOKEN_1 leaked")})
+        self.assertEqual(result["error"]["type"], "ValueError")
+        self.assertEqual(result["error"]["message"], "<SECRET_1> leaked")
+        self.assertNotIn("SECRET_TOKEN_1", json.dumps(result))
+
+    def test_tuple_limits_and_cycles_match_lists(self) -> None:
+        self.assertEqual(
+            mask_secrets_with(fake_scan_and_redact, ("a", "b", "c"), limits={"max_array_length": 2}), ("a", "b")
+        )
+        self.assertEqual(
+            mask_secrets_with(fake_scan_and_redact, {"t": ("SECRET_TOKEN_1",)}, limits={"max_depth": 1}),
+            {"t": LIMIT_MARKER},
+        )
+        inner: list = []
+        outer = (inner,)
+        inner.append(outer)
+        self.assertEqual(mask_secrets_with(fake_scan_and_redact, outer), ([CYCLE_MARKER],))
+
     def test_depth_beyond_limit_is_marked_rather_than_walked(self) -> None:
         data = {"a": {"b": {"c": "SECRET_TOKEN_1"}}}
         result = mask_secrets_with(fake_scan_and_redact, data, limits={"max_depth": 1})
@@ -91,9 +141,25 @@ class MaskSecretsWithTest(unittest.TestCase):
         result = mask_secrets_with(fake_scan_and_redact, data, limits={"max_string_length": 10})
         self.assertEqual(result["blob"], LIMIT_MARKER)
 
+    def test_policy_reaches_the_scanner(self) -> None:
+        policy = object()
+        for mask in (mask_secrets_with, mask_log_value_with):
+            with self.subTest(mask=mask.__name__):
+                scanner = RecordingScanner()
+                mask(scanner, {"a": "x", "b": ["y", ("z",)]}, policy=policy)
+                self.assertEqual([text for text, _ in scanner.calls], ["x", "y", "z"])
+                self.assertTrue(all(called_policy is policy for _, called_policy in scanner.calls))
+
     def test_rejects_non_callable_scan_and_redact(self) -> None:
         with self.assertRaises(TypeError):
             mask_secrets_with(None, {})
+
+
+class PackageVersionTest(unittest.TestCase):
+    def test_version_comes_from_pyproject(self) -> None:
+        pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+        declared = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE).group(1)
+        self.assertEqual(redact_secret_adapters.__version__, declared)
 
 
 if __name__ == "__main__":

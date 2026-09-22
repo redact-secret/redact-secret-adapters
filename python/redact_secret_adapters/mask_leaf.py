@@ -59,9 +59,11 @@ def mask_leaf_with(
 
     try:
         result = scan_and_redact(text, policy)
+        # Reading the result is inside the guard too: a malformed result
+        # must not raise into the host or pass the input through.
+        if any(finding.action == "block" for finding in result.findings):
+            return BLOCK_MARKER
+        masked = result.text
     except Exception:
         return ERROR_MARKER
-
-    if any(finding.action == "block" for finding in result.findings):
-        return BLOCK_MARKER
-    return result.text
+    return masked if isinstance(masked, str) else ERROR_MARKER
