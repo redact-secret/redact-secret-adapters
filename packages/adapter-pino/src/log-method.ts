@@ -79,32 +79,45 @@ function asMaskedError(original: Error, masked: unknown): unknown {
   return out;
 }
 
-function hasMergingObjectFirst(args: unknown[]): boolean {
-  return args.length > 0 && typeof args[0] === "object" && args[0] !== null;
+/**
+ * Where pino's `LOG` reads the message: after a first argument that is an
+ * object (`null` included) or `undefined`, else the first argument itself.
+ */
+function messageIndex(args: unknown[]): number {
+  const first = args[0];
+  return first === undefined || typeof first === "object" ? 1 : 0;
 }
 
 /**
  * Folds `msg` and any trailing printf-style interpolation values into the
  * single string pino would format, so the redaction pass below sees it as
- * one leaf. A no-op for every other shape — a bare message with nothing
- * after it, a non-string `msg`, or a merging object with no message —
- * which all fall through to the existing per-leaf walk unchanged.
+ * one leaf. A no-op when `msg` is not a string or has nothing after it.
  */
-function joinInterpolatedMessage(args: unknown[]): unknown[] {
-  const msgIndex = hasMergingObjectFirst(args) ? 1 : 0;
+function joinInterpolatedMessage(args: unknown[], msgIndex: number): unknown[] {
   const msg = args[msgIndex];
   if (typeof msg !== "string" || args.length <= msgIndex + 1) {
     return args;
   }
-  const joined = formatPinoMessage(msg, args.slice(msgIndex + 1));
-  return msgIndex === 1 ? [args[0], joined] : [joined];
+  return [...args.slice(0, msgIndex), formatPinoMessage(msg, args.slice(msgIndex + 1))];
 }
 
-function redactArgs(scanAndRedact: ScanAndRedact, args: unknown[], options: MaskOptions): unknown[] {
-  const joined = joinInterpolatedMessage(args);
+function redactArgs(scanAndRedact: ScanAndRedact, args: unknown[], prefix: unknown, options: MaskOptions): unknown[] {
+  const msgIndex = messageIndex(args);
+  const joined = joinInterpolatedMessage(args, msgIndex);
+  // pino prepends `msgPrefix` after this hook returns, so scan it with the
+  // message (a prefix like "api_key=" is the context that makes the value
+  // detectable), then hand pino the message without it again.
+  const prefixed = typeof prefix === "string" && prefix !== "" && typeof joined[msgIndex] === "string";
+  if (prefixed) joined[msgIndex] = `${prefix}${joined[msgIndex]}`;
   const redacted = maskLogValueWith(scanAndRedact, joined, options);
   if (!Array.isArray(redacted)) return [ERROR_MARKER];
-  if (joined[0] instanceof Error) redacted[0] = asMaskedError(joined[0], redacted[0]);
+  if (prefixed) {
+    const message = redacted[msgIndex];
+    // A redaction that reached into the prefix (or a marker) is kept whole;
+    // pino then prints the static prefix before it, never the raw message.
+    if (typeof message === "string" && message.startsWith(prefix)) redacted[msgIndex] = message.slice(prefix.length);
+  }
+  if (args[0] instanceof Error) redacted[0] = asMaskedError(args[0], redacted[0]);
   return redacted;
 }
 
@@ -122,7 +135,7 @@ export function createRedactingLogMethodWith(
   return function redactingLogMethod(args, method, _level) {
     let redacted: unknown[];
     try {
-      redacted = redactArgs(scanAndRedact, Array.from(args), options);
+      redacted = redactArgs(scanAndRedact, Array.from(args), this?.msgPrefix, options);
     } catch {
       // e.g. formatting `%d` with a Symbol: log the marker, never the raw arguments.
       redacted = [ERROR_MARKER];

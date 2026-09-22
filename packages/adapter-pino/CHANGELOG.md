@@ -35,6 +35,12 @@ tarball (`files` in `package.json`), so a consumer can read it from
   arguments into it. The hook now hands pino a masked copy of the error that
   keeps its prototype, so pino's own handling applies: the caller's message
   wins, and `logger.error(err)` still gets the masked `err.message`.
+- `logger.info(undefined, fmt, ...values)` (or `null` first) now joins the
+  message with its values before scanning, as pino formats it; before, the
+  parts were scanned separately and a secret split across them was missed.
+- A logger's `msgPrefix` is now scanned together with the message, so a
+  prefix such as `"api_key="` gives the core the context to detect the value
+  that follows it.
 - The `logMethod` hook no longer throws into pino when an argument cannot be
   formatted (for example `%d` with a `Symbol`): pino logs `[REDACTED:ERROR]`
   instead of the raw arguments.

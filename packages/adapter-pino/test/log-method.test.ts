@@ -187,6 +187,35 @@ test("a throwing getter in a merging object fails closed for that field only", (
   expect(calls[0]?.args).toEqual([{ ok: "<SECRET_1>", bad: ERROR_MARKER }, "msg"]);
 });
 
+test("an undefined or null first argument still has the message after it joined with its values", () => {
+  for (const first of [undefined, null]) {
+    const { method, calls } = spyMethod();
+    const hook = createRedactingLogMethodWith(fakeScanAndRedact);
+    callHook(hook, {}, [first, "token is SECRET_TOKEN_%s", "1"], method, 30);
+    expect(calls[0]?.args, String(first)).toEqual([first, "token is <SECRET_1>"]);
+  }
+});
+
+test("msgPrefix is scanned together with the message, then left for pino to prepend", () => {
+  const scanned: string[] = [];
+  const recording: ScanAndRedact = (text) => {
+    scanned.push(text);
+    return fakeScanAndRedact(text);
+  };
+  const { method, calls } = spyMethod();
+  const hook = createRedactingLogMethodWith(recording);
+  callHook(hook, { msgPrefix: "[auth] " }, ["token SECRET_TOKEN_%s", "1"], method, 30);
+  expect(scanned).toEqual(["[auth] token SECRET_TOKEN_1"]);
+  expect(calls[0]?.args).toEqual(["token <SECRET_1>"]);
+});
+
+test("a redaction that reaches into msgPrefix keeps the whole masked text, never the raw message", () => {
+  const { method, calls } = spyMethod();
+  const hook = createRedactingLogMethodWith(fakeScanAndRedact);
+  callHook(hook, { msgPrefix: "SECRET_TOKEN_" }, ["1 rotated"], method, 30);
+  expect(calls[0]?.args).toEqual(["<SECRET_1> rotated"]);
+});
+
 test("rejects a non-function scanAndRedact", () => {
   expect(() => createRedactingLogMethodWith(null as unknown as ScanAndRedact)).toThrow(TypeError);
 });

@@ -120,6 +120,19 @@ test("issue #361: a scanner failure on the joined message fails closed in the de
   expect(raw()).not.toContain("BOOM");
 });
 
+test("logger.info(undefined, fmt, ...values) joins before scanning, as pino formats it", () => {
+  const { logger, lines, raw } = capturingLogger();
+  (logger.info as (...args: unknown[]) => void)(undefined, "token is SECRET_TOKEN_%s", "1");
+  expect(lines()).toEqual([{ level: 30, msg: "token is <SECRET_1>" }]);
+  expect(raw()).not.toContain("SECRET_TOKEN_1");
+});
+
+test("a child's msgPrefix is scanned with the message and still printed once", () => {
+  const { logger, lines } = capturingLogger();
+  logger.child({}, { msgPrefix: "[auth] " }).info("token %s", "SECRET_TOKEN_1");
+  expect(lines()).toEqual([{ level: 30, msg: "[auth] token <SECRET_1>" }]);
+});
+
 function capture() {
   const chunks: string[] = [];
   const destination = {

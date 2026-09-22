@@ -110,7 +110,12 @@ Two things keep pino's own call-shape handling intact:
 2. **A string message and its interpolation values are joined** into the exact
    string pino would format, *before* redaction. pino formats `msg` after the
    hook returns, so scanning the format string and its arguments separately
-   misses a secret split across them — neither half matches on its own.
+   misses a secret split across them — neither half matches on its own. The
+   message is found where pino looks for it (after a first argument that is an
+   object, `null` or `undefined`). A logger's `msgPrefix` is prepended by pino
+   after the hook too, so it is scanned together with the message and stripped
+   again; if a redaction reaches into the prefix, the whole masked text is kept
+   and pino prints the static prefix before it.
 
 Redaction then runs over one value tree and the redacted arguments are passed on
 with `method.apply`, so every later pino stage — serializers, formatters, the
