@@ -21,11 +21,9 @@ from .mask_leaf import ERROR_MARKER, mask_leaf_with
 __all__ = ["RedactSecretFilter"]
 
 
-def _LIVE(*_args: Any, **_kwargs: Any) -> Any:  # pragma: no cover - sentinel, never called
-    """Sentinel default for ``scan_and_redact``. ``None`` is not used, so an
-    explicit ``RedactSecretFilter(None)`` still fails closed with a
-    ``TypeError`` instead of silently selecting the live scanner."""
-    raise AssertionError("sentinel")
+# Default for ``scan_and_redact``: not ``None``, so an explicit
+# ``RedactSecretFilter(None)`` raises instead of selecting the live scanner.
+_LIVE: Any = object()
 
 
 class RedactSecretFilter(logging.Filter):
@@ -69,7 +67,7 @@ class RedactSecretFilter(logging.Filter):
         self._limits = limits
 
     def _mask(self, text: str) -> str:
-        max_len = (self._limits or {}).get("max_string_length") if self._limits else None
+        max_len = (self._limits or {}).get("max_string_length")
         return mask_leaf_with(self._scan_and_redact, text, policy=self._policy, max_string_length=max_len)
 
     def filter(self, record: logging.LogRecord) -> bool:
