@@ -30,7 +30,7 @@ the Release workflow first publishes this package.
   redaction over the exact string pino would format from a message and its
   interpolation arguments, alongside — not instead of — pino's own
   path-based `redact` option.
-- Declared ranges: `@redact-secret/core ^0.1.0-beta.4`, peer `pino ^10.0.0`.
+- Declared ranges: `@redact-secret/core ^0.1.0-beta.6`, peer `pino ^10.0.0`.
   `pino ^10.0.0` is verified by a real `pino` logger writing to a captured
   stream at both ends of the range; `pino 9.x` is deliberately not declared —
   it may work, but it is untested, so it is not claimed.

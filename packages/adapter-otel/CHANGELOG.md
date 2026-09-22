@@ -32,7 +32,7 @@ the Release workflow first publishes this package.
   `onEnd`, before delegating. Attribute names are not allowlisted, so
   OpenInference and GenAI semantic-convention attributes are covered without
   hardcoding either convention.
-- Declared ranges: `@redact-secret/core ^0.1.0-beta.4`, peer
+- Declared ranges: `@redact-secret/core ^0.1.0-beta.6`, peer
   `@opentelemetry/sdk-trace-base ^2.0.0`, verified by a real span passed
   through `onEnd` at both ends of the range, asserting the mutation actually
   took effect on the real span object.

@@ -31,6 +31,6 @@ the Release workflow first publishes this package.
   and L2 value-tree walker) every host adapter in this repository is built on.
 - The `[REDACTED:BLOCKED]`, `[REDACTED:ERROR]`, `[REDACTED:LIMIT_EXCEEDED]`,
   and `[REDACTED:CYCLE]` markers, and `DEFAULT_LIMITS`, as public API.
-- Declared range: `@redact-secret/core ^0.1.0-beta.4`, as an **optional**
+- Declared range: `@redact-secret/core ^0.1.0-beta.6`, as an **optional**
   peer dependency — `scanAndRedact` is injected, so this package works
   without the core installed.
