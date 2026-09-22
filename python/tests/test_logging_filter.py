@@ -50,6 +50,29 @@ class MaskLogValueWithTest(unittest.TestCase):
         self.assertEqual(masked["message"], ERROR_MARKER)
         self.assertNotIn(_SECRET, json.dumps(masked))
 
+    def test_exception_own_attributes_are_walked(self) -> None:
+        error = ValueError("request failed")
+        error.status = 401
+        error.headers = {"authorization": "Bearer " + _SECRET}
+        error.__notes__ = ["retry with " + _SECRET]  # what add_note() sets on 3.11+
+        masked = mask_log_value_with(fake_scan_and_redact, error)
+        self.assertEqual(masked["message"], "request failed")
+        self.assertEqual(masked["status"], 401)
+        self.assertEqual(masked["headers"], {"authorization": "Bearer <SECRET_1>"})
+        self.assertEqual(masked["__notes__"], ["retry with <SECRET_1>"])
+        self.assertNotIn(_SECRET, json.dumps(masked))
+
+    def test_exception_cause_is_walked(self) -> None:
+        try:
+            try:
+                _raise_with_secret(_SECRET)
+            except ValueError as inner:
+                raise RuntimeError("wrapper") from inner
+        except RuntimeError as outer:
+            masked = mask_log_value_with(fake_scan_and_redact, outer)
+        self.assertEqual(masked["cause"]["type"], "ValueError")
+        self.assertEqual(masked["cause"]["message"], "db write failed: <SECRET_1>")
+
 
 class ListHandler(logging.Handler):
     """Captures fully formatted (`Formatter.format`-ed) lines, so a test

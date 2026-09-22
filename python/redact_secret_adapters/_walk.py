@@ -6,7 +6,8 @@ Walked: ``str`` leaves; ``dict`` and its subclasses (``OrderedDict``,
 ``defaultdict``, ...), returned as a plain ``dict``; ``list`` and its
 subclasses, returned as a plain ``list``; tuples, returned as a plain
 ``tuple``; and exceptions, returned as a ``{"type", "message", "stack",
-"cause"}`` mapping. Everything else is returned unchanged.
+"cause"}`` mapping plus one key per attribute in the exception's
+``__dict__``. Everything else is returned unchanged.
 """
 
 from __future__ import annotations
@@ -53,6 +54,12 @@ class _Walk:
             "message": ERROR_MARKER if message is None else self.string(message),
             "stack": self.stack(exc),
         }
+        # The exception's own attributes (``exc.status = ...``, ``__notes__``),
+        # like the TS walker's own enumerable properties of an Error.
+        own = getattr(exc, "__dict__", None) or {}
+        for key in list(own)[: self.limits["max_object_keys"]]:
+            if key not in out:
+                out[key] = self.value(own[key], depth + 1)
         if exc.__cause__ is not None:
             out["cause"] = self.value(exc.__cause__, depth + 1)
         return out
