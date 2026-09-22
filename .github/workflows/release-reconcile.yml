@@ -1,0 +1,137 @@
+name: Release reconcile
+
+# The last stage of a release train, after every planned package is
+# published and tagged:
+#
+#   1. Verify: every declared version is on its registry, and every package
+#      tag and the train tag exist. Anything else is a half-shipped train.
+#   2. main: open release -> main, so main is exactly what has been published.
+#   3. develop: open sync/<train> -> develop, carrying back any fix made on
+#      the rc branch. cut-rc.yml refuses the next train until it is merged.
+#      Merge it with a merge commit, never squash: develop has to contain
+#      release's commits, not a copy of them.
+#
+# The PRs are opened with GITHUB_TOKEN, which fires no pull_request event,
+# so the required checks are dispatched onto their head refs directly.
+
+on:
+  workflow_call:
+    inputs:
+      train:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      train:
+        description: "Train to reconcile, e.g. 2026.09.22"
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: release-reconcile
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify registries and tags
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: release
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+
+      - name: Every declared version is published and tagged
+        run: node scripts/release-plan.mjs --require-published --check-tags
+
+      - name: The train tag exists
+        env:
+          TRAIN: ${{ inputs.train }}
+        run: |
+          set -euo pipefail
+          if [ "$(git tag --list "train/$TRAIN")" != "train/$TRAIN" ]; then
+            echo "::error::tag train/$TRAIN is missing"
+            exit 1
+          fi
+
+  sync-main:
+    name: Sync main
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TRAIN: ${{ inputs.train }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Open release -> main
+        run: |
+          set -euo pipefail
+          if git merge-base --is-ancestor origin/release origin/main; then
+            echo "main already contains release"
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor origin/main origin/release; then
+            echo "::error::main has commits release doesn't. main only ever moves by merging release; find how those commits got there."
+            exit 1
+          fi
+          if [ -z "$(gh pr list --base main --head release --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base main --head release \
+              --title "Release train $TRAIN -> main" \
+              --body "Brings main up to release after train \`$TRAIN\` published. Merge with a merge commit."
+          fi
+          gh workflow run ci.yml --ref release
+          gh workflow run branch-guard.yml --ref release -f base=main
+
+  sync-develop:
+    name: Sync develop
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TRAIN: ${{ inputs.train }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Open sync/<train> -> develop
+        # A branch of its own rather than release itself, so a conflict with
+        # develop can be resolved on it without touching release.
+        run: |
+          set -euo pipefail
+          if git merge-base --is-ancestor origin/release origin/develop; then
+            echo "develop already contains release"
+            exit 0
+          fi
+          branch="sync/$TRAIN"
+          if ! git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null; then
+            git push origin "origin/release:refs/heads/$branch"
+          fi
+          if [ -z "$(gh pr list --base develop --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base develop --head "$branch" \
+              --title "Sync release train $TRAIN back to develop" \
+              --body "Carries release (including any fix made on \`rc/$TRAIN\`) back to develop. **Merge with a merge commit, not squash**: the next train can't be cut until develop contains release."
+          fi
+          gh workflow run ci.yml --ref "$branch"
