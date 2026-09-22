@@ -133,6 +133,28 @@ test("a child's msgPrefix is scanned with the message and still printed once", (
   expect(lines()).toEqual([{ level: 30, msg: "[auth] token <SECRET_1>" }]);
 });
 
+test("an Error under any errorKey keeps its class in err.type and is masked", () => {
+  const { destination, lines, raw } = capture();
+  const logMethod = createRedactingLogMethodWith(fakeScanAndRedact);
+  const logger = pino({ base: null, timestamp: false, errorKey: "error", hooks: { logMethod } }, destination);
+
+  logger.error(new TypeError("leading SECRET_TOKEN_1"));
+  logger.error({ error: new RangeError("merged SECRET_TOKEN_2") }, "failed");
+
+  const [leading, merged] = lines();
+  expect(leading.msg).toBe("leading <SECRET_1>");
+  expect(leading.error).toMatchObject({ type: "TypeError", message: "leading <SECRET_1>" });
+  expect(merged.msg).toBe("failed");
+  expect(merged.error).toMatchObject({ type: "RangeError", message: "merged <SECRET_1>" });
+  expect(raw()).not.toMatch(/SECRET_TOKEN_\d/);
+});
+
+test("an Error under the default err key keeps its class in err.type", () => {
+  const { logger, lines } = capturingLogger();
+  logger.error({ err: new SyntaxError("bad SECRET_TOKEN_1") }, "parse failed");
+  expect(lines()[0].err).toMatchObject({ type: "SyntaxError", message: "bad <SECRET_1>" });
+});
+
 function capture() {
   const chunks: string[] = [];
   const destination = {

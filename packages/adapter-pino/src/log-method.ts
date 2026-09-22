@@ -117,8 +117,36 @@ function redactArgs(scanAndRedact: ScanAndRedact, args: unknown[], prefix: unkno
     // pino then prints the static prefix before it, never the raw message.
     if (typeof message === "string" && message.startsWith(prefix)) redacted[msgIndex] = message.slice(prefix.length);
   }
-  if (args[0] instanceof Error) redacted[0] = asMaskedError(args[0], redacted[0]);
+  restoreErrors(args[0], redacted);
   return redacted;
+}
+
+/**
+ * Restores the `Error` prototype where pino's serializers look: a leading
+ * `Error`, and any top-level merging-object key holding one — whatever the
+ * logger's `errorKey` is, which the hook cannot read. pino's `err`
+ * serializer takes `type` from the constructor, so a plain object would log
+ * `type: "Object"`.
+ */
+function restoreErrors(first: unknown, redacted: unknown[]): void {
+  if (first instanceof Error) {
+    redacted[0] = asMaskedError(first, redacted[0]);
+    return;
+  }
+  const merged = redacted[0];
+  if (typeof first !== "object" || first === null || typeof merged !== "object" || merged === null) return;
+  for (const key of Object.keys(merged)) {
+    // A data descriptor only: re-running a getter could return something else.
+    const original: unknown = Object.getOwnPropertyDescriptor(first, key)?.value;
+    if (original instanceof Error) {
+      Object.defineProperty(merged, key, {
+        value: asMaskedError(original, (merged as Record<string, unknown>)[key]),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+  }
 }
 
 /**

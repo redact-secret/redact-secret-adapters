@@ -35,6 +35,11 @@ tarball (`files` in `package.json`), so a consumer can read it from
   arguments into it. The hook now hands pino a masked copy of the error that
   keeps its prototype, so pino's own handling applies: the caller's message
   wins, and `logger.error(err)` still gets the masked `err.message`.
+- A masked `Error` keeps its class: pino's `err` serializer now logs
+  `type: "TypeError"` (or whatever the class is) instead of `"Object"`, for a
+  leading `Error` and for one under a merging-object key, whatever the
+  logger's `errorKey` is. Nothing in the hook assumes the key is `err` any
+  more.
 - `logger.info(undefined, fmt, ...values)` (or `null` first) now joins the
   message with its values before scanning, as pino formats it; before, the
   parts were scanned separately and a secret split across them was missed.
