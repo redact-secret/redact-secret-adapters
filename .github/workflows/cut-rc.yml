@@ -26,8 +26,10 @@ jobs:
     steps:
       - name: Refuse to cut from anything but develop
         if: github.ref != 'refs/heads/develop'
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          echo "::error::Run this workflow on develop, not ${{ github.ref_name }}"
+          echo "::error::Run this workflow on develop, not $REF_NAME"
           exit 1
 
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -80,7 +82,9 @@ jobs:
           echo "Train: $train"
 
       - name: Push rc/${{ steps.train.outputs.train }}
-        run: git push origin "HEAD:refs/heads/rc/${{ steps.train.outputs.train }}"
+        env:
+          TRAIN: ${{ steps.train.outputs.train }}
+        run: git push origin "HEAD:refs/heads/rc/$TRAIN"
 
       - name: Open the PR into release
         env:

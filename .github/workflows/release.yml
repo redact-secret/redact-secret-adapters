@@ -330,6 +330,8 @@ jobs:
           fi
 
       - name: Report
+        env:
+          TRAIN: ${{ steps.train.outputs.train }}
         run: |
           set -euo pipefail
 
@@ -346,7 +348,7 @@ jobs:
           }
 
           {
-            echo "## Release report: train ${{ steps.train.outputs.train }}"
+            echo "## Release report: train $TRAIN"
             echo
             echo "| Package | Declared version | Result | Registry now has declared version |"
             echo "|---|---|---|---|"
