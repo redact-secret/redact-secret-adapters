@@ -80,7 +80,9 @@ function maskProperties(
   }
 }
 
-const ERROR_OWN_KEYS: ReadonlySet<string> = new Set(["message", "stack", "cause"]);
+// Own properties that would clash with the fixed fields are skipped; `cause`
+// is walked once, below, whether or not it is enumerable.
+const ERROR_OWN_KEYS: ReadonlySet<string> = new Set(["type", "message", "stack", "cause"]);
 
 /**
  * An `Error` becomes `{ type, message, stack, ...ownProps, cause }`, the
