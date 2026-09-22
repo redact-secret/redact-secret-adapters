@@ -20,6 +20,14 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+### Deprecated
+
+- `RedactSecretFilter(name=...)`: it was accepted but never honored (the
+  filter redacts every record it sees and never drops one, unlike a named
+  `logging.Filter`). Passing a non-empty `name` now emits a
+  `DeprecationWarning`; the parameter will be removed in a later minor
+  release. Attach the filter where it should apply instead.
+
 ### Fixed
 
 - `otel`: a string-sequence attribute containing `None` (which the SDK

@@ -13,6 +13,7 @@ handlers. Custom formatters must not add unscanned fields afterward.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Any, Callable, Optional, Sequence
 
 from ._walk import mask_exception_text_with, walk
@@ -52,6 +53,16 @@ class RedactSecretFilter(logging.Filter):
         extra_fields: Sequence[str] = (),
         limits: Optional[dict[str, int]] = None,
     ) -> None:
+        if name:
+            # logging.Filter's name would drop records from other loggers,
+            # and filter() has never honored it: skipping or dropping records
+            # is not this filter's job. Kept only so 0.1.0 callers still work.
+            warnings.warn(
+                "RedactSecretFilter(name=...) is ignored and will be removed; "
+                "attach the filter to the handlers or logger it should cover instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         super().__init__(name)
         if scan_and_redact is _LIVE:
             # The live wrapper: the only place this module touches the core.

@@ -357,6 +357,15 @@ class RedactSecretFilterTest(unittest.TestCase):
         self.assertEqual(len(scanner.calls), 4)
         self.assertTrue(all(called_policy is policy for _, called_policy in scanner.calls))
 
+    def test_name_is_deprecated_and_never_drops_or_skips_a_record(self) -> None:
+        with self.assertWarns(DeprecationWarning):
+            redact_filter = RedactSecretFilter(fake_scan_and_redact, name="some.other.logger")
+        handler = ListHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler.addFilter(redact_filter)
+        handler.handle(logging.makeLogRecord({"name": "app", "msg": "token SECRET_TOKEN_1"}))
+        self.assertEqual(handler.lines, ["token <SECRET_1>"])
+
     def test_rejects_a_non_callable_scan_and_redact(self) -> None:
         with self.assertRaises(TypeError):
             RedactSecretFilter(None)
