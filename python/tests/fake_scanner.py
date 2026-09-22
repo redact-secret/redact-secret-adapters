@@ -53,3 +53,16 @@ def fake_scan_and_redact(text: str, policy=None) -> FakeResult:
     if "WARN_ME" in text:
         return FakeResult(text, [FakeFinding("warn", confidence="medium")])
     return FakeResult(text, [])
+
+
+class RecordingScanner:
+    """``fake_scan_and_redact`` that also records each ``(text, policy)``
+    call, so a test can assert what reached the core. Python-only; not part
+    of the cross-language fixture contract."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, object]] = []
+
+    def __call__(self, text: str, policy=None) -> FakeResult:
+        self.calls.append((text, policy))
+        return fake_scan_and_redact(text, policy)

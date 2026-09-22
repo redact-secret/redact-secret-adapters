@@ -13,10 +13,10 @@ import logging
 import unittest
 from pathlib import Path
 
-from fake_scanner import fake_scan_and_redact
+from fake_scanner import RecordingScanner, fake_scan_and_redact
 
 from redact_secret_adapters.logging_filter import RedactSecretFilter
-from redact_secret_adapters.mask_leaf import BLOCK_MARKER, ERROR_MARKER
+from redact_secret_adapters.mask_leaf import BLOCK_MARKER, ERROR_MARKER, LIMIT_MARKER
 from redact_secret_adapters.mask_log_value import mask_log_value_with
 
 FIXTURES_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "logging-redaction-cases.json"
@@ -187,13 +187,9 @@ class RedactSecretFilterTest(unittest.TestCase):
 
     def test_configured_extra_string_field_is_redacted(self) -> None:
         logger, handler = make_logger("logging-redaction.extra", extra_fields=("request_id", "auth_header"))
+        handler.setFormatter(logging.Formatter("%(message)s %(request_id)s %(auth_header)s"))
         logger.info("request received", extra={"request_id": "req-1", "auth_header": "Bearer SECRET_TOKEN_1"})
-
-        captured = []
-        handler.addFilter(lambda record: captured.append(record) or True)
-        logger.info("second call", extra={"request_id": "req-2", "auth_header": "Bearer SECRET_TOKEN_1"})
-        self.assertEqual(captured[0].auth_header, "Bearer <SECRET_1>")
-        self.assertEqual(captured[0].request_id, "req-2")
+        self.assertEqual(handler.lines, ["request received req-1 Bearer <SECRET_1>"])
 
     def test_a_bare_string_extra_fields_names_one_field(self) -> None:
         handler = ListHandler()
@@ -257,14 +253,9 @@ class RedactSecretFilterTest(unittest.TestCase):
         self.assertNotIn(_SECRET, handler.lines[0])
 
     def test_exc_info_is_scanned_once_as_one_traceback(self) -> None:
-        calls: list[str] = []
-
-        def counting_scanner(text, policy=None):
-            calls.append(text)
-            return fake_scan_and_redact(text, policy)
-
+        scanner = RecordingScanner()
         handler = ListHandler()
-        handler.addFilter(RedactSecretFilter(counting_scanner))
+        handler.addFilter(RedactSecretFilter(scanner))
         try:
             try:
                 _raise_with_secret(_SECRET)
@@ -275,10 +266,96 @@ class RedactSecretFilterTest(unittest.TestCase):
         handler.handle(record)
         # One scan for the message, one for the whole traceback -- which
         # already carries the cause chain.
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(scanner.calls), 2)
         self.assertIn("The above exception was the direct cause", record.exc_text)
         self.assertIn("<SECRET_1>", record.exc_text)
         self.assertNotIn(_SECRET, record.exc_text)
+
+    def test_shared_fixture_cases_through_the_filter(self) -> None:
+        """The shared logging fixture again, through the filter's own paths:
+        a string case as the log message, a structured case as a listed
+        extra."""
+        cases = json.loads(FIXTURES_PATH.read_text(encoding="utf-8"))["cases"]
+        for case in cases:
+            with self.subTest(name=case["name"]):
+                logger, handler = make_logger("logging-redaction.fixture", extra_fields=("payload",))
+                captured = []
+                handler.addFilter(lambda record: captured.append(record) or True)
+                if isinstance(case["input"], str):
+                    logger.info(case["input"])
+                    self.assertEqual(handler.lines, [case["expected"]])
+                else:
+                    logger.info("event", extra={"payload": case["input"]})
+                    self.assertEqual(captured[0].payload, case["expected"])
+
+    def test_dict_args_are_formatted_then_redacted(self) -> None:
+        logger, handler = make_logger("logging-redaction.dict-args")
+        logger.info("user %(user)s token %(token)s", {"user": "alice", "token": "SECRET_TOKEN_1"})
+        self.assertEqual(handler.lines, ["user alice token <SECRET_1>"])
+
+    def test_stack_info_is_redacted(self) -> None:
+        _, handler = make_logger("logging-redaction.stack-info")
+        record = logging.makeLogRecord(
+            {"msg": "checkpoint", "stack_info": "Stack (most recent call last):\n  " + _SECRET}
+        )
+        handler.handle(record)
+        self.assertEqual(handler.lines, ["checkpoint\nStack (most recent call last):\n  <SECRET_1>"])
+
+        logger, handler = make_logger("logging-redaction.stack-info-real")
+        logger.info("checkpoint %s", "SECRET_TOKEN_1", stack_info=True)
+        self.assertTrue(handler.lines[0].startswith("checkpoint <SECRET_1>\nStack (most recent call last):"))
+
+    def test_filter_attached_to_the_logger_redacts_for_every_handler(self) -> None:
+        logger = logging.getLogger("logging-redaction.logger-level")
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        for existing in list(logger.handlers):
+            logger.removeHandler(existing)
+        for existing in list(logger.filters):
+            logger.removeFilter(existing)
+        handler = ListHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+        logger.addFilter(RedactSecretFilter(fake_scan_and_redact))
+        logger.info("token %s", "SECRET_TOKEN_1")
+        self.assertEqual(handler.lines, ["token <SECRET_1>"])
+
+    def test_two_filtered_handlers_both_emit_the_redacted_line(self) -> None:
+        logger, first = make_logger("logging-redaction.two-handlers")
+        second = ListHandler()
+        second.setFormatter(logging.Formatter("%(message)s"))
+        second.addFilter(RedactSecretFilter(fake_scan_and_redact))
+        logger.addHandler(second)
+        logger.info("token %s", "SECRET_TOKEN_1")
+        logger.info("prefix BLOCK_ME suffix")
+        self.assertEqual(first.lines, ["token <SECRET_1>", BLOCK_MARKER])
+        self.assertEqual(second.lines, ["token <SECRET_1>", BLOCK_MARKER])
+
+    def test_max_string_length_limit_applies_to_the_message_and_exc_text(self) -> None:
+        handler = ListHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler.addFilter(RedactSecretFilter(fake_scan_and_redact, limits={"max_string_length": 12}))
+        handler.handle(logging.makeLogRecord({"msg": "short"}))
+        handler.handle(logging.makeLogRecord({"msg": "token %s", "args": ("SECRET_TOKEN_1",)}))
+        handler.handle(logging.makeLogRecord({"msg": "short", "exc_text": "ValueError: " + _SECRET}))
+        self.assertEqual(handler.lines, ["short", LIMIT_MARKER, "short\n" + LIMIT_MARKER])
+
+    def test_policy_reaches_the_scanner_on_every_path(self) -> None:
+        policy = object()
+        scanner = RecordingScanner()
+        handler = ListHandler()
+        handler.addFilter(RedactSecretFilter(scanner, policy=policy, extra_fields=("payload",)))
+        record = logging.makeLogRecord(
+            {
+                "msg": "query failed",
+                "exc_info": (ValueError, ValueError("x"), None),
+                "stack_info": "stack",
+                "payload": {"k": "v"},
+            }
+        )
+        handler.handle(record)
+        self.assertEqual(len(scanner.calls), 4)
+        self.assertTrue(all(called_policy is policy for _, called_policy in scanner.calls))
 
     def test_rejects_a_non_callable_scan_and_redact(self) -> None:
         with self.assertRaises(TypeError):

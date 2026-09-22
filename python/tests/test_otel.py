@@ -11,8 +11,9 @@ import unittest
 import warnings
 from types import MappingProxyType
 
-from fake_scanner import fake_scan_and_redact
+from fake_scanner import RecordingScanner, fake_scan_and_redact
 
+from redact_secret_adapters.mask_leaf import LIMIT_MARKER
 from redact_secret_adapters.otel import RedactingSpanProcessorWith, redact_attributes_with
 
 
@@ -229,7 +230,27 @@ class RedactingSpanProcessorWithTest(unittest.TestCase):
         self.assertEqual(next_processor.exported[0]._attributes, {"k": "<SECRET_1>"})
 
     def test_redact_attributes_with_is_a_noop_for_none(self) -> None:
-        redact_attributes_with(fake_scan_and_redact, None)  # must not raise
+        scanner = RecordingScanner()
+        self.assertIsNone(redact_attributes_with(scanner, None))
+        self.assertEqual(scanner.calls, [])
+
+    def test_max_string_length_limit_applies_to_attributes_and_the_name(self) -> None:
+        next_processor = FakeNextProcessor()
+        processor = RedactingSpanProcessorWith(next_processor, fake_scan_and_redact, limits={"max_string_length": 8})
+        span = FakeSpan({"short": "ok", "long": "SECRET_TOKEN_1", "seq": ["ok", "SECRET_TOKEN_2"]}, name="a" * 9)
+        processor.on_end(span)
+        exported = next_processor.exported[0]
+        self.assertEqual(exported._name, LIMIT_MARKER)
+        self.assertEqual(exported._attributes, {"short": "ok", "long": LIMIT_MARKER, "seq": ["ok", LIMIT_MARKER]})
+
+    def test_policy_reaches_the_scanner(self) -> None:
+        policy = object()
+        scanner = RecordingScanner()
+        processor = RedactingSpanProcessorWith(FakeNextProcessor(), scanner, policy=policy)
+        processor.on_end(FakeSpan({"k": "v"}, events=[FakeEvent({"e": "v"})], links=[FakeLink({"l": "v"})]))
+        # name, attribute, event name, event attribute, link attribute
+        self.assertEqual(len(scanner.calls), 5)
+        self.assertTrue(all(called_policy is policy for _, called_policy in scanner.calls))
 
     def test_rejects_next_processor_without_on_end_or_non_callable_scanner(self) -> None:
         with self.assertRaises(TypeError):

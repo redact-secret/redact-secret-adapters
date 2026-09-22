@@ -11,7 +11,7 @@ from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fake_scanner import fake_scan_and_redact
+from fake_scanner import RecordingScanner, fake_scan_and_redact
 
 from redact_secret_adapters.mask_leaf import BLOCK_MARKER, CYCLE_MARKER, ERROR_MARKER, LIMIT_MARKER
 from redact_secret_adapters.mask_log_value import mask_log_value_with
@@ -138,6 +138,15 @@ class MaskSecretsWithTest(unittest.TestCase):
         data = {"blob": "a" * 50}
         result = mask_secrets_with(fake_scan_and_redact, data, limits={"max_string_length": 10})
         self.assertEqual(result["blob"], LIMIT_MARKER)
+
+    def test_policy_reaches_the_scanner(self) -> None:
+        policy = object()
+        for mask in (mask_secrets_with, mask_log_value_with):
+            with self.subTest(mask=mask.__name__):
+                scanner = RecordingScanner()
+                mask(scanner, {"a": "x", "b": ["y", ("z",)]}, policy=policy)
+                self.assertEqual([text for text, _ in scanner.calls], ["x", "y", "z"])
+                self.assertTrue(all(called_policy is policy for _, called_policy in scanner.calls))
 
     def test_rejects_non_callable_scan_and_redact(self) -> None:
         with self.assertRaises(TypeError):
