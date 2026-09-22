@@ -43,6 +43,14 @@ class SharedFixtureTest(unittest.TestCase):
                 self.assertEqual(result, case["expected"])
 
 
+class MaskLogValueWithTest(unittest.TestCase):
+    def test_exception_whose_str_raises_gets_an_error_marker_message(self) -> None:
+        masked = mask_log_value_with(fake_scan_and_redact, _RaisingStrError(_SECRET))
+        self.assertEqual(masked["type"], "_RaisingStrError")
+        self.assertEqual(masked["message"], ERROR_MARKER)
+        self.assertNotIn(_SECRET, json.dumps(masked))
+
+
 class ListHandler(logging.Handler):
     """Captures fully formatted (`Formatter.format`-ed) lines, so a test
     can assert on exactly what would have reached a real destination."""
@@ -65,6 +73,11 @@ def _raise_with_secret(secret: str) -> None:
     # keeps it out of the traceback's source-context line, which would
     # otherwise print the raw literal from this file a second time.
     raise ValueError("db write failed: " + secret)
+
+
+class _RaisingStrError(ValueError):
+    def __str__(self) -> str:
+        raise RuntimeError("__str__ failed")
 
 
 def make_logger(name: str, *, extra_fields: tuple[str, ...] = ()) -> tuple[logging.Logger, ListHandler]:
@@ -179,6 +192,40 @@ class RedactSecretFilterTest(unittest.TestCase):
             logger.info(RaisingStr())
         self.assertEqual(handler.lines, [ERROR_MARKER] * 4)
         self.assertNotIn("SECRET_TOKEN_1", stderr.getvalue())
+
+    def test_exception_whose_str_raises_does_not_crash_logger_exception(self) -> None:
+        logger, handler = make_logger("logging-redaction.raising-str")
+        try:
+            raise _RaisingStrError(_SECRET)
+        except _RaisingStrError:
+            logger.exception("query failed")  # must not raise
+        self.assertEqual(len(handler.lines), 1)
+        self.assertTrue(handler.lines[0].startswith("query failed\nTraceback"))
+        self.assertNotIn(_SECRET, handler.lines[0])
+
+    def test_exc_info_is_scanned_once_as_one_traceback(self) -> None:
+        calls: list[str] = []
+
+        def counting_scanner(text, policy=None):
+            calls.append(text)
+            return fake_scan_and_redact(text, policy)
+
+        handler = ListHandler()
+        handler.addFilter(RedactSecretFilter(counting_scanner))
+        try:
+            try:
+                _raise_with_secret(_SECRET)
+            except ValueError as inner:
+                raise RuntimeError("wrapper") from inner
+        except RuntimeError as outer:
+            record = logging.makeLogRecord({"msg": "query failed", "exc_info": (RuntimeError, outer, None)})
+        handler.handle(record)
+        # One scan for the message, one for the whole traceback -- which
+        # already carries the cause chain.
+        self.assertEqual(len(calls), 2)
+        self.assertIn("The above exception was the direct cause", record.exc_text)
+        self.assertIn("<SECRET_1>", record.exc_text)
+        self.assertNotIn(_SECRET, record.exc_text)
 
     def test_rejects_a_non_callable_scan_and_redact(self) -> None:
         with self.assertRaises(TypeError):

@@ -32,6 +32,11 @@ can read it without leaving their environment.
   raises out of the filter into the logging call; the message becomes
   `[REDACTED:ERROR]` and the arguments are cleared, so the handler's
   `handleError` never prints them.
+- An exception whose `__str__` raises no longer crashes `logger.exception()`
+  or `mask_log_value_with`; its `message` becomes `[REDACTED:ERROR]`. The
+  filter now scans an exception once, as its formatted traceback (which
+  already includes the message and the cause chain), instead of also
+  scanning the message and every cause and discarding the results.
 
 ## [0.1.0]
 

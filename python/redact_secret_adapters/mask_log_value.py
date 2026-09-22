@@ -14,7 +14,7 @@ from __future__ import annotations
 import traceback
 from typing import Any, Callable, Optional
 
-from .mask_leaf import CYCLE_MARKER, DEFAULT_LIMITS, LIMIT_MARKER, mask_leaf_with
+from .mask_leaf import CYCLE_MARKER, DEFAULT_LIMITS, ERROR_MARKER, LIMIT_MARKER, mask_leaf_with
 
 __all__ = ["mask_log_value_with"]
 
@@ -34,13 +34,27 @@ def _mask_string(scan_and_redact, value, *, policy, limits, budget):
     return mask_leaf_with(scan_and_redact, value, policy=policy, max_string_length=limits["max_string_length"])
 
 
+def _mask_exception_stack(scan_and_redact, exc, *, policy, limits, budget):
+    try:
+        formatted_stack = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    except Exception:
+        return ERROR_MARKER
+    return _mask_string(scan_and_redact, formatted_stack, policy=policy, limits=limits, budget=budget)
+
+
 def _mask_exception(scan_and_redact, exc, *, policy, limits, budget, depth, seen):
+    try:
+        message = str(exc)
+    except Exception:
+        # A raising __str__ must not escape into logger.exception().
+        message = None
     out: dict[str, Any] = {
         "type": type(exc).__name__,
-        "message": _mask_string(scan_and_redact, str(exc), policy=policy, limits=limits, budget=budget),
+        "message": ERROR_MARKER
+        if message is None
+        else _mask_string(scan_and_redact, message, policy=policy, limits=limits, budget=budget),
+        "stack": _mask_exception_stack(scan_and_redact, exc, policy=policy, limits=limits, budget=budget),
     }
-    formatted_stack = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    out["stack"] = _mask_string(scan_and_redact, formatted_stack, policy=policy, limits=limits, budget=budget)
     cause = exc.__cause__
     if cause is not None:
         out["cause"] = _mask_value(
@@ -125,3 +139,21 @@ def mask_log_value_with(
     merged_limits = {**DEFAULT_LIMITS, **(limits or {})}
     budget = {"leaves": merged_limits["max_total_leaves"]}
     return _mask_value(scan_and_redact, data, policy=policy, limits=merged_limits, budget=budget, depth=0, seen=set())
+
+
+def _mask_exception_text_with(
+    scan_and_redact: Callable[..., Any],
+    exc: BaseException,
+    *,
+    policy: Optional[Any] = None,
+    limits: Optional[dict[str, int]] = None,
+) -> str:
+    """The masked ``stack`` that ``mask_log_value_with(exc)`` would produce,
+    without scanning the message or cause separately: the formatted
+    traceback already contains both, and the logging filter keeps only
+    this text."""
+    merged_limits = {**DEFAULT_LIMITS, **(limits or {})}
+    if merged_limits["max_depth"] <= 0:
+        return LIMIT_MARKER
+    budget = {"leaves": merged_limits["max_total_leaves"]}
+    return _mask_exception_stack(scan_and_redact, exc, policy=policy, limits=merged_limits, budget=budget)
