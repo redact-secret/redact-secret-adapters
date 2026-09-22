@@ -1,0 +1,63 @@
+name: Branch guard
+
+# Enforces the branch flow the rulesets can't express on their own:
+#
+#   feature/* ──PR──▶ develop ──cut──▶ rc/<train> ──PR──▶ release ──PR──▶ main
+#
+# `release` only accepts a release-candidate branch, and `main` only accepts
+# `release`, so `main` is always exactly what has been published. The
+# required "Branch guard" check on both branches is this job.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches: [release, main]
+  # For PRs opened with GITHUB_TOKEN (by cut-rc.yml and
+  # release-reconcile.yml), which fire no `pull_request` event; run on the
+  # PR's head ref.
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "The PR's base branch"
+        type: choice
+        options: [release, main]
+
+permissions: {}
+
+jobs:
+  guard:
+    name: Branch guard
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check the PR's source branch against its target
+        env:
+          BASE: ${{ github.event.pull_request.base.ref || inputs.base }}
+          HEAD: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::error::$BASE only accepts branches from $REPO, not from a fork ($HEAD_REPO)"
+            exit 1
+          fi
+          case "$BASE" in
+            release)
+              if ! [[ "$HEAD" =~ ^rc/[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]]; then
+                echo "::error::release only accepts a release candidate branch rc/YYYY.MM.DD[.N] cut by the 'Cut release candidate' workflow, not '$HEAD'. Target develop instead."
+                exit 1
+              fi
+              ;;
+            main)
+              if [ "$HEAD" != "release" ]; then
+                echo "::error::main only accepts the release branch, not '$HEAD'. main is what has been published; target develop instead."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::No rule for base '$BASE'"
+              exit 1
+              ;;
+          esac
+          echo "$HEAD -> $BASE is allowed"

@@ -1,10 +1,26 @@
 name: Release
 
+# Runs when a release train (rc/<train>) is merged into release:
+#
+#   CI ─▶ rehearsal ─▶ publish (per package) ─▶ tag + GitHub Release ─▶ reconcile
+#
+# Every package carries its own SemVer. The rehearsal's plan
+# (scripts/release-plan.mjs) reads the versions the manifests declare —
+# never computed or bumped here — and a package is published exactly when
+# its declared version is not on its registry yet. That makes a re-run safe:
+# after a partial failure, dispatching this workflow on release publishes
+# only what is still missing, never overwrites.
+#
+# The publish jobs stay in this file: npm and PyPI trusted publishing are
+# bound to the calling workflow's filename (release.yml).
+
 on:
+  push:
+    branches: [release]
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Run every check and build, but publish nothing and tag nothing"
+        description: "Run CI and the rehearsal only: publish nothing, tag nothing"
         type: boolean
         default: false
 
@@ -21,90 +37,21 @@ jobs:
       contents: read
     uses: ./.github/workflows/ci.yml
 
-  preflight:
-    # Reads the versions the manifests declare (never computed or bumped here)
-    # and refuses to continue if any of them is already on its registry. This
-    # is a hard stop before anything is built for publish, not an overwrite
-    # attempt.
-    name: Preflight
+  rehearsal:
+    name: Rehearsal
     needs: ci
-    runs-on: ubuntu-latest
     permissions:
       contents: read
-    outputs:
-      adapter_version: ${{ steps.versions.outputs.adapter_version }}
-      adapter_pino_version: ${{ steps.versions.outputs.adapter_pino_version }}
-      adapter_otel_version: ${{ steps.versions.outputs.adapter_otel_version }}
-      python_version: ${{ steps.versions.outputs.python_version }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-
-      - name: Read declared versions
-        id: versions
-        run: |
-          set -euo pipefail
-          adapter=$(node -p "require('./packages/adapter/package.json').version")
-          pino=$(node -p "require('./packages/adapter-pino/package.json').version")
-          otel=$(node -p "require('./packages/adapter-otel/package.json').version")
-          python=$(grep -m1 '^version = ' python/pyproject.toml | sed -E 's/version = "(.*)"/\1/')
-
-          {
-            echo "adapter_version=$adapter"
-            echo "adapter_pino_version=$pino"
-            echo "adapter_otel_version=$otel"
-            echo "python_version=$python"
-          } >> "$GITHUB_OUTPUT"
-
-          echo "Declared versions for this release:"
-          echo "  @redact-secret/adapter@$adapter"
-          echo "  @redact-secret/adapter-pino@$pino"
-          echo "  @redact-secret/adapter-otel@$otel"
-          echo "  redact-secret-adapters@$python (PyPI)"
-
-      - name: Refuse to publish an already-published version
-        run: |
-          set -euo pipefail
-          exists=0
-
-          check_npm() {
-            local name="$1" version="$2"
-            if npm view "${name}@${version}" version >/dev/null 2>&1; then
-              echo "::error::${name}@${version} is already published to npm"
-              exists=1
-            fi
-          }
-
-          check_pypi() {
-            local name="$1" version="$2"
-            local http_status
-            http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/${name}/${version}/json")
-            if [ "$http_status" = "200" ]; then
-              echo "::error::${name}==${version} is already published to PyPI"
-              exists=1
-            fi
-          }
-
-          check_npm "@redact-secret/adapter" "${{ steps.versions.outputs.adapter_version }}"
-          check_npm "@redact-secret/adapter-pino" "${{ steps.versions.outputs.adapter_pino_version }}"
-          check_npm "@redact-secret/adapter-otel" "${{ steps.versions.outputs.adapter_otel_version }}"
-          check_pypi "redact-secret-adapters" "${{ steps.versions.outputs.python_version }}"
-
-          if [ "$exists" -ne 0 ]; then
-            echo "::error::One or more declared versions already exist on a registry. Bump the manifest version before releasing."
-            exit 1
-          fi
+    uses: ./.github/workflows/release-rehearsal.yml
 
   publish-adapter:
-    # Publishes first: adapter-pino and adapter-otel both depend on this at
-    # ^0.1.0, and only resolve once it exists on the registry.
+    # Publishes first when it is in the plan: adapter-pino and adapter-otel
+    # both depend on it and only resolve once it exists on the registry.
     name: Publish @redact-secret/adapter
-    needs: preflight
+    needs: rehearsal
+    if: >-
+      !inputs.dry_run && github.ref == 'refs/heads/release' &&
+      needs.rehearsal.outputs.publish_adapter == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -126,18 +73,17 @@ jobs:
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@latest
 
-      - name: Publish
-        run: |
-          set -euo pipefail
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --workspace @redact-secret/adapter --access public --dry-run
-          else
-            npm publish --workspace @redact-secret/adapter --access public --provenance
-          fi
+      - run: npm publish --workspace @redact-secret/adapter --access public --provenance
 
   publish-adapter-pino:
+    # A skipped adapter publish (not in this train) doesn't block this one;
+    # a failed one does.
     name: Publish @redact-secret/adapter-pino
-    needs: publish-adapter
+    needs: [rehearsal, publish-adapter]
+    if: >-
+      !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/release' &&
+      needs.rehearsal.result == 'success' && needs.publish-adapter.result != 'failure' &&
+      needs.rehearsal.outputs.publish_adapter_pino == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -154,23 +100,20 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - run: npm ci
-      - run: npm run build --workspace @redact-secret/adapter-pino
+      - run: npm run build --workspace @redact-secret/adapter --workspace @redact-secret/adapter-pino
 
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@latest
 
-      - name: Publish
-        run: |
-          set -euo pipefail
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --workspace @redact-secret/adapter-pino --access public --dry-run
-          else
-            npm publish --workspace @redact-secret/adapter-pino --access public --provenance
-          fi
+      - run: npm publish --workspace @redact-secret/adapter-pino --access public --provenance
 
   publish-adapter-otel:
     name: Publish @redact-secret/adapter-otel
-    needs: publish-adapter
+    needs: [rehearsal, publish-adapter]
+    if: >-
+      !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/release' &&
+      needs.rehearsal.result == 'success' && needs.publish-adapter.result != 'failure' &&
+      needs.rehearsal.outputs.publish_adapter_otel == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -187,27 +130,27 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - run: npm ci
-      - run: npm run build --workspace @redact-secret/adapter-otel
+      - run: npm run build --workspace @redact-secret/adapter --workspace @redact-secret/adapter-otel
 
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@latest
 
-      - name: Publish
-        run: |
-          set -euo pipefail
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --workspace @redact-secret/adapter-otel --access public --dry-run
-          else
-            npm publish --workspace @redact-secret/adapter-otel --access public --provenance
-          fi
+      - run: npm publish --workspace @redact-secret/adapter-otel --access public --provenance
 
   publish-python:
-    # Independently versioned from the npm side, but the issue's stated order
-    # is adapter -> (adapter-pino, adapter-otel) -> PyPI, so this waits on
-    # both host packages rather than running in parallel with them.
+    # Independently versioned from the npm side, but ordered after it: a
+    # train whose npm side failed stops before it reaches a second registry.
     name: Publish redact-secret-adapters (PyPI)
-    needs: [publish-adapter-pino, publish-adapter-otel]
+    needs: [rehearsal, publish-adapter, publish-adapter-pino, publish-adapter-otel]
+    if: >-
+      !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/release' &&
+      needs.rehearsal.result == 'success' &&
+      needs.publish-adapter.result != 'failure' &&
+      needs.publish-adapter-pino.result != 'failure' &&
+      needs.publish-adapter-otel.result != 'failure' &&
+      needs.rehearsal.outputs.publish_python == 'true'
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
       id-token: write
@@ -224,45 +167,68 @@ jobs:
       - run: python -m build ./python
       - run: twine check python/dist/*
 
-      - name: Publish
-        if: ${{ !inputs.dry_run }}
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: python/dist
 
   finalize:
     # Tags per package, only for what this run actually published, only
-    # after publishing succeeded -- never before, never for a dry run. Then
-    # reports what was attempted against what the registries now report,
-    # since a partial run across two registries is not transactional and
-    # must be diagnosable rather than silent.
+    # after publishing succeeded. Then tags the train and creates (or, on a
+    # re-run, refreshes) its GitHub Release, and reports what was attempted
+    # against what the registries now report, since a partial run across two
+    # registries is not transactional and must be diagnosable, not silent.
     name: Tag and report
     needs:
-      - preflight
+      - rehearsal
       - publish-adapter
       - publish-adapter-pino
       - publish-adapter-otel
       - publish-python
-    if: always()
+    if: >-
+      always() && !inputs.dry_run && github.ref == 'refs/heads/release' &&
+      needs.rehearsal.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: read
+    outputs:
+      train: ${{ steps.train.outputs.train }}
+    env:
+      ADAPTER_RESULT: ${{ needs.publish-adapter.result }}
+      PINO_RESULT: ${{ needs.publish-adapter-pino.result }}
+      OTEL_RESULT: ${{ needs.publish-adapter-otel.result }}
+      PYTHON_RESULT: ${{ needs.publish-python.result }}
+      ADAPTER_VERSION: ${{ needs.rehearsal.outputs.adapter_version }}
+      PINO_VERSION: ${{ needs.rehearsal.outputs.adapter_pino_version }}
+      OTEL_VERSION: ${{ needs.rehearsal.outputs.adapter_otel_version }}
+      PYTHON_VERSION: ${{ needs.rehearsal.outputs.python_version }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          fetch-depth: 0
           persist-credentials: true
 
-      - name: Tag published packages
-        if: ${{ !inputs.dry_run }}
+      - name: Resolve the train
+        # From the rc/<train> PR this commit merged; the merge commit's
+        # subject is the fallback if the API has no association for it.
+        id: train
         env:
-          ADAPTER_RESULT: ${{ needs.publish-adapter.result }}
-          PINO_RESULT: ${{ needs.publish-adapter-pino.result }}
-          OTEL_RESULT: ${{ needs.publish-adapter-otel.result }}
-          PYTHON_RESULT: ${{ needs.publish-python.result }}
-          ADAPTER_VERSION: ${{ needs.preflight.outputs.adapter_version }}
-          PINO_VERSION: ${{ needs.preflight.outputs.adapter_pino_version }}
-          OTEL_VERSION: ${{ needs.preflight.outputs.adapter_otel_version }}
-          PYTHON_VERSION: ${{ needs.preflight.outputs.python_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+            --jq '[.[] | select(.base.ref == "release" and .merged_at != null) | .head.ref][0] // ""')
+          if [ -z "$head" ]; then
+            head=$(git log -1 --format=%s | sed -nE 's#^Merge pull request \#[0-9]+ from [^/]+/(rc/[^ ]+)$#\1#p')
+          fi
+          if ! [[ "$head" =~ ^rc/([0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?)$ ]]; then
+            echo "::error::Could not resolve the release train for $GITHUB_SHA (got '$head'). release only moves by merging an rc/<train> PR."
+            exit 1
+          fi
+          echo "train=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          echo "Train: ${BASH_REMATCH[1]}"
+
+      - name: Tag published packages
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -285,50 +251,74 @@ jobs:
           tag_if_published "$OTEL_RESULT" "adapter-otel@${OTEL_VERSION}"
           tag_if_published "$PYTHON_RESULT" "redact-secret-adapters@${PYTHON_VERSION}"
 
-      - name: Report
+      - name: Tag the train and publish its GitHub Release
+        # Only once at least one package tag points at this commit. The
+        # notes are regenerated from those tags, so a re-run that publishes
+        # the rest of a partially failed train updates them in place.
         env:
-          ADAPTER_RESULT: ${{ needs.publish-adapter.result }}
-          PINO_RESULT: ${{ needs.publish-adapter-pino.result }}
-          OTEL_RESULT: ${{ needs.publish-adapter-otel.result }}
-          PYTHON_RESULT: ${{ needs.publish-python.result }}
-          ADAPTER_VERSION: ${{ needs.preflight.outputs.adapter_version }}
-          PINO_VERSION: ${{ needs.preflight.outputs.adapter_pino_version }}
-          OTEL_VERSION: ${{ needs.preflight.outputs.adapter_otel_version }}
-          PYTHON_VERSION: ${{ needs.preflight.outputs.python_version }}
+          GH_TOKEN: ${{ github.token }}
+          TRAIN: ${{ steps.train.outputs.train }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git tag --points-at HEAD | grep '@' || true)" ]; then
+            echo "::warning::No package was published from this commit; not tagging train/$TRAIN"
+            exit 0
+          fi
+          tag="train/$TRAIN"
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            git tag -a "$tag" -m "Release train $TRAIN"
+            git push origin "$tag"
+          fi
+          node scripts/release-notes.mjs "$TRAIN" > notes.md
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes-file notes.md
+          else
+            gh release create "$tag" --verify-tag --latest --title "Release train $TRAIN" --notes-file notes.md
+          fi
+
+      - name: Report
         run: |
           set -euo pipefail
 
           npm_registry_version() {
-            npm view "$1" version 2>/dev/null || echo "(not on registry)"
+            local status
+            status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/$1/$2")
+            [ "$status" = "200" ] && echo "$2" || echo "(not on registry)"
           }
 
           pypi_registry_version() {
-            local http_status
-            http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/$1/$2/json")
-            if [ "$http_status" = "200" ]; then
-              echo "$2"
-            else
-              echo "(not on registry)"
-            fi
+            local status
+            status=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/$1/$2/json")
+            [ "$status" = "200" ] && echo "$2" || echo "(not on registry)"
           }
 
           {
-            echo "## Release report"
+            echo "## Release report: train ${{ steps.train.outputs.train }}"
             echo
-            echo "| Package | Declared version | Attempted | Result | Registry now reports |"
-            echo "|---|---|---|---|---|"
-            echo "| @redact-secret/adapter | ${ADAPTER_VERSION} | $([ "$ADAPTER_RESULT" != "skipped" ] && echo yes || echo no) | ${ADAPTER_RESULT} | $(npm_registry_version "@redact-secret/adapter") |"
-            echo "| @redact-secret/adapter-pino | ${PINO_VERSION} | $([ "$PINO_RESULT" != "skipped" ] && echo yes || echo no) | ${PINO_RESULT} | $(npm_registry_version "@redact-secret/adapter-pino") |"
-            echo "| @redact-secret/adapter-otel | ${OTEL_VERSION} | $([ "$OTEL_RESULT" != "skipped" ] && echo yes || echo no) | ${OTEL_RESULT} | $(npm_registry_version "@redact-secret/adapter-otel") |"
-            echo "| redact-secret-adapters (PyPI) | ${PYTHON_VERSION} | $([ "$PYTHON_RESULT" != "skipped" ] && echo yes || echo no) | ${PYTHON_RESULT} | $(pypi_registry_version "redact-secret-adapters" "${PYTHON_VERSION}") |"
+            echo "| Package | Declared version | Result | Registry now has declared version |"
+            echo "|---|---|---|---|"
+            echo "| @redact-secret/adapter | ${ADAPTER_VERSION} | ${ADAPTER_RESULT} | $(npm_registry_version "@redact-secret/adapter" "$ADAPTER_VERSION") |"
+            echo "| @redact-secret/adapter-pino | ${PINO_VERSION} | ${PINO_RESULT} | $(npm_registry_version "@redact-secret/adapter-pino" "$PINO_VERSION") |"
+            echo "| @redact-secret/adapter-otel | ${OTEL_VERSION} | ${OTEL_RESULT} | $(npm_registry_version "@redact-secret/adapter-otel" "$OTEL_VERSION") |"
+            echo "| redact-secret-adapters (PyPI) | ${PYTHON_VERSION} | ${PYTHON_RESULT} | $(pypi_registry_version "redact-secret-adapters" "$PYTHON_VERSION") |"
             echo
-            if [ "${{ inputs.dry_run }}" = "true" ]; then
-              echo "_Dry run: every check and build ran, nothing was published or tagged._"
-            fi
+            echo "_\`skipped\` means the declared version was already published: not part of this train._"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if any publish job failed
-        if: contains(needs.*.result, 'failure')
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |
-          echo "::error::One or more publish jobs failed. See the release report above for exactly what shipped."
+          echo "::error::One or more publish jobs failed. See the release report above for exactly what shipped, then re-run this workflow on release to publish the rest."
           exit 1
+
+  reconcile:
+    name: Reconcile
+    needs: finalize
+    if: needs.finalize.result == 'success'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    uses: ./.github/workflows/release-reconcile.yml
+    with:
+      train: ${{ needs.finalize.outputs.train }}

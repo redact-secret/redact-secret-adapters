@@ -10,11 +10,11 @@ A change to the range this package declares against `redact-secret`, its
 always its own entry, naming the test that backs the new range, never folded
 into a generic "bump dependency" line.
 
-To cut a release: move this section's `Unreleased` entries under a new
-`## [x.y.z] - YYYY-MM-DD` heading matching the version bumped in
-`pyproject.toml`, then run the [Release workflow](../.github/workflows/release.yml),
-which publishes and tags each package independently once its declared
-version isn't already on the registry. This file ships inside the sdist
+To release: in a PR into `develop`, move this section's `Unreleased`
+entries under a new `## [x.y.z] - YYYY-MM-DD` heading matching the version
+bumped in `pyproject.toml`. The next release train publishes and tags every
+package whose declared version isn't on its registry yet — see
+[RELEASING.md](../RELEASING.md). This file ships inside the sdist
 (`tool.hatch.build.targets.sdist.include` in `pyproject.toml`), so a consumer
 can read it without leaving their environment.
 
