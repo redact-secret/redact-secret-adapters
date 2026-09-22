@@ -80,7 +80,11 @@ jobs:
       - run: npm run build --workspace @redact-secret/adapter
 
       - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@latest
+        # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10.
+        # Pinned, not @latest: this job holds id-token: write, so whatever
+        # npm resolves here runs with a token that can publish. Bump it
+        # deliberately, together with release-rehearsal.yml.
+        run: npm install -g npm@11.19.1
 
       - run: npm publish --workspace @redact-secret/adapter --access public --provenance
 
@@ -113,7 +117,11 @@ jobs:
       - run: npm run build --workspace @redact-secret/adapter --workspace @redact-secret/adapter-pino
 
       - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@latest
+        # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10.
+        # Pinned, not @latest: this job holds id-token: write, so whatever
+        # npm resolves here runs with a token that can publish. Bump it
+        # deliberately, together with release-rehearsal.yml.
+        run: npm install -g npm@11.19.1
 
       - run: npm publish --workspace @redact-secret/adapter-pino --access public --provenance
 
@@ -144,7 +152,11 @@ jobs:
       - run: npm run build --workspace @redact-secret/adapter --workspace @redact-secret/adapter-otel
 
       - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@latest
+        # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10.
+        # Pinned, not @latest: this job holds id-token: write, so whatever
+        # npm resolves here runs with a token that can publish. Bump it
+        # deliberately, together with release-rehearsal.yml.
+        run: npm install -g npm@11.19.1
 
       - run: npm publish --workspace @redact-secret/adapter-otel --access public --provenance
 
