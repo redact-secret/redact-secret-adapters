@@ -314,7 +314,10 @@ jobs:
   reconcile:
     name: Reconcile
     needs: finalize
-    if: needs.finalize.result == 'success'
+    # Without a status function GitHub adds success(), which is false when
+    # any publish job upstream was skipped — i.e. on every train that does
+    # not bump every package.
+    if: ${{ !cancelled() && needs.finalize.result == 'success' }}
     permissions:
       contents: write
       pull-requests: write
