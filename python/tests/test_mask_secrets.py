@@ -6,6 +6,7 @@ scanner stands in for the core.
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from pathlib import Path
 
 from fake_scanner import RecordingScanner, fake_scan_and_redact
 
+import redact_secret_adapters
 from redact_secret_adapters.mask_leaf import BLOCK_MARKER, CYCLE_MARKER, ERROR_MARKER, LIMIT_MARKER
 from redact_secret_adapters.mask_log_value import mask_log_value_with
 from redact_secret_adapters.mask_secrets import mask_secrets_with
@@ -151,6 +153,13 @@ class MaskSecretsWithTest(unittest.TestCase):
     def test_rejects_non_callable_scan_and_redact(self) -> None:
         with self.assertRaises(TypeError):
             mask_secrets_with(None, {})
+
+
+class PackageVersionTest(unittest.TestCase):
+    def test_version_comes_from_pyproject(self) -> None:
+        pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+        declared = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE).group(1)
+        self.assertEqual(redact_secret_adapters.__version__, declared)
 
 
 if __name__ == "__main__":
