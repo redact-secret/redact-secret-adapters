@@ -119,6 +119,29 @@ and reports an empty plan.
 - Rulesets from [.github/rulesets](.github/rulesets), applied with
   `scripts/apply-rulesets.sh`.
 
+### A brand-new npm package
+
+npm only lets you configure a trusted publisher on a package that already
+exists, so the first version of a new npm package can't come from
+`release.yml`: its publish fails with `E404`. (PyPI doesn't have this
+problem: a *pending* trusted publisher can be registered before the project
+exists.) Wire the package in on `develop` first (`PACKAGES` in
+`scripts/release-plan.mjs`, `CHANGELOGS` in `scripts/release-notes.mjs`, a
+publish job in `release.yml`), then bootstrap it once by hand:
+
+1. Cut the train as usual. On the `rc/<train>` head, build and publish the
+   new package from your machine:
+   `npm ci && npm run build && npm publish --workspace <package> --access public`.
+   This version has no provenance attestation; later ones will.
+2. On npmjs.com, add the package's trusted publisher (this repository,
+   `release.yml`, environment `release`), then under *Publishing access*
+   disallow tokens.
+3. Merge the rc PR. The plan skips the version you published, publishes
+   the rest, and **Tag and report** tags the hand-published version too, so
+   reconcile's tag check passes. If the rc PR was already merged and the
+   publish failed with `E404`, do steps 1–2 from `release` instead and
+   re-run **Release**.
+
 PRs that cut and reconcile open use `GITHUB_TOKEN`, which fires no
 `pull_request` event; those workflows dispatch CI, Branch guard and
 Rehearsal onto the PR's head ref instead, which is what the required checks
