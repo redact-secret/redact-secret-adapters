@@ -30,8 +30,10 @@ hosts actually move at.
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | Beta |
 
 Every package declares a compatibility range against `@redact-secret/core` /
-`redact-secret` and is tested against the host versions it claims. A package is
-published only once a test runs against a real instance of its host — see
+`redact-secret` and is tested against the host versions it claims. Each host
+integration has a test against a real instance of its host, which CI runs at
+both ends of the declared range, and a release publishes only from a commit
+that passed CI ([RELEASING.md](./RELEASING.md)). See
 [Supported host versions](#supported-host-versions).
 
 ### Install
@@ -173,26 +175,17 @@ packages are not part of that lockstep: a new pino release moves
 
 ## What this repository does not contain
 
-- **Stream adapters.** Node `Transform` and Web `TransformStream` integration
-  ships inside `@redact-secret/core` (`./node-stream`, `./web-stream`) and stays
-  there. "Adapter" in this repository's package names means an external *host*
-  integration, and is also distinct from "host adapter" as the core repository
-  uses it for the CLI and the language bindings.
-- **MCP and model-context integration.** Those require the core's incremental
-  sanitizer, a far wider and stateful surface than the four items above. They
-  remain examples in the core repository.
-- **Any detection.** An adapter never decides what a secret is, never adds a
-  pattern, and never post-processes a finding beyond the fail-closed rules
-  above.
+No detection: deciding what a secret is stays in the core. Also out of scope
+are stream adapters (Node `Transform` and Web `TransformStream` ship inside
+`@redact-secret/core` as `./node-stream` and `./web-stream`), MCP and
+model-context wiring, LangChain, and a Langfuse package;
+[ARCHITECTURE.md § Deliberate exclusions](./ARCHITECTURE.md#deliberate-exclusions)
+gives the reason for each.
 
 ## Contributing
 
-Read [ARCHITECTURE.md](./ARCHITECTURE.md) first. Two rules are absolute:
-
-1. No adapter may log, attach, or re-expose matched plaintext — including in its
-   own error paths.
-2. Real credentials never appear in source, fixtures, tests, snapshots, or
-   documentation. Use unmistakably synthetic values.
+Read [ARCHITECTURE.md](./ARCHITECTURE.md) first. Every change must hold to its
+[Security boundary](./ARCHITECTURE.md#security-boundary).
 
 ## License
 
