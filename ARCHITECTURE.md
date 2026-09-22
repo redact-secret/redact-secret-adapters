@@ -3,7 +3,7 @@
 This repository holds host integrations for
 [Redact Secret](https://github.com/redact-secret/redact-secret). It contains no
 detection logic, no policy, and no redaction algorithm. Everything here is
-wiring, and the value of the wiring is that it is subtle enough to get wrong.
+wiring between a host's extension point and the core.
 
 ## The layering
 
@@ -55,9 +55,9 @@ import type {
 export type ScanAndRedact = (text: string, options?: ScanAndRedactOptions) => ScanResult;
 ```
 
-This is the strongest guard in the repository. If the core renames an action or
-reshapes a result, these packages fail to compile — they do not keep running
-while quietly letting a `block`-worthy secret through as an inline placeholder.
+If the core renames an action or reshapes a result, these packages fail to
+compile instead of running on while letting a `block`-worthy secret through as
+an inline placeholder.
 
 Because a typecheck only covers the core version that is installed, CI
 typechecks at **both ends of every declared range**, host packages included.
@@ -73,21 +73,19 @@ runtime code stays structural: an object is a `SpanProcessor` because it has
 ## Fail-closed rules
 
 L1 is small on purpose. It performs no detection; it decides how the core's
-answer reaches the host.
+answer reaches the host. The four markers, when each fires, and
+`DEFAULT_LIMITS` are listed once, in
+[README.md § Fail-closed behavior](./README.md#fail-closed-behavior); they are
+public API and move only in a major version. The reasons behind them:
 
-- A `block` finding replaces the **whole leaf** with `[REDACTED:BLOCKED]`. The
-  core already substitutes `block` findings in place like `redact` ones, but an
-  inline placeholder still leaves the rest of the string visible, which is not
-  what a host asked for when it declared a value block-worthy.
-- Any throw becomes `[REDACTED:ERROR]`. Not the original text, and not the
-  error's own message — an error message can carry the input.
-- A value past a budget becomes `[REDACTED:LIMIT_EXCEEDED]` and is never sent to
-  the core. Elements and keys past `maxArrayLength` / `maxObjectKeys` are
-  dropped, never passed through unmasked.
-- A cycle becomes `[REDACTED:CYCLE]`.
-
-The markers and `DEFAULT_LIMITS` are public API. They move only in a major
-version.
+- `block` replaces the **whole leaf**. The core already substitutes `block`
+  findings in place like `redact` ones, but an inline placeholder still leaves
+  the rest of the string visible, which is not what a host asked for when it
+  declared a value block-worthy.
+- An error produces a fixed marker, never the error's own message: an error
+  message can carry the input.
+- A value past a budget is never sent to the core, and elements or keys past a
+  width limit are dropped rather than passed through unmasked.
 
 ## Adapter-specific notes
 
@@ -125,8 +123,7 @@ One runtime assumption is load-bearing: `ReadableSpan.attributes` is typed
 `readonly` but is a plain mutable object at runtime. If an SDK version freezes
 it, this adapter becomes a silent no-op — which is exactly the failure mode the
 fail-closed rules exist to prevent. The test suite asserts mutation actually
-took effect on a real span, at both ends of the declared SDK range. That
-assertion is not optional.
+took effect on a real span, at both ends of the declared SDK range.
 
 The Python SDK makes the same assumption false by construction rather than by
 version drift: `opentelemetry-sdk`'s `BoundedAttributes` marks every event's
