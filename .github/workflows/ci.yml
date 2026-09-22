@@ -2,14 +2,20 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
   workflow_call:
+  # Dispatched by cut-rc.yml and release-reconcile.yml onto the head of a PR
+  # they open: a PR opened with GITHUB_TOKEN fires no `pull_request` event,
+  # and required checks match by name on the head commit, whatever the event.
+  workflow_dispatch:
 
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # `github.workflow` is the caller's name under workflow_call, so the
+  # Release workflow's CI never cancels (or is cancelled by) a plain CI run.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -190,3 +196,32 @@ jobs:
       - run: ruff format --check python
       - run: ruff check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py
       - run: ruff format --check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py
+
+  ci-passed:
+    # The single required status check for develop, release and main, so
+    # branch rulesets don't have to list (and track renames of) every
+    # matrix leg above.
+    name: CI passed
+    if: always()
+    needs:
+      - node
+      - range-endpoints
+      - python
+      - pack-contents
+      - npm-install-smoke
+      - python-wheel-smoke
+      - python-range-endpoints
+      - lint
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Fail unless every CI job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::A CI job finished with '$result'"
+              exit 1
+            fi
+          done

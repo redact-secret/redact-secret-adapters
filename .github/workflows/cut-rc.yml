@@ -1,0 +1,114 @@
+name: Cut release candidate
+
+# Cuts rc/<train> from the head of develop and opens its PR into release.
+# The train is a date label (YYYY.MM.DD, then .2, .3 for a second cut the
+# same day), not a package version: every package keeps its own SemVer, and
+# the train publishes exactly the packages whose declared version is not on
+# its registry yet (scripts/release-plan.mjs).
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cut-rc
+  cancel-in-progress: false
+
+jobs:
+  cut:
+    name: Cut rc/<train>
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Refuse to cut from anything but develop
+        if: github.ref != 'refs/heads/develop'
+        run: |
+          echo "::error::Run this workflow on develop, not ${{ github.ref_name }}"
+          exit 1
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+
+      - name: Refuse to cut while release has changes develop lacks
+        # Fixes made on an rc branch reach develop through the sync PR that
+        # release-reconcile.yml opens. Cutting past an unmerged one would
+        # ship a train that silently drops those fixes on its way back.
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor origin/release HEAD; then
+            echo "::error::release has commits develop doesn't. Merge the open sync/* PR into develop first."
+            exit 1
+          fi
+
+      - name: Refuse to cut while another train is open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          open=$(gh pr list --base release --state open --json headRefName --jq '[.[].headRefName | select(startswith("rc/"))] | join(", ")')
+          if [ -n "$open" ]; then
+            echo "::error::A train is already open against release: $open. Merge or close it first."
+            exit 1
+          fi
+
+      - name: Plan
+        id: plan
+        run: node scripts/release-plan.mjs --check-changelog --require-publish
+
+      - name: Name the train
+        id: train
+        run: |
+          set -euo pipefail
+          base=$(date -u +%Y.%m.%d)
+          train="$base"
+          n=1
+          while git ls-remote --exit-code origin "refs/heads/rc/$train" "refs/tags/train/$train" >/dev/null; do
+            n=$((n + 1))
+            train="$base.$n"
+          done
+          echo "train=$train" >> "$GITHUB_OUTPUT"
+          echo "Train: $train"
+
+      - name: Push rc/${{ steps.train.outputs.train }}
+        run: git push origin "HEAD:refs/heads/rc/${{ steps.train.outputs.train }}"
+
+      - name: Open the PR into release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRAIN: ${{ steps.train.outputs.train }}
+          PLAN: ${{ steps.plan.outputs.plan }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Release train \`$TRAIN\`, cut from develop at $(git rev-parse --short HEAD)."
+            echo
+            echo "| Package | Registry | Version | Plan |"
+            echo "|---|---|---|---|"
+            echo "$PLAN" | jq -r '.[] | "| \(.name) | \(.registry) | \(.version) | \(if .publish then "**publish**" else "already published, skip" end) |"'
+            echo
+            echo "Fixes for this train go in as PRs into \`rc/$TRAIN\`; they reach develop through the sync PR opened after release."
+            echo "Merging this PR (merge commit) runs **Release**: rehearsal, publish, then reconcile."
+          } > body.md
+          gh pr create --base release --head "rc/$TRAIN" --title "Release train $TRAIN" --body-file body.md
+
+      - name: Run the required checks on the rc head
+        # This PR was opened with GITHUB_TOKEN, which fires no pull_request
+        # event; required checks match by name on the head commit.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: rc/${{ steps.train.outputs.train }}
+        run: |
+          set -euo pipefail
+          gh workflow run ci.yml --ref "$REF"
+          gh workflow run branch-guard.yml --ref "$REF" -f base=release
+          gh workflow run release-rehearsal.yml --ref "$REF"
