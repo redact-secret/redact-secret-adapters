@@ -19,6 +19,15 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Fixed
+
+- `logger.error(err, "custom")` now logs `"custom"` as `msg`. Before, a leading
+  `Error` was rewritten to `[{ err }, err.message, ...rest]`, which replaced
+  the caller's message with `err.message` and interpolated the caller's
+  arguments into it. The hook now hands pino a masked copy of the error that
+  keeps its prototype, so pino's own handling applies: the caller's message
+  wins, and `logger.error(err)` still gets the masked `err.message`.
+
 ## [0.1.0] - 2026-09-22
 
 Initial release.

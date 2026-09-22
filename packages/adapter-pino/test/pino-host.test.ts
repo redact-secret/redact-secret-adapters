@@ -88,6 +88,24 @@ test("a bare Error's message and stack are redacted before pino's default err se
   expect(raw()).not.toContain("SECRET_TOKEN_1");
 });
 
+test("logger.error(err, msg) keeps the caller's message; pino's own err.message fallback never replaces it", () => {
+  const { logger, lines, raw } = capturingLogger();
+  logger.error(new TypeError("failed at 50%s with SECRET_TOKEN_1"), "custom message");
+  const [line] = lines();
+  expect(line.msg).toBe("custom message");
+  expect(line.err.type).toBe("TypeError");
+  expect(line.err.message).toBe("failed at 50%s with <SECRET_1>");
+  expect(raw()).not.toContain("SECRET_TOKEN_1");
+});
+
+test("logger.error(err, fmt, ...values) formats the caller's message, not err.message", () => {
+  const { logger, lines } = capturingLogger();
+  logger.error(new Error("at 50%s"), "retry %s of %s", "1", "3");
+  const [line] = lines();
+  expect(line.msg).toBe("retry 1 of 3");
+  expect(line.err.message).toBe("at 50%s");
+});
+
 test("issue #361: a block finding on the joined message replaces the whole message pino writes", () => {
   const { logger, lines, raw } = capturingLogger();
   logger.info("prefix %s suffix", "BLOCK_ME");

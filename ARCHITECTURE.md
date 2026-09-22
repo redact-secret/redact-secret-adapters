@@ -98,12 +98,15 @@ key separately from the merged object — and it runs before `serializers[key]`,
 so it can reach a plain string field but never the message and never a
 serialized `err.message`.
 
-Two transformations run before anything is scanned:
+Two things keep pino's own call-shape handling intact:
 
-1. **A leading `Error` is normalized** to `[{ err }, err.message, ...rest]`.
-   pino infers `msg` from `err.message` only when the first argument is
-   `instanceof Error`; replacing that argument with a masked plain object would
-   silently drop the `msg` field from the output.
+1. **A leading `Error` stays a leading `Error`.** pino wraps a first argument
+   that is `instanceof Error` under `errorKey`, and takes `msg` from its
+   `message` only when the caller passed no message. The hook therefore hands
+   pino a masked copy that keeps the original error's prototype, rather than a
+   plain object or a rewritten argument list: `logger.error(err, "custom")`
+   keeps `"custom"`, `logger.error(err)` gets the masked `err.message`, and
+   `err.type` still names the error's class.
 2. **A string message and its interpolation values are joined** into the exact
    string pino would format, *before* redaction. pino formats `msg` after the
    hook returns, so scanning the format string and its arguments separately

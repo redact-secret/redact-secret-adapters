@@ -102,16 +102,29 @@ test("issue #361: ordinary formatting with no secret is unaffected", () => {
   expect(calls[0]?.args).toEqual(["user alice logged in from 10.0.0.1"]);
 });
 
-test("a bare leading Error is normalized to { err }, message, ...rest — and both are redacted", () => {
+test("a leading Error stays in first position as a masked object that is still instanceof its class", () => {
   const { method, calls } = spyMethod();
   const hook = createRedactingLogMethodWith(fakeScanAndRedact);
-  const err = new Error("failed with SECRET_TOKEN_1");
+  const err = new TypeError("failed with SECRET_TOKEN_1");
   callHook(hook, {}, [err], method, 50);
-  const [mergingObject, msg] = (calls[0]?.args ?? []) as [{ err: Record<string, unknown> }, string];
-  expect(msg).toBe("failed with <SECRET_1>");
-  expect(mergingObject.err.message).toBe("failed with <SECRET_1>");
-  expect(typeof mergingObject.err.stack).toBe("string");
-  expect(JSON.stringify(calls[0]?.args)).not.toContain("SECRET_TOKEN_1");
+  const args = calls[0]?.args ?? [];
+  expect(args).toHaveLength(1);
+  const masked = args[0] as TypeError;
+  expect(masked).toBeInstanceOf(TypeError);
+  expect(masked).not.toBe(err);
+  expect(masked.message).toBe("failed with <SECRET_1>");
+  expect(masked.stack).not.toContain("SECRET_TOKEN_1");
+  expect(err.message).toBe("failed with SECRET_TOKEN_1");
+});
+
+test("a leading Error with a message keeps the caller's message, never interpolating into err.message", () => {
+  const { method, calls } = spyMethod();
+  const hook = createRedactingLogMethodWith(fakeScanAndRedact);
+  callHook(hook, {}, [new Error("at 50%s"), "custom %s", "SECRET_TOKEN_1"], method, 50);
+  const [masked, msg] = (calls[0]?.args ?? []) as [Error, string];
+  expect(msg).toBe("custom <SECRET_1>");
+  expect(masked.message).toBe("at 50%s");
+  expect(calls[0]?.args).toHaveLength(2);
 });
 
 test("an Error nested inside a merging object is redacted before pino's own serializer sees it", () => {
