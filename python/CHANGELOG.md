@@ -20,6 +20,14 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+### Fixed
+
+- `otel`: a string-sequence attribute containing `None` (which the SDK
+  accepts) was exported unscanned. Each `str` element is now masked and
+  `None` kept in place.
+- `otel`: the span name, status description, event names, and link
+  attributes are now redacted, not only span and event attributes.
+
 ## [0.1.0]
 
 Initial release. Not yet published — this heading gains a release date once

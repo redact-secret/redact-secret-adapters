@@ -1,8 +1,9 @@
 """A SpanProcessor (OpenTelemetry Python,
 https://github.com/open-telemetry/opentelemetry-python/blob/main/opentelemetry-sdk/src/opentelemetry/sdk/trace/__init__.py)
-that redacts every string and string-sequence attribute -- including
-OpenInference and GenAI semantic-convention attributes -- on a span and
-its events before handing the span to the next processor. It does not
+that redacts a span's name, status description, every string and
+string-sequence attribute -- including OpenInference and GenAI
+semantic-convention attributes -- every event's name and attributes, and
+every link's attributes before handing the span to the next processor. It does not
 allowlist those attribute names: every string-shaped attribute value is
 scanned, which covers any semantic convention without hardcoding it and
 without a dependency on either convention's attribute list.
@@ -144,14 +145,34 @@ class RedactingSpanProcessorWith:
         if callable(on_ending):
             on_ending(span)
 
-    def on_end(self, span: "ReadableSpan") -> None:
-        redact_attributes_with(
-            self._scan_and_redact, getattr(span, "_attributes", None), policy=self._policy, limits=self._limits
+    def _mask_text(self, value: Any) -> Any:
+        max_string_length = (self._limits or {}).get("max_string_length")
+        return _mask_attribute_value(
+            self._scan_and_redact, value, policy=self._policy, max_string_length=max_string_length
         )
-        for event in getattr(span, "events", ()) or ():
-            redact_attributes_with(
-                self._scan_and_redact, getattr(event, "_attributes", None), policy=self._policy, limits=self._limits
-            )
+
+    def _redact_attributes(self, attributes: Any) -> None:
+        redact_attributes_with(self._scan_and_redact, attributes, policy=self._policy, limits=self._limits)
+
+    def on_end(self, span: "ReadableSpan") -> None:
+        # Everything a span exports as free text: its name, attributes,
+        # status description, each event's name and attributes, and each
+        # link's attributes. The public accessors are read-only (or return
+        # copies), so each write goes to the private field behind them.
+        span._name = self._mask_text(span._name)
+        self._redact_attributes(span._attributes)
+        status = span._status
+        description = getattr(status, "description", None)
+        if isinstance(description, str) and description:
+            masked = self._mask_text(description)
+            if masked != description:
+                # Replaced, not mutated: the Status may be the caller's object.
+                span._status = type(status)(status.status_code, masked)
+        for event in span.events:
+            event._name = self._mask_text(event._name)
+            self._redact_attributes(event._attributes)
+        for link in span.links:
+            self._redact_attributes(link._attributes)
         self._next.on_end(span)
 
     def shutdown(self) -> None:

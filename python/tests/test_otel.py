@@ -15,18 +15,40 @@ from redact_secret_adapters.otel import RedactingSpanProcessorWith, redact_attri
 
 
 class FakeEvent:
+    def __init__(self, attributes: dict, name: str = "event") -> None:
+        self._name = name
+        self._attributes = attributes
+
+
+class FakeLink:
     def __init__(self, attributes: dict) -> None:
         self._attributes = attributes
 
 
-class FakeSpan:
-    """Stands in for `ReadableSpan`: attributes/event attributes live on
-    the private `_attributes` field, matching the real SDK's read-only
-    `.attributes` property."""
+class FakeStatus:
+    def __init__(self, status_code: str = "UNSET", description=None) -> None:
+        self.status_code = status_code
+        self.description = description
 
-    def __init__(self, attributes: dict, events=()) -> None:
+
+class FakeSpan:
+    """Stands in for `ReadableSpan`: everything the processor writes lives
+    on a private field, matching the real SDK's read-only accessors."""
+
+    def __init__(self, attributes: dict, events=(), *, name: str = "span", status=None, links=()) -> None:
+        self._name = name
         self._attributes = attributes
-        self.events = list(events)
+        self._status = status if status is not None else FakeStatus()
+        self._events = list(events)
+        self._links = list(links)
+
+    @property
+    def events(self) -> tuple:
+        return tuple(self._events)
+
+    @property
+    def links(self) -> tuple:
+        return tuple(self._links)
 
 
 class FakeNextProcessor:
@@ -80,6 +102,28 @@ class RedactingSpanProcessorWithTest(unittest.TestCase):
         self.assertNotIn("SECRET_TOKEN_1", serialized)
         self.assertNotIn("SECRET_TOKEN_2", serialized)
         self.assertNotIn("BLOCK_ME", serialized)
+
+    def test_name_status_event_names_and_link_attributes_are_redacted(self) -> None:
+        next_processor = FakeNextProcessor()
+        processor = RedactingSpanProcessorWith(next_processor, fake_scan_and_redact)
+        caller_status = FakeStatus("ERROR", "failed with SECRET_TOKEN_1")
+        span = FakeSpan(
+            attributes={},
+            name="GET SECRET_TOKEN_2",
+            status=caller_status,
+            events=[FakeEvent({}, name="retry SECRET_TOKEN_3")],
+            links=[FakeLink({"peer": "SECRET_TOKEN_4 here", "tags": ("x", None)})],
+        )
+
+        processor.on_end(span)
+
+        exported = next_processor.exported[0]
+        self.assertEqual(exported._name, "GET <SECRET_1>")
+        self.assertEqual(exported._status.status_code, "ERROR")
+        self.assertEqual(exported._status.description, "failed with <SECRET_1>")
+        self.assertEqual(caller_status.description, "failed with SECRET_TOKEN_1")  # replaced, not mutated
+        self.assertEqual(exported.events[0]._name, "retry <SECRET_1>")
+        self.assertEqual(exported.links[0]._attributes, {"peer": "<SECRET_1> here", "tags": ("x", None)})
 
     def test_core_failure_on_one_attribute_fails_closed(self) -> None:
         next_processor = FakeNextProcessor()
