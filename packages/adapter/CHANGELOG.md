@@ -19,10 +19,9 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
-## [0.1.0]
+## [0.1.0] - 2026-09-22
 
-Initial release. Not yet published — this heading gains a release date once
-the Release workflow first publishes this package.
+Initial release.
 
 ### Added
 
