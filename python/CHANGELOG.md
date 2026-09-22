@@ -39,7 +39,7 @@ the Release workflow first publishes this package.
   through `BoundedAttributes`' backing dict, since the Python OpenTelemetry
   SDK marks span and event attributes immutable once a span ends, before any
   processor hook fires.
-- Declared ranges: `redact-secret>=0.1.0b4,<0.2`; `requires-python >=3.10`
+- Declared ranges: `redact-secret>=0.1.0b6,<0.2`; `requires-python >=3.10`
   for the stdlib `logging` integration; `otel` extra:
   `opentelemetry-sdk>=1.16.0,<2`, verified by a real span passed through a
   real `TracerProvider` at both ends of the range.

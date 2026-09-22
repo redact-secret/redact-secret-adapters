@@ -22,6 +22,7 @@ function finding(action: SecretAction): SecretFinding {
     type: "generic_token",
     detector: "fake",
     confidence: action === "warn" ? "medium" : "high",
+    obfuscation: "none",
     action,
     start: 0,
     end: 0,

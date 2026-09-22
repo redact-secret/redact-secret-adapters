@@ -17,7 +17,7 @@ classifiers = [
   "Topic :: System :: Logging",
   "Typing :: Typed",
 ]
-dependencies = ["redact-secret>=0.1.0b4,<0.2"]
+dependencies = ["redact-secret>=0.1.0b6,<0.2"]
 
 [project.optional-dependencies]
 # Range evidence: tests/test_otel_host.py passes at every version from

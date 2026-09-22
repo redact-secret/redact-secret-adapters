@@ -27,6 +27,7 @@ class FakeFinding:
     type: str = "generic_token"
     detector: str = "fake"
     confidence: str = "high"
+    obfuscation: str = "none"
     start: int = 0
     end: int = 0
 
