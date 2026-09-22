@@ -8,27 +8,23 @@ allowlist those attribute names: every string-shaped attribute value is
 scanned, which covers any semantic convention without hardcoding it and
 without a dependency on either convention's attribute list.
 
-``ReadableSpan.attributes`` returns a read-only ``MappingProxyType`` in
-every declared SDK version -- there is no public mutation API before
-export. This reaches into the private ``_attributes`` field instead (and
-each event's ``_attributes``), which is the accepted workaround for OTel
-Python redaction processors absent a public API. If a future SDK version
-removes or renames that field, ``tests/test_otel_host.py``'s exporter
-assertion fails loudly instead of silently letting plaintext through --
-it does not assume the field is `None`-safe by construction.
+The SDK has no public mutation API before export: ``ReadableSpan.name``,
+``.status``, ``.attributes`` and the event/link accessors are read-only.
+This writes the private fields behind them instead -- ``_name``,
+``_status``, ``_attributes``, and each event's ``_name``/``_attributes``
+and each link's ``_attributes`` -- and reads every write back through the
+public accessor. If a field is missing while its public accessor has
+content, or a write does not show through, the span is **dropped** (never
+exported with plaintext) and a ``RuntimeWarning`` is issued once per
+processor. ``tests/test_otel_host.py`` checks the writes against a real SDK
+at both ends of the declared range.
 
-The ``_attributes`` field is a ``BoundedAttributes`` -- a ``MutableMapping``
-that raises ``TypeError`` from ``__setitem__`` once its own ``_immutable``
-flag is set. Every SDK version in the declared range sets that flag
-unconditionally for event attributes (an event, once recorded, is meant to
-be immutable) and, from opentelemetry-sdk 1.43 onward, for span attributes
-too as of ``Span.end()`` -- in both cases *before* any processor hook runs,
-so there is no callback timing that reaches attributes while they are still
-mutable through ``__setitem__``. This writes through the backing
-``_dict`` instead, which ``BoundedAttributes.__deepcopy__`` itself uses for
-the same reason ("bypass the immutability guard in __setitem__"): it is the
-SDK's own accepted way to mutate a frozen bag, not a version-specific
-workaround, so it doesn't need gating by which SDK version is installed.
+An attribute bag is a ``BoundedAttributes``, whose ``__setitem__`` raises
+once its ``_immutable`` flag is set: always for event and link attributes,
+and for span attributes from ``Span.end()`` on in newer SDKs (1.16.0 still
+leaves them mutable in ``on_end``). Writes go through its backing ``_dict``,
+the same bypass ``BoundedAttributes.__deepcopy__`` uses, so no SDK version
+check is needed.
 
 This module does not import ``opentelemetry`` at all: ``SpanProcessor``'s
 ``on_start``/``on_end``/``shutdown``/``force_flush`` are plain (non-
@@ -48,6 +44,7 @@ matching ``packages/adapter-otel/src/span-processor.ts``. Install the
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only, no runtime dependency
@@ -106,6 +103,27 @@ def redact_attributes_with(
         )
 
 
+class _Unredactable(Exception):
+    """A span field this processor must write is missing or did not take
+    the write. The message names the field, never its value."""
+
+
+def _private(obj: Any, field: str, public: str) -> Any:
+    """``obj.<field>``, or ``None`` when absent and the public accessor is
+    empty too. Absent with a non-empty public accessor means the SDK moved
+    the field, and the text behind it would be exported unscanned."""
+    if hasattr(obj, field):
+        return getattr(obj, field)
+    if getattr(obj, public, None):
+        raise _Unredactable(f"{type(obj).__name__}.{field}")
+    return None
+
+
+def _check_written(obj: Any, public: str, expected: Any) -> None:
+    if hasattr(obj, public) and getattr(obj, public) != expected:
+        raise _Unredactable(f"{type(obj).__name__}.{public}")
+
+
 class RedactingSpanProcessorWith:
     """Wraps `next_processor` (any object shaped like a `SpanProcessor`)
     and redacts every span's and event's string attributes before
@@ -129,6 +147,7 @@ class RedactingSpanProcessorWith:
         self._scan_and_redact = scan_and_redact
         self._policy = policy
         self._limits = limits
+        self._warned = False
 
     def on_start(self, span: "Span", parent_context: Optional["Context"] = None) -> None:
         self._next.on_start(span, parent_context)
@@ -151,28 +170,65 @@ class RedactingSpanProcessorWith:
             self._scan_and_redact, value, policy=self._policy, max_string_length=max_string_length
         )
 
-    def _redact_attributes(self, attributes: Any) -> None:
-        redact_attributes_with(self._scan_and_redact, attributes, policy=self._policy, limits=self._limits)
+    def _redact_name(self, obj: Any) -> None:
+        name = _private(obj, "_name", "name")
+        if name is None:
+            return
+        masked = self._mask_text(name)
+        obj._name = masked
+        _check_written(obj, "name", masked)
 
-    def on_end(self, span: "ReadableSpan") -> None:
-        # Everything a span exports as free text: its name, attributes,
-        # status description, each event's name and attributes, and each
-        # link's attributes. The public accessors are read-only (or return
-        # copies), so each write goes to the private field behind them.
-        span._name = self._mask_text(span._name)
-        self._redact_attributes(span._attributes)
+    def _redact_attributes_of(self, obj: Any) -> None:
+        attributes = _private(obj, "_attributes", "attributes")
+        if attributes is None:
+            return
+        redact_attributes_with(self._scan_and_redact, attributes, policy=self._policy, limits=self._limits)
+        public = getattr(obj, "attributes", None)
+        if public is not None and dict(public) != dict(getattr(attributes, "_dict", attributes)):
+            raise _Unredactable(f"{type(obj).__name__}.attributes")
+
+    def _redact_status(self, span: Any) -> None:
+        if not hasattr(span, "_status"):
+            if getattr(getattr(span, "status", None), "description", None):
+                raise _Unredactable(f"{type(span).__name__}._status")
+            return
         status = span._status
         description = getattr(status, "description", None)
-        if isinstance(description, str) and description:
-            masked = self._mask_text(description)
-            if masked != description:
-                # Replaced, not mutated: the Status may be the caller's object.
-                span._status = type(status)(status.status_code, masked)
-        for event in span.events:
-            event._name = self._mask_text(event._name)
-            self._redact_attributes(event._attributes)
-        for link in span.links:
-            self._redact_attributes(link._attributes)
+        if not isinstance(description, str) or not description:
+            return
+        masked = self._mask_text(description)
+        if masked == description:
+            return
+        # Replaced, not mutated: the Status may be the caller's object.
+        span._status = type(status)(status.status_code, masked)
+        if getattr(getattr(span, "status", None), "description", masked) != masked:
+            raise _Unredactable(f"{type(span).__name__}.status")
+
+    def _redact_span(self, span: Any) -> None:
+        self._redact_name(span)
+        self._redact_attributes_of(span)
+        self._redact_status(span)
+        for event in getattr(span, "events", None) or ():
+            self._redact_name(event)
+            self._redact_attributes_of(event)
+        for link in getattr(span, "links", None) or ():
+            self._redact_attributes_of(link)
+
+    def on_end(self, span: "ReadableSpan") -> None:
+        try:
+            self._redact_span(span)
+        except Exception as error:
+            # Fail closed: a span that cannot be redacted is not exported.
+            if not self._warned:
+                self._warned = True
+                reason = str(error) if isinstance(error, _Unredactable) else type(error).__name__
+                warnings.warn(
+                    f"redact_secret_adapters.otel: dropped a span that could not be redacted ({reason}); "
+                    "the installed opentelemetry-sdk may have changed its private span fields",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+            return
         self._next.on_end(span)
 
     def shutdown(self) -> None:

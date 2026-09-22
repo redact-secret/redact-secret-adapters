@@ -64,14 +64,15 @@ provider.add_span_processor(create_redacting_span_processor(BatchSpanProcessor(o
 A span's name and status description, every string and string-sequence
 attribute (a `None` inside a sequence stays in place), every event's name and
 attributes, and every link's attributes are redacted before the span reaches
-the next processor, including OpenInference
-and GenAI semantic-convention attributes, without hardcoding either
-convention's attribute list. `opentelemetry-sdk` never hands a processor a
-public, mutable view of a span's attributes; the adapter reaches into the
-private `_attributes` field, and past that into its backing `_dict` to get
-past the SDK's own immutability guard on frozen attribute bags. See
-`redact_secret_adapters.otel` for why that's the SDK's own accepted
-mechanism, not a version-specific hack.
+the next processor, including OpenInference and GenAI semantic-convention
+attributes, without hardcoding either convention's attribute list.
+
+`opentelemetry-sdk` has no public way to change a span before export, so the
+adapter writes the private fields behind the read-only accessors (`_name`,
+`_status`, `_attributes` and its backing `_dict`) and reads each write back
+through the public accessor. If an SDK release moves one of those fields, the
+span is **dropped** rather than exported unredacted, and a `RuntimeWarning` is
+issued once per processor. See `redact_secret_adapters.otel` for details.
 
 Supported range: `opentelemetry-sdk>=1.16.0,<2` — CI runs
 `tests/test_otel_host.py`, a real `TracerProvider`/exporter round trip, at

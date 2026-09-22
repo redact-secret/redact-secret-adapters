@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import unittest
+import warnings
+from types import MappingProxyType
 
 from fake_scanner import fake_scan_and_redact
 
@@ -124,6 +126,51 @@ class RedactingSpanProcessorWithTest(unittest.TestCase):
         self.assertEqual(caller_status.description, "failed with SECRET_TOKEN_1")  # replaced, not mutated
         self.assertEqual(exported.events[0]._name, "retry <SECRET_1>")
         self.assertEqual(exported.links[0]._attributes, {"peer": "<SECRET_1> here", "tags": ("x", None)})
+
+    def test_a_renamed_private_field_drops_the_span_and_warns_once(self) -> None:
+        class RenamedAttributesSpan(FakeSpan):
+            def __init__(self) -> None:
+                super().__init__({})
+                del self._attributes
+                self._attributes_v2 = {"k": "SECRET_TOKEN_1"}
+
+            @property
+            def attributes(self):
+                return MappingProxyType(self._attributes_v2)
+
+        next_processor = FakeNextProcessor()
+        processor = RedactingSpanProcessorWith(next_processor, fake_scan_and_redact)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            processor.on_end(RenamedAttributesSpan())
+            processor.on_end(RenamedAttributesSpan())
+        self.assertEqual(next_processor.exported, [])
+        self.assertEqual(len(caught), 1)
+        self.assertIs(caught[0].category, RuntimeWarning)
+        self.assertIn("RenamedAttributesSpan._attributes", str(caught[0].message))
+        self.assertNotIn("SECRET_TOKEN_1", str(caught[0].message))
+
+    def test_a_write_that_does_not_show_through_the_public_accessor_drops_the_span(self) -> None:
+        class NameMovedSpan(FakeSpan):
+            @property
+            def name(self) -> str:
+                return "GET SECRET_TOKEN_1"  # reads a field the processor does not know
+
+        next_processor = FakeNextProcessor()
+        processor = RedactingSpanProcessorWith(next_processor, fake_scan_and_redact)
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            processor.on_end(NameMovedSpan({}))
+        self.assertEqual(next_processor.exported, [])
+
+    def test_an_attribute_bag_that_rejects_writes_drops_the_span(self) -> None:
+        next_processor = FakeNextProcessor()
+        processor = RedactingSpanProcessorWith(next_processor, fake_scan_and_redact)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            processor.on_end(FakeSpan(MappingProxyType({"k": "SECRET_TOKEN_1"})))
+        self.assertEqual(next_processor.exported, [])
+        self.assertIn("TypeError", str(caught[0].message))
 
     def test_core_failure_on_one_attribute_fails_closed(self) -> None:
         next_processor = FakeNextProcessor()

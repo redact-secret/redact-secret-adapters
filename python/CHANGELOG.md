@@ -37,6 +37,11 @@ can read it without leaving their environment.
   filter now scans an exception once, as its formatted traceback (which
   already includes the message and the cause chain), instead of also
   scanning the message and every cause and discarding the results.
+- `otel`: if a private span field the processor writes is missing, or a
+  write does not show through the public accessor (an SDK release that
+  moved the field), the span is now dropped with a one-time
+  `RuntimeWarning` instead of being exported unredacted. No redaction
+  failure raises out of `on_end`.
 
 ## [0.1.0]
 
