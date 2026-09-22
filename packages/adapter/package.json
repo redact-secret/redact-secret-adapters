@@ -37,11 +37,6 @@
   "peerDependencies": {
     "@redact-secret/core": "^0.1.0-beta.6"
   },
-  "peerDependenciesMeta": {
-    "@redact-secret/core": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@redact-secret/core": "^0.1.0-beta.6"
   }

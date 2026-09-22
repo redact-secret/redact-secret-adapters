@@ -198,7 +198,11 @@ holding the two languages together, so they are shared — one copy, read by bot
 - Each package carries its own SemVer. Nothing here is released in lockstep with
   the core, or with the other packages in this repository.
 - Each package declares a range against the core and, where it has one, a
-  `peerDependency` range against its host.
+  `peerDependency` range against its host. The core is a required
+  `peerDependency` of every JavaScript package: a regular dependency could
+  install a second copy of the native core next to the application's (with
+  its own, separate `initialize()`), and an optional peer leaves the published
+  type declarations, which import the core's types, unresolvable.
 - A host range is only as wide as the tests that run against it. An untested
   version is not a supported version, however likely it is to work.
 - Pre-1.0 while the core is pre-1.0: a 1.0 adapter that can only work against a

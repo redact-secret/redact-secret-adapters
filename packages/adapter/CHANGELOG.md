@@ -19,6 +19,13 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Changed
+
+- `@redact-secret/core` is now a required peer dependency (was optional). The
+  published `.d.ts` files import the core's types, so without it a TypeScript
+  consumer failed to typecheck. npm 7+ and pnpm install a required peer
+  automatically.
+
 ### Fixed
 
 - `maskLeafWith` fails closed to `[REDACTED:ERROR]` on a scanner result that

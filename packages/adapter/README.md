@@ -4,8 +4,10 @@ The shared base for [Redact Secret](https://github.com/redact-secret/redact-secr
 host adapters: mask one string, or walk a value tree and mask every string in
 it, failing closed on every error path.
 
-It contains no detection. The scanner is **injected** — this package has no
-runtime dependencies, and imports the core only as types.
+It contains no detection. The scanner is **injected**: this package has no
+dependencies of its own, and `@redact-secret/core` is a peer dependency — the
+one copy your application installs and initializes. Its type declarations
+import the core's types, so the peer is required, not optional.
 
 Install it directly only when building your own integration;
 `@redact-secret/adapter-pino` pulls it in automatically.
@@ -23,9 +25,9 @@ const maskSecrets = await createMaskSecrets();
 const langfuse = new Langfuse({ mask: ({ data }) => maskSecrets(data) });
 ```
 
-`createMaskSecrets` is the one export that needs `@redact-secret/core`
-installed (an optional peer dependency). It loads the core on call, awaits
-`initialize()`, and returns `(data) => masked`.
+`createMaskSecrets` is the one export that loads `@redact-secret/core` at
+runtime. It imports the core on call, awaits `initialize()`, and returns
+`(data) => masked`.
 
 ## Injected API
 

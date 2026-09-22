@@ -19,6 +19,15 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Changed
+
+- `@redact-secret/core ^0.1.0-beta.6` moves from `dependencies` to
+  `peerDependencies`, same range. As a regular dependency, a core version in
+  the application outside that range installed a second, separately
+  initialized copy of the native core. Now there is exactly one. npm 7+ and
+  pnpm install a required peer automatically. Backed by the same range-endpoint
+  CI jobs, which already resolved the core range from either field.
+
 ### Added
 
 - `createRedactingStreamWrite` / `createRedactingStreamWriteWith`, a pino
