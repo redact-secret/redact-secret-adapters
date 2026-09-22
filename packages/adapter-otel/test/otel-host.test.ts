@@ -56,6 +56,31 @@ test("a real span's attributes are actually mutated before the exporter sees the
   await provider.shutdown();
 });
 
+test("a real span's name, event name, status message, and link attributes are redacted before export", async () => {
+  const { exporter, provider, tracer } = realPipeline();
+
+  const linked = tracer.startSpan("linked").spanContext();
+  const span = tracer.startSpan("GET /reset?token=SECRET_TOKEN_1", {
+    links: [{ context: linked, attributes: { "peer.auth": "Bearer SECRET_TOKEN_2" } }],
+  });
+  span.setAttribute("tags", ["SECRET_TOKEN_3", null, "plain"] as unknown as string[]);
+  span.addEvent("retry with SECRET_TOKEN_4");
+  span.setStatus({ code: 2 /* SpanStatusCode.ERROR */, message: "denied for SECRET_TOKEN_5" });
+  span.end();
+  await provider.forceFlush();
+
+  const [exported] = exporter.getFinishedSpans();
+  expect(exported?.name).toBe("GET /reset?token=<SECRET_1>");
+  expect(exported?.attributes.tags).toEqual(["<SECRET_1>", null, "plain"]);
+  expect(exported?.events.map((event) => event.name)).toEqual(["retry with <SECRET_1>"]);
+  expect(exported?.status.message).toBe("denied for <SECRET_1>");
+  expect(exported?.links[0]?.attributes).toEqual({ "peer.auth": "Bearer <SECRET_1>" });
+  const { name, attributes, events, status, links } = exported ?? {};
+  expect(JSON.stringify({ name, attributes, events, status, links })).not.toMatch(/SECRET_TOKEN_\d/);
+
+  await provider.shutdown();
+});
+
 test("the SDK hands onEnd mutable attribute bags — the assumption this adapter rests on", async () => {
   const frozen: boolean[] = [];
   const probe = new RedactingSpanProcessorWith(

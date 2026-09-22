@@ -12,8 +12,11 @@ import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
 import { RedactingSpanProcessorWith, redactAttributesWith } from "../src/index.js";
 
 interface PlainSpan {
+  name?: string;
   attributes: Record<string, unknown>;
   events: { name?: string; attributes: Record<string, unknown> }[];
+  status?: { code: number; message?: string };
+  links?: { context: object; attributes?: Record<string, unknown> }[];
 }
 
 function fakeNextProcessor(exported: PlainSpan[]) {
@@ -64,6 +67,34 @@ test("redacts string and string-array span and event attributes; no plaintext re
   expect(serialized).not.toContain("SECRET_TOKEN_1");
   expect(serialized).not.toContain("SECRET_TOKEN_2");
   expect(serialized).not.toContain("BLOCK_ME");
+});
+
+test("a string array with null or undefined holes has every string masked and the holes kept", () => {
+  const attributes = { tags: ["SECRET_TOKEN_1", null, "plain", undefined, "BLOCK_ME"] };
+  redactAttributesWith(fakeScanAndRedact, attributes);
+  expect(attributes.tags).toEqual(["<SECRET_1>", null, "plain", undefined, "[REDACTED:BLOCKED]"]);
+});
+
+test("span name, event names, status message, and link attributes are redacted", () => {
+  const exported: PlainSpan[] = [];
+  const processor = new RedactingSpanProcessorWith(fakeNextProcessor(exported).next, fakeScanAndRedact);
+
+  processor.onEnd(
+    asSpan({
+      name: "GET /reset?token=SECRET_TOKEN_1",
+      attributes: {},
+      events: [{ name: "retry with SECRET_TOKEN_2", attributes: {} }],
+      status: { code: 2, message: "denied for SECRET_TOKEN_3" },
+      links: [{ context: {}, attributes: { "peer.auth": "Bearer SECRET_TOKEN_4" } }, { context: {} }],
+    }),
+  );
+
+  const [span] = exported;
+  expect(span?.name).toBe("GET /reset?token=<SECRET_1>");
+  expect(span?.events[0]?.name).toBe("retry with <SECRET_1>");
+  expect(span?.status).toEqual({ code: 2, message: "denied for <SECRET_1>" });
+  expect(span?.links).toEqual([{ context: {}, attributes: { "peer.auth": "Bearer <SECRET_1>" } }, { context: {} }]);
+  expect(JSON.stringify(exported)).not.toMatch(/SECRET_TOKEN_\d/);
 });
 
 test("a core failure on one attribute fails closed without throwing into the SDK", () => {

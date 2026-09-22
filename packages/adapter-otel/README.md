@@ -12,8 +12,10 @@ const provider = new NodeTracerProvider({
 });
 ```
 
-Every string and string-array attribute on a span and its events is redacted
-in `onEnd`, before the span reaches the next processor. Attribute names are not
+In `onEnd`, before the span reaches the next processor, the processor redacts
+the span name, every string and string-array attribute (a `null` hole in an
+array is kept in place), every event's name and attributes, the status message,
+and every link's attributes. Attribute names are not
 allowlisted, so OpenInference (`llm.input_messages`, `input.value`, …) and GenAI
 semantic-convention attributes (`gen_ai.prompt`, …) are covered without
 hardcoding either convention.

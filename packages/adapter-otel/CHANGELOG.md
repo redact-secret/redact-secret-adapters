@@ -20,6 +20,14 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Fixed
+
+- The span name, every event's name, the status message, and every link's
+  attributes are now redacted; before, only span and event attributes were.
+- A string-array attribute with a `null` or `undefined` element is now
+  redacted element by element, keeping the holes in place. Before, any
+  non-string element made the whole array pass through unmasked.
+
 ## [0.1.0] - 2026-09-22
 
 Initial release.

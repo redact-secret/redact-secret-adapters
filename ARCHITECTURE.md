@@ -116,9 +116,10 @@ in the clear.
 
 ### OpenTelemetry
 
-The processor wraps any object shaped like a `SpanProcessor` and redacts every
-string and string-array attribute on the span and its events in `onEnd` before
-delegating.
+The processor wraps any object shaped like a `SpanProcessor` and, in `onEnd`
+before delegating, redacts every free-text field an exporter sends: the span
+name, string and string-array attributes (keeping `null` holes in place), each
+event's name and attributes, the status message, and each link's attributes.
 
 One runtime assumption is load-bearing: `ReadableSpan.attributes` is typed
 `readonly` but is a plain mutable object at runtime. If an SDK version freezes
