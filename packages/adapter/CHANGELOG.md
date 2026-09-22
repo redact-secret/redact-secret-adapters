@@ -19,6 +19,13 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Fixed
+
+- A limit passed as `undefined`, `NaN`, or a negative number now falls back to
+  its `DEFAULT_LIMITS` value. Before, `{ maxDepth: undefined }` overrode the
+  default and disabled the bound, and a `NaN` `maxStringLength` disabled the
+  size check.
+
 ## [0.1.0] - 2026-09-22
 
 Initial release.

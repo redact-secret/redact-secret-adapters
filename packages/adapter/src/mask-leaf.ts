@@ -32,6 +32,15 @@ export const DEFAULT_LIMITS: Limits = Object.freeze({
 });
 
 /**
+ * `value` if it is a usable bound, else `fallback`. `undefined`, `NaN`, a
+ * negative number, or a non-number would otherwise disable a limit
+ * (`length > NaN` is never true) or override the default by accident.
+ */
+export function resolveLimit(value: unknown, fallback: number): number {
+  return typeof value === "number" && value >= 0 ? value : fallback;
+}
+
+/**
  * Masks one leaf string. Any thrown error — including `NOT_INITIALIZED` if
  * a host skipped `await initialize()` — fails closed: the leaf becomes
  * {@link ERROR_MARKER}, never the original text and never the error's own
@@ -51,8 +60,7 @@ export function maskLeafWith(
   if (typeof text !== "string") {
     throw new TypeError("maskLeafWith: text must be a string");
   }
-  const limit = maxStringLength ?? DEFAULT_LIMITS.maxStringLength;
-  if (text.length > limit) return LIMIT_MARKER;
+  if (text.length > resolveLimit(maxStringLength, DEFAULT_LIMITS.maxStringLength)) return LIMIT_MARKER;
 
   let result: ReturnType<ScanAndRedact>;
   try {

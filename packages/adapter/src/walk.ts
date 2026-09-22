@@ -1,6 +1,6 @@
 /** Shared walk state for `./mask-secrets.ts` and `./mask-log-value.ts`. */
 
-import { DEFAULT_LIMITS, LIMIT_MARKER, maskLeafWith } from "./mask-leaf.js";
+import { DEFAULT_LIMITS, LIMIT_MARKER, maskLeafWith, resolveLimit } from "./mask-leaf.js";
 import type { Limits, MaskOptions, Policy, ScanAndRedact } from "./types.js";
 
 export interface WalkContext {
@@ -9,8 +9,17 @@ export interface WalkContext {
   readonly budget: { leaves: number };
 }
 
+/** Per-key fallback to `DEFAULT_LIMITS`, so `{ maxDepth: undefined }` or `NaN` never disables a bound. */
+export function resolveLimits(overrides: Partial<Limits> | undefined): Limits {
+  const limits: { -readonly [K in keyof Limits]: number } = { ...DEFAULT_LIMITS };
+  for (const key of Object.keys(DEFAULT_LIMITS) as (keyof Limits)[]) {
+    limits[key] = resolveLimit(overrides?.[key], DEFAULT_LIMITS[key]);
+  }
+  return limits;
+}
+
 export function createWalkContext(options: MaskOptions): WalkContext {
-  const limits = { ...DEFAULT_LIMITS, ...options.limits };
+  const limits = resolveLimits(options.limits);
   return { policy: options.policy, limits, budget: { leaves: limits.maxTotalLeaves } };
 }
 

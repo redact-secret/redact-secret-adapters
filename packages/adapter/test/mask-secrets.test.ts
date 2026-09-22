@@ -4,8 +4,10 @@ import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
 import {
   BLOCK_MARKER,
   CYCLE_MARKER,
+  DEFAULT_LIMITS,
   ERROR_MARKER,
   LIMIT_MARKER,
+  maskLeafWith,
   maskSecretsWith,
   type ScanAndRedact,
 } from "../src/index.js";
@@ -89,6 +91,21 @@ test("a cycle is marked rather than recursed into forever", () => {
   const result = maskSecretsWith(fakeScanAndRedact, input) as Masked;
   expect(result.name).toBe("root");
   expect(result.self).toBe(CYCLE_MARKER);
+});
+
+test("an explicit undefined, NaN, or negative limit falls back to the default instead of disabling it", () => {
+  const deep = { a: { b: { c: { d: { e: { f: { g: { h: { i: "SECRET_TOKEN_1" } } } } } } } } };
+  for (const maxDepth of [undefined, Number.NaN, -1]) {
+    const result = JSON.stringify(maskSecretsWith(fakeScanAndRedact, deep, { limits: { maxDepth } }));
+    expect(result, String(maxDepth)).toContain(LIMIT_MARKER);
+    expect(result, String(maxDepth)).not.toContain("SECRET_TOKEN_1");
+  }
+  const long = { blob: `SECRET_TOKEN_1 ${"a".repeat(DEFAULT_LIMITS.maxStringLength)}` };
+  for (const maxStringLength of [undefined, Number.NaN, -5]) {
+    expect(maskSecretsWith(fakeScanAndRedact, long, { limits: { maxStringLength } })).toEqual({ blob: LIMIT_MARKER });
+  }
+  expect(maskLeafWith(fakeScanAndRedact, "a".repeat(11), { maxStringLength: Number.NaN })).toBe("a".repeat(11));
+  expect(maskLeafWith(fakeScanAndRedact, long.blob, { maxStringLength: Number.NaN })).toBe(LIMIT_MARKER);
 });
 
 test("a string too long for the size limit is marked, not scanned", () => {
