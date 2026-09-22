@@ -134,7 +134,7 @@ API: they are what a host sees, and they change only in a major version.
 | Marker | When |
 | --- | --- |
 | `[REDACTED:BLOCKED]` | A `block` finding — the **entire** leaf is replaced, not just the matched span |
-| `[REDACTED:ERROR]` | Any failure inside the core call, including an uninitialized core. Never the original text, never the error's own message |
+| `[REDACTED:ERROR]` | Any failure inside the core call, including an uninitialized core or a malformed result, and any value that cannot be read (a throwing getter or `toJSON()`). Never the original text, never the error's own message |
 | `[REDACTED:LIMIT_EXCEEDED]` | A value past a walk budget. It is never scanned and never passed through unmasked |
 | `[REDACTED:CYCLE]` | A self-referencing object |
 

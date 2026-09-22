@@ -70,7 +70,7 @@ Public API; they change only in a major version.
 | Marker | When |
 | --- | --- |
 | `BLOCK_MARKER` `[REDACTED:BLOCKED]` | A `block` finding — the **entire** leaf is replaced |
-| `ERROR_MARKER` `[REDACTED:ERROR]` | Any throw from the core. Never the input, never the error's message |
+| `ERROR_MARKER` `[REDACTED:ERROR]` | Any throw or malformed result from the core, or a value that cannot be read. Never the input, never the error's message |
 | `LIMIT_MARKER` `[REDACTED:LIMIT_EXCEEDED]` | A value past a walk budget; never scanned, never passed through |
 | `CYCLE_MARKER` `[REDACTED:CYCLE]` | A self-referencing object |
 

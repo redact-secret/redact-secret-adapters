@@ -19,6 +19,14 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Added
+
+- `createRedactingStreamWrite` / `createRedactingStreamWriteWith`, a pino
+  `hooks.streamWrite` that masks every string value in the finished JSON line.
+  `hooks.logMethod` never sees child-logger bindings (`child()`,
+  `setBindings()`) or `mixin()` output, so with `logMethod` alone a secret in
+  either reached the destination in plaintext. Install both hooks.
+
 ### Changed
 
 - `createRedactingLogMethod` and `createRedactingStreamWrite` load
@@ -33,14 +41,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   initialized copy of the native core. Now there is exactly one. npm 7+ and
   pnpm install a required peer automatically. Backed by the same range-endpoint
   CI jobs, which already resolved the core range from either field.
-
-### Added
-
-- `createRedactingStreamWrite` / `createRedactingStreamWriteWith`, a pino
-  `hooks.streamWrite` that masks every string value in the finished JSON line.
-  `hooks.logMethod` never sees child-logger bindings (`child()`,
-  `setBindings()`) or `mixin()` output, so with `logMethod` alone a secret in
-  either reached the destination in plaintext. Install both hooks.
 
 ### Fixed
 
