@@ -90,11 +90,12 @@ Package tags: `adapter`, `adapter-pino`, `adapter-otel`, and
   are regenerated to cover everything it shipped.
 - **After publishing** (a tag push or the GitHub Release failed): re-run
   **Release** on `release` the same way. The rehearsal plans nothing to
-  publish, which is allowed inside **Release**, and finalize tags whatever
-  is published but untagged and refreshes the GitHub Release.
-- **Reconcile**: re-run **Release reconcile** on `develop` with the train
-  name. It is idempotent: it skips PRs that are already open and branches
-  that already contain `release`.
+  publish, which is allowed inside **Release**, and **Tag and report** tags
+  whatever is published but untagged and refreshes the GitHub Release.
+- **Reconcile**: if it failed on a missing tag, re-run **Release** as above.
+  Otherwise re-run **Release reconcile** on `develop` with the train name.
+  It is idempotent: it skips PRs that are already open and branches that
+  already contain `release`.
 
 A dry run of the whole release (no publish, no tags) is **Release** with
 `dry_run` on, from any branch. On a branch with nothing bumped it runs CI
