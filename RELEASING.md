@@ -86,12 +86,17 @@ Package tags: `adapter`, `adapter-pino`, `adapter-otel`, and
   (Run workflow, `dry_run` off): the plan now excludes what shipped, and
   only the rest is published and tagged. The train's GitHub Release notes
   are regenerated to cover everything it shipped.
+- **After publishing** (a tag push or the GitHub Release failed): re-run
+  **Release** on `release` the same way. The rehearsal plans nothing to
+  publish, which is allowed inside **Release**, and finalize tags whatever
+  is published but untagged and refreshes the GitHub Release.
 - **Reconcile**: re-run **Release reconcile** on `develop` with the train
   name. It is idempotent: it skips PRs that are already open and branches
   that already contain `release`.
 
 A dry run of the whole release (no publish, no tags) is **Release** with
-`dry_run` on, from any branch.
+`dry_run` on, from any branch. On a branch with nothing bumped it runs CI
+and reports an empty plan.
 
 ## One-time setup
 

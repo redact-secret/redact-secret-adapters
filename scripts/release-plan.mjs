@@ -12,7 +12,9 @@
  *
  *   --check-changelog    every planned package's CHANGELOG.md has a
  *                        `## [x.y.z]` heading for its declared version
- *   --require-publish    fail if nothing is planned (cut / rehearsal)
+ *   --require-publish    fail if nothing is planned (cut, and the rc PR's
+ *                        rehearsal; not inside the Release workflow, whose
+ *                        re-runs may have nothing left to publish)
  *   --require-published  fail if anything is still unpublished (reconcile)
  *   --check-tags         every package's `<tag>@<version>` exists locally
  *                        (fetch tags first)

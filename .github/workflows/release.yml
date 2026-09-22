@@ -43,6 +43,11 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/release-rehearsal.yml
+    with:
+      # A re-run after everything is published (to finish tagging or the
+      # GitHub Release) plans no publish; that is not a failure here. The
+      # rc PR's own Rehearsal check still requires one.
+      allow_nothing_to_publish: true
 
   publish-adapter:
     # Publishes first when it is in the plan: adapter-pino and adapter-otel

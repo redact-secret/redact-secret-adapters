@@ -12,6 +12,16 @@ on:
     branches: [release]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      allow_nothing_to_publish:
+        # The Release workflow sets this. A PR into release (and cut-rc.yml)
+        # must still ship something, but a Release re-run after every
+        # package is published — to finish tagging or the GitHub Release —
+        # or a dry run on an unbumped branch legitimately plans no publish.
+        # It only relaxes the "at least one" check: whatever is planned is
+        # still dry-run here before any publish job can start.
+        type: boolean
+        default: false
     outputs:
       any_publish:
         value: ${{ jobs.plan.outputs.any_publish }}
@@ -61,7 +71,16 @@ jobs:
 
       - name: Plan
         id: plan
-        run: node scripts/release-plan.mjs --check-changelog --require-publish
+        env:
+          # Empty outside workflow_call, so PR and dispatch runs require a publish.
+          ALLOW_NOTHING_TO_PUBLISH: ${{ inputs.allow_nothing_to_publish }}
+        run: |
+          set -euo pipefail
+          if [ "$ALLOW_NOTHING_TO_PUBLISH" = "true" ]; then
+            node scripts/release-plan.mjs --check-changelog
+          else
+            node scripts/release-plan.mjs --check-changelog --require-publish
+          fi
 
   npm:
     name: npm publish dry run
