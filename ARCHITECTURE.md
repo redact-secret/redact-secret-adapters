@@ -14,7 +14,8 @@ bottom; the top two are host-specific, the bottom two are shared.
   L3  host seam          pino hooks.logMethod · SpanProcessor.onEnd · logging.Filter.filter
        |                 structural (duck-typed) match against the host's extension point
        |                 no runtime import of the host package
-  L2  value-tree walker  recursive descent over dicts / lists / strings
+  L2  value-tree walker  recursive descent over everything JSON would emit:
+       |                 objects, arrays, Errors, toJSON() results, strings
        |                 owns the depth, width and total-leaf budgets
   L1  mask-leaf          mask ONE string; fail closed on every error path
        |                 owns the four markers and DEFAULT_LIMITS

@@ -42,10 +42,24 @@ maskLogValueWith(scanAndRedact, { err: new Error("also walks Errors") });
 | Export | Purpose |
 | --- | --- |
 | `maskLeafWith(scan, text, { policy, maxStringLength })` | Mask one string |
-| `maskSecretsWith(scan, data, { policy, limits })` | Walk plain objects, arrays, strings |
-| `maskLogValueWith(scan, data, { policy, limits })` | Same walk, plus `Error` → redacted `{ type, message, stack }` |
+| `maskSecretsWith(scan, data, { policy, limits })` | Walk a value tree and mask every string in it (see below) |
+| `maskLogValueWith(scan, data, { policy, limits })` | The same walk, under its logging-side name |
 | `createMaskSecrets({ policy, limits })` | Live wrapper over the real core |
 | `ScanAndRedact` | The injected scanner's type |
+
+The walk returns a masked copy of everything JSON serialization would emit:
+
+- plain objects and arrays, recursively;
+- an `Error` as `{ type, message, stack, ...ownProps, cause }`, every string
+  in it masked (an axios error's `config.headers` included);
+- an object with a `toJSON()` method (`Date`, `URL`, `Buffer`, …) as its
+  masked `toJSON()` result;
+- any other object (class instances, `IncomingMessage`, …) as a plain object
+  of its masked own enumerable properties.
+
+Numbers, booleans, `null`, `undefined`, bigints and functions pass through. A
+getter or `toJSON()` that throws becomes `[REDACTED:ERROR]` for that value; the
+walk itself never throws.
 
 ## Fail-closed markers
 
