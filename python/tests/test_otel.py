@@ -91,6 +91,22 @@ class RedactingSpanProcessorWithTest(unittest.TestCase):
         self.assertEqual(next_processor.exported[0]._attributes["boom"], "[REDACTED:ERROR]")
         self.assertNotIn("BOOM", json.dumps(next_processor.exported[0]._attributes))
 
+    def test_string_sequences_containing_none_are_masked_with_none_kept_in_place(self) -> None:
+        attributes = {
+            "list": ["ok", None, "call SECRET_TOKEN_1 now"],
+            "tuple": (None, "BLOCK_ME here"),
+            "numbers": [1, None, 2],
+        }
+        redact_attributes_with(fake_scan_and_redact, attributes)
+        self.assertEqual(attributes["list"], ["ok", None, "call <SECRET_1> now"])
+        self.assertEqual(attributes["tuple"], (None, "[REDACTED:BLOCKED]"))
+        self.assertEqual(attributes["numbers"], [1, None, 2])
+
+    def test_a_malformed_scan_result_fails_closed_without_raising(self) -> None:
+        attributes = {"a": "SECRET_TOKEN_1", "b": ["x", None]}
+        redact_attributes_with(lambda text, policy=None: object(), attributes)
+        self.assertEqual(attributes, {"a": "[REDACTED:ERROR]", "b": ["[REDACTED:ERROR]", None]})
+
     def test_on_start_shutdown_force_flush_delegate(self) -> None:
         next_processor = FakeNextProcessor()
         processor = RedactingSpanProcessorWith(next_processor, fake_scan_and_redact)

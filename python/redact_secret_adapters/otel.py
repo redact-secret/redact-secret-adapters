@@ -53,19 +53,27 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only, no runtime dependenc
     from opentelemetry.context import Context
     from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor
 
-from .mask_leaf import mask_leaf_with
+from .mask_leaf import ERROR_MARKER, mask_leaf_with
 
 __all__ = ["RedactingSpanProcessorWith", "create_redacting_span_processor", "redact_attributes_with"]
 
 
 def _mask_attribute_value(scan_and_redact, value, *, policy, max_string_length):
-    if isinstance(value, str):
-        return mask_leaf_with(scan_and_redact, value, policy=policy, max_string_length=max_string_length)
-    if isinstance(value, (list, tuple)) and value and all(isinstance(item, str) for item in value):
-        masked = [
-            mask_leaf_with(scan_and_redact, item, policy=policy, max_string_length=max_string_length) for item in value
-        ]
-        return type(value)(masked)
+    try:
+        if isinstance(value, str):
+            return mask_leaf_with(scan_and_redact, value, policy=policy, max_string_length=max_string_length)
+        if isinstance(value, (list, tuple)) and any(isinstance(item, str) for item in value):
+            # The SDK accepts None inside a sequence, so mask each str
+            # element and keep everything else in place.
+            masked = [
+                mask_leaf_with(scan_and_redact, item, policy=policy, max_string_length=max_string_length)
+                if isinstance(item, str)
+                else item
+                for item in value
+            ]
+            return tuple(masked) if isinstance(value, tuple) else masked
+    except Exception:
+        return ERROR_MARKER
     # Numbers, booleans, and homogeneous number/boolean sequences are the
     # only other attribute value shapes OpenTelemetry allows; none of them
     # can carry a secret as free text, so they pass through unchanged.

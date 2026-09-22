@@ -41,6 +41,7 @@ def test_a_real_spans_attributes_are_actually_mutated_before_the_exporter_sees_t
     span = tracer.start_span("llm-call")
     span.set_attribute("llm.input_messages", "call SECRET_TOKEN_1 now")
     span.set_attribute("llm.tags", ["ok", "BLOCK_ME here"])
+    span.set_attribute("llm.optional", ["SECRET_TOKEN_3 x", None])
     span.set_attribute("retry.count", 3)
     span.set_attribute("retry.ok", True)
     span.set_attribute("boom", "trigger BOOM here")
@@ -52,6 +53,7 @@ def test_a_real_spans_attributes_are_actually_mutated_before_the_exporter_sees_t
     assert dict(exported.attributes) == {
         "llm.input_messages": "call <SECRET_1> now",
         "llm.tags": ("ok", "[REDACTED:BLOCKED]"),
+        "llm.optional": ("<SECRET_1> x", None),
         "retry.count": 3,
         "retry.ok": True,
         "boom": "[REDACTED:ERROR]",
@@ -59,7 +61,14 @@ def test_a_real_spans_attributes_are_actually_mutated_before_the_exporter_sees_t
     assert [dict(event.attributes) for event in exported.events] == [{"tool.args": "value <SECRET_1> done"}]
 
     serialized = exported.to_json() + json.dumps([dict(event.attributes) for event in exported.events])
-    for plaintext in ("SECRET_TOKEN_1", "SECRET_TOKEN_2", "BLOCK_ME", "BOOM", "simulated core failure"):
+    for plaintext in (
+        "SECRET_TOKEN_1",
+        "SECRET_TOKEN_2",
+        "SECRET_TOKEN_3",
+        "BLOCK_ME",
+        "BOOM",
+        "simulated core failure",
+    ):
         assert plaintext not in serialized
 
     provider.shutdown()
