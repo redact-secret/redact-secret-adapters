@@ -56,10 +56,13 @@ it directly only when building your own integration.
 
 ```js
 import pino from "pino";
-import { createRedactingLogMethod } from "@redact-secret/adapter-pino";
+import { createRedactingLogMethod, createRedactingStreamWrite } from "@redact-secret/adapter-pino";
 
 const logger = pino({
-  hooks: { logMethod: await createRedactingLogMethod() },
+  hooks: {
+    logMethod: await createRedactingLogMethod(),
+    streamWrite: await createRedactingStreamWrite(), // child bindings and mixin() output
+  },
   redact: ["req.headers.authorization"], // pino's own path-based redact still applies, on top
 });
 
@@ -68,7 +71,9 @@ logger.info("token is %s", secretValue); // the secret never reaches the transpo
 
 pino's own `redact` option censors by object *path*. It cannot see a token
 inside a message string or an error message. This adapter redacts by *value*,
-alongside that mechanism rather than instead of it.
+alongside that mechanism rather than instead of it. `logMethod` alone does not
+see child-logger bindings or `mixin()` output; `streamWrite` does — see the
+[package README](./packages/adapter-pino#readme).
 
 ### OpenTelemetry
 

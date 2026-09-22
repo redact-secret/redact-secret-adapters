@@ -11,7 +11,7 @@ Every adapter, in both languages, is the same four layers. Read them top to
 bottom; the top two are host-specific, the bottom two are shared.
 
 ```text
-  L3  host seam          pino hooks.logMethod · SpanProcessor.onEnd · logging.Filter.filter
+  L3  host seam          pino hooks.logMethod + hooks.streamWrite · SpanProcessor.onEnd · logging.Filter.filter
        |                 structural (duck-typed) match against the host's extension point
        |                 no runtime import of the host package
   L2  value-tree walker  recursive descent over everything JSON would emit:
@@ -116,6 +116,18 @@ Redaction then runs over one value tree and the redacted arguments are passed on
 with `method.apply`, so every later pino stage — serializers, formatters, the
 host's own path-based `redact` — runs unchanged over text pino can no longer see
 in the clear.
+
+`hooks.logMethod` cannot see two inputs that end up in the line: child-logger
+bindings, which pino serializes once when `child()` or `setBindings()` runs, and
+`mixin()` output, merged after the hook returns. `formatters.bindings` is no
+fix — pino replaces it with an identity function for every child created
+without its own `formatters` option. The sound hook is `hooks.streamWrite`,
+which receives the finished JSON line. `createRedactingStreamWrite` masks every
+string value in it in place (keys and every other byte are kept), and fails
+closed to a fixed `{"msg":"[REDACTED:ERROR]"}` line if the line cannot be
+lexed. It is a second scan of each line, so it is a separate hook the host
+installs next to `logMethod` rather than a replacement: `logMethod` still keeps
+raw values away from the host's own serializers, formatters and `mixin()`.
 
 ### OpenTelemetry
 

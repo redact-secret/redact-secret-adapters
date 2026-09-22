@@ -19,6 +19,14 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Added
+
+- `createRedactingStreamWrite` / `createRedactingStreamWriteWith`, a pino
+  `hooks.streamWrite` that masks every string value in the finished JSON line.
+  `hooks.logMethod` never sees child-logger bindings (`child()`,
+  `setBindings()`) or `mixin()` output, so with `logMethod` alone a secret in
+  either reached the destination in plaintext. Install both hooks.
+
 ### Fixed
 
 - `logger.error(err, "custom")` now logs `"custom"` as `msg`. Before, a leading

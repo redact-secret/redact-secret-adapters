@@ -17,7 +17,7 @@ import pino from "pino";
 import { expect, test } from "vitest";
 
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
-import { createRedactingLogMethodWith } from "../src/index.js";
+import { createRedactingLogMethodWith, createRedactingStreamWriteWith } from "../src/index.js";
 
 function capturingLogger(options: MaskOptions = {}) {
   const chunks: string[] = [];
@@ -118,6 +118,64 @@ test("issue #361: a scanner failure on the joined message fails closed in the de
   logger.info("trigger %s here", "BOOM");
   expect(lines()).toEqual([{ level: 30, msg: "[REDACTED:ERROR]" }]);
   expect(raw()).not.toContain("BOOM");
+});
+
+function capture() {
+  const chunks: string[] = [];
+  const destination = {
+    write(chunk: string) {
+      chunks.push(chunk);
+      return true;
+    },
+  };
+  return { destination, raw: () => chunks.join(""), lines: () => chunks.map((chunk) => JSON.parse(chunk)) };
+}
+
+test("logMethod alone never sees child bindings or mixin() output — the gap streamWrite closes", () => {
+  const { destination, raw } = capture();
+  const logMethod = createRedactingLogMethodWith(fakeScanAndRedact);
+  const logger = pino(
+    { base: null, timestamp: false, hooks: { logMethod }, mixin: () => ({ mixed: "SECRET_TOKEN_2" }) },
+    destination,
+  );
+  logger.child({ session: "SECRET_TOKEN_1" }).info("hello");
+  // If pino ever routes these through hooks.logMethod, this canary fails and
+  // the streamWrite requirement in the README can be revisited.
+  expect(raw()).toContain("SECRET_TOKEN_1");
+  expect(raw()).toContain("SECRET_TOKEN_2");
+});
+
+test("streamWrite masks child bindings, setBindings, and mixin() output in the bytes pino writes", () => {
+  const { destination, raw, lines } = capture();
+  const logger = pino(
+    {
+      base: null,
+      timestamp: false,
+      hooks: {
+        logMethod: createRedactingLogMethodWith(fakeScanAndRedact),
+        streamWrite: createRedactingStreamWriteWith(fakeScanAndRedact),
+      },
+      mixin: () => ({ mixed: "mixin SECRET_TOKEN_2" }),
+    },
+    destination,
+  );
+  const child = logger.child({ session: "session SECRET_TOKEN_1" });
+  child.info("hello %s", "SECRET_TOKEN_3");
+  child.setBindings({ later: "later SECRET_TOKEN_4" });
+  child.child({ grand: "BLOCK_ME" }).warn("again");
+
+  expect(lines()).toEqual([
+    { level: 30, session: "session <SECRET_1>", mixed: "mixin <SECRET_1>", msg: "hello <SECRET_1>" },
+    {
+      level: 40,
+      session: "session <SECRET_1>",
+      later: "later <SECRET_1>",
+      grand: "[REDACTED:BLOCKED]",
+      mixed: "mixin <SECRET_1>",
+      msg: "again",
+    },
+  ]);
+  expect(raw()).not.toMatch(/SECRET_TOKEN_\d|BLOCK_ME/);
 });
 
 test("pino's own path-based redact still applies on top, to a field the value-based hook left untouched", () => {
