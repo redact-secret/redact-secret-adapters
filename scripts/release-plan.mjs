@@ -67,12 +67,33 @@ const PACKAGES = [
 const root = new URL("../", import.meta.url);
 const args = new Set(process.argv.slice(2));
 
+// `version` in pyproject.toml's `[project]` table, read line by line: a
+// table header is any line that starts with `[` in column 0 (array
+// continuation lines are indented), so key order, blank lines, comments,
+// multi-line arrays and either TOML string quote don't matter. A dynamic
+// version or a version outside `[project]` is an error, not a guess.
+function pyprojectVersion(text) {
+  let table = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (line.startsWith("[")) {
+      const header = line.match(/^\[\[?([^\]]*)\]\]?\s*(?:#.*)?$/);
+      table = header ? header[1].replace(/["'\s]/g, "") : null;
+      if (line.startsWith("[[")) table = null;
+      continue;
+    }
+    if (table !== "project") continue;
+    const match = line.match(/^\s*version\s*=\s*(?:"([^"\\]*)"|'([^']*)')\s*(?:#.*)?$/);
+    if (match) return match[1] ?? match[2];
+  }
+  return null;
+}
+
 function declaredVersion(pkg) {
   const text = readFileSync(new URL(pkg.manifest, root), "utf-8");
   if (pkg.registry === "npm") return JSON.parse(text).version;
-  const match = text.match(/^\[project\][^[]*?^version = "([^"]+)"/ms);
-  if (!match) throw new Error(`${pkg.manifest}: no [project] version`);
-  return match[1];
+  const version = pyprojectVersion(text);
+  if (!version) throw new Error(`${pkg.manifest}: no static \`version = "..."\` in its [project] table`);
+  return version;
 }
 
 // 200 means published, 404 means not; anything else is an error rather than
