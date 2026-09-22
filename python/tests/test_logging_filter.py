@@ -142,6 +142,17 @@ class RedactSecretFilterTest(unittest.TestCase):
         self.assertIsNone(record.exc_info)
         self.assertEqual(handler.lines, ["query failed\nValueError: <SECRET_1>"])
 
+    def test_cached_exception_text_with_an_empty_exc_info_tuple_is_redacted(self) -> None:
+        handler = ListHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler.addFilter(RedactSecretFilter(fake_scan_and_redact))
+        record = logging.makeLogRecord(
+            {"msg": "query failed", "exc_info": (None, None, None), "exc_text": "ValueError: " + _SECRET}
+        )
+        handler.handle(record)
+        self.assertIsNone(record.exc_info)
+        self.assertEqual(handler.lines, ["query failed\nValueError: <SECRET_1>"])
+
     def test_exception_depth_limit_emits_marker(self) -> None:
         handler = ListHandler()
         handler.addFilter(RedactSecretFilter(fake_scan_and_redact, limits={"max_depth": 0}))

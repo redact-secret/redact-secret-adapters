@@ -84,14 +84,18 @@ class RedactSecretFilter(logging.Filter):
             record.msg = self._mask(message)
         record.args = None
 
+        exc_value = None
         if record.exc_info:
-            _exc_type, exc_value, _exc_tb = record.exc_info
-            if exc_value is not None:
-                record.exc_text = mask_exception_text_with(
-                    self._scan_and_redact, exc_value, policy=self._policy, limits=self._limits
-                )
+            if isinstance(record.exc_info, tuple) and len(record.exc_info) == 3:
+                exc_value = record.exc_info[1]
             record.exc_info = None
+        if isinstance(exc_value, BaseException):
+            record.exc_text = mask_exception_text_with(
+                self._scan_and_redact, exc_value, policy=self._policy, limits=self._limits
+            )
         elif record.exc_text:
+            # Also reached with exc_info == (None, None, None): a cached
+            # exc_text still renders and must be scanned.
             record.exc_text = self._mask(record.exc_text)
 
         if record.stack_info:

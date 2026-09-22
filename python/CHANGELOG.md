@@ -52,6 +52,8 @@ can read it without leaving their environment.
   `h`; a bare string now names one field. A listed extra holding a
   dict/list/tuple was left unscanned; it is now walked and replaced by a
   masked copy (the caller's object is not mutated).
+- `RedactSecretFilter`: a record with `exc_info=(None, None, None)` and a
+  cached `exc_text` left that text unscanned; it is now masked.
 
 ## [0.1.0]
 
