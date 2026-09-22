@@ -6,6 +6,8 @@ extension: a fake scanner stands in for the core, and a real
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import logging
 import unittest
@@ -162,6 +164,21 @@ class RedactSecretFilterTest(unittest.TestCase):
         logger, handler = make_logger("logging-redaction.error")
         logger.info("trigger BOOM here")
         self.assertEqual(handler.lines, [ERROR_MARKER])
+
+    def test_malformed_percent_args_emit_the_error_marker_and_never_the_args(self) -> None:
+        class RaisingStr:
+            def __str__(self) -> str:
+                raise RuntimeError("str failed")
+
+        logger, handler = make_logger("logging-redaction.malformed-args")
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            logger.info("value", "SECRET_TOKEN_1")  # too many args
+            logger.info("%d", "SECRET_TOKEN_1")  # wrong type
+            logger.info("%s %s", "SECRET_TOKEN_1")  # too few args
+            logger.info(RaisingStr())
+        self.assertEqual(handler.lines, [ERROR_MARKER] * 4)
+        self.assertNotIn("SECRET_TOKEN_1", stderr.getvalue())
 
     def test_rejects_a_non_callable_scan_and_redact(self) -> None:
         with self.assertRaises(TypeError):

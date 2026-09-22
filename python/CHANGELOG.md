@@ -27,6 +27,11 @@ can read it without leaving their environment.
   `None` kept in place.
 - `otel`: the span name, status description, event names, and link
   attributes are now redacted, not only span and event attributes.
+- `RedactSecretFilter`: a `%`-formatting error (`logger.info("value", x)`,
+  `logger.info("%d", "abc")`) or a message whose `__str__` raises no longer
+  raises out of the filter into the logging call; the message becomes
+  `[REDACTED:ERROR]` and the arguments are cleared, so the handler's
+  `handleError` never prints them.
 
 ## [0.1.0]
 

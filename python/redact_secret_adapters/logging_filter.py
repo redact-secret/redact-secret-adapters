@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional, Sequence
 
-from .mask_leaf import mask_leaf_with
+from .mask_leaf import ERROR_MARKER, mask_leaf_with
 from .mask_log_value import mask_log_value_with
 
 __all__ = ["RedactSecretFilter"]
@@ -71,7 +71,15 @@ class RedactSecretFilter(logging.Filter):
         return mask_leaf_with(self._scan_and_redact, text, policy=self._policy, max_string_length=max_len)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg = self._mask(record.getMessage())
+        try:
+            message = record.getMessage()
+        except Exception:
+            # A bad %-format (wrong arg count or type) or a raising __str__.
+            # Left alone, the handler's handleError would print msg and args
+            # to stderr in the clear; the message is unrecoverable, so mark it.
+            record.msg = ERROR_MARKER
+        else:
+            record.msg = self._mask(message)
         record.args = None
 
         if record.exc_info:
