@@ -25,7 +25,9 @@ feature ──PR──▶ develop ──cut──▶ rc/<train> ──PR──�
 
 The `Branch guard` workflow enforces the Accepts column; repository rulesets
 ([.github/rulesets](.github/rulesets)) require a PR and the checks on
-`develop`, `release` and `main`.
+`develop`, `release` and `main`, and allow only merge commits on all three.
+A squash-merged `sync/<train>` PR would leave `develop` without `release`'s
+commits, and cut-rc would refuse every later train.
 
 ## Trains
 
