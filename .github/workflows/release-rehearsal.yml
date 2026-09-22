@@ -1,0 +1,151 @@
+name: Release rehearsal
+
+# Everything a release does except the publish itself: plan which packages
+# this train ships, check each one's CHANGELOG entry, build them, and run
+# `npm publish --dry-run` / `twine check`. Nothing is published or tagged.
+#
+# Runs on every rc/* PR into release (the required "Rehearsal" check), and
+# again as the first stage of the Release workflow on the merged commit.
+
+on:
+  pull_request:
+    branches: [release]
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      any_publish:
+        value: ${{ jobs.plan.outputs.any_publish }}
+      publish_adapter:
+        value: ${{ jobs.plan.outputs.publish_adapter }}
+      publish_adapter_pino:
+        value: ${{ jobs.plan.outputs.publish_adapter_pino }}
+      publish_adapter_otel:
+        value: ${{ jobs.plan.outputs.publish_adapter_otel }}
+      publish_python:
+        value: ${{ jobs.plan.outputs.publish_python }}
+      adapter_version:
+        value: ${{ jobs.plan.outputs.adapter_version }}
+      adapter_pino_version:
+        value: ${{ jobs.plan.outputs.adapter_pino_version }}
+      adapter_otel_version:
+        value: ${{ jobs.plan.outputs.adapter_otel_version }}
+      python_version:
+        value: ${{ jobs.plan.outputs.python_version }}
+
+permissions: {}
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      any_publish: ${{ steps.plan.outputs.any_publish }}
+      publish_adapter: ${{ steps.plan.outputs.publish_adapter }}
+      publish_adapter_pino: ${{ steps.plan.outputs.publish_adapter_pino }}
+      publish_adapter_otel: ${{ steps.plan.outputs.publish_adapter_otel }}
+      publish_python: ${{ steps.plan.outputs.publish_python }}
+      adapter_version: ${{ steps.plan.outputs.adapter_version }}
+      adapter_pino_version: ${{ steps.plan.outputs.adapter_pino_version }}
+      adapter_otel_version: ${{ steps.plan.outputs.adapter_otel_version }}
+      python_version: ${{ steps.plan.outputs.python_version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+
+      - name: Plan
+        id: plan
+        run: node scripts/release-plan.mjs --check-changelog --require-publish
+
+  npm:
+    name: npm publish dry run
+    needs: plan
+    if: >-
+      needs.plan.outputs.publish_adapter == 'true' ||
+      needs.plan.outputs.publish_adapter_pino == 'true' ||
+      needs.plan.outputs.publish_adapter_otel == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Upgrade npm to the version the publish jobs use
+        run: npm install -g npm@latest
+
+      - name: Dry-run every planned publish
+        env:
+          ADAPTER: ${{ needs.plan.outputs.publish_adapter }}
+          PINO: ${{ needs.plan.outputs.publish_adapter_pino }}
+          OTEL: ${{ needs.plan.outputs.publish_adapter_otel }}
+        run: |
+          set -euo pipefail
+          [ "$ADAPTER" = "true" ] && npm publish --workspace @redact-secret/adapter --access public --dry-run
+          [ "$PINO" = "true" ] && npm publish --workspace @redact-secret/adapter-pino --access public --dry-run
+          [ "$OTEL" = "true" ] && npm publish --workspace @redact-secret/adapter-otel --access public --dry-run
+          true
+
+  python:
+    name: PyPI build check
+    needs: plan
+    if: needs.plan.outputs.publish_python == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - run: python -m pip install build==1.6.1 twine==7.0.0
+      - run: python -m build ./python
+      - run: twine check python/dist/*
+
+  rehearsal:
+    # The required status check on release. A skipped npm or python job
+    # means that side has nothing to publish this train, which is fine; a
+    # failed or cancelled one is not.
+    name: Rehearsal
+    needs: [plan, npm, python]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Fail unless every rehearsal job succeeded or had nothing to do
+        env:
+          PLAN: ${{ needs.plan.result }}
+          NPM: ${{ needs.npm.result }}
+          PYTHON: ${{ needs.python.result }}
+        run: |
+          set -euo pipefail
+          if [ "$PLAN" != "success" ]; then
+            echo "::error::Plan finished with '$PLAN'"
+            exit 1
+          fi
+          for result in "$NPM" "$PYTHON"; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "::error::A rehearsal job finished with '$result'"; exit 1 ;;
+            esac
+          done
