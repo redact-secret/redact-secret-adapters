@@ -6,7 +6,7 @@
 
 import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { ScanAndRedact } from "@redact-secret/adapter";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
 import { RedactingSpanProcessorWith, redactAttributesWith } from "../src/index.js";
@@ -105,6 +105,62 @@ test("a core failure on one attribute fails closed without throwing into the SDK
 
   expect(exported[0]?.attributes.boom).toBe("[REDACTED:ERROR]");
   expect(JSON.stringify(exported)).not.toContain("BOOM");
+});
+
+test("a span whose fields cannot take the masked write is dropped with one warning, never exported or thrown", () => {
+  const emit = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+  try {
+    const exported: PlainSpan[] = [];
+    const processor = new RedactingSpanProcessorWith(fakeNextProcessor(exported).next, fakeScanAndRedact);
+    const frozen = () =>
+      asSpan({ attributes: Object.freeze({ key: "SECRET_TOKEN_1" }), events: [] } as unknown as PlainSpan);
+    const ignoresWrites = asSpan({
+      get name() {
+        return "GET SECRET_TOKEN_2";
+      },
+      set name(_value: string) {},
+      attributes: {},
+      events: [],
+    } as unknown as PlainSpan);
+
+    expect(() => processor.onEnd(frozen())).not.toThrow();
+    expect(() => processor.onEnd(ignoresWrites)).not.toThrow();
+    expect(() => processor.onEnd(frozen())).not.toThrow();
+
+    expect(exported).toEqual([]);
+    expect(emit).toHaveBeenCalledTimes(1);
+    const [message] = emit.mock.calls[0] ?? [];
+    expect(String(message)).toContain("span.attributes");
+    expect(String(message)).not.toMatch(/SECRET_TOKEN_\d/);
+  } finally {
+    emit.mockRestore();
+  }
+});
+
+test("a frozen bag with nothing to mask is exported unchanged", () => {
+  const exported: PlainSpan[] = [];
+  const processor = new RedactingSpanProcessorWith(fakeNextProcessor(exported).next, fakeScanAndRedact);
+  processor.onEnd(asSpan({ attributes: Object.freeze({ key: "plain" }), events: [] }));
+  expect(exported).toHaveLength(1);
+});
+
+test("the status is replaced, not mutated, so a caller's status object keeps its text", () => {
+  const exported: PlainSpan[] = [];
+  const processor = new RedactingSpanProcessorWith(fakeNextProcessor(exported).next, fakeScanAndRedact);
+  const status = Object.freeze({ code: 2, message: "denied for SECRET_TOKEN_1" });
+  processor.onEnd(asSpan({ attributes: {}, events: [], status }));
+  expect(exported[0]?.status).toEqual({ code: 2, message: "denied for <SECRET_1>" });
+  expect(exported[0]?.status).not.toBe(status);
+});
+
+test("redactAttributesWith throws a TypeError naming no value when it cannot write back", () => {
+  const frozen = Object.freeze({ key: "SECRET_TOKEN_1" });
+  expect(() => redactAttributesWith(fakeScanAndRedact, frozen)).toThrow(TypeError);
+  try {
+    redactAttributesWith(fakeScanAndRedact, frozen);
+  } catch (error) {
+    expect(String(error)).not.toContain("SECRET_TOKEN_1");
+  }
 });
 
 test("onStart, shutdown, and forceFlush delegate to the wrapped processor", async () => {

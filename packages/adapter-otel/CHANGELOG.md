@@ -22,6 +22,11 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ### Fixed
 
+- `onEnd` never throws into the SDK. A span whose fields do not take the
+  masked write (for example, attributes frozen by an earlier processor) is
+  dropped with a one-time `REDACT_SECRET_SPAN_DROPPED` process warning naming
+  the field, never its value. Before, a frozen bag threw a `TypeError` out of
+  `span.end()`. The status is now replaced rather than mutated.
 - The SDK's optional `onEnding` hook is now forwarded to the wrapped
   processor. Before, a wrapped processor that relied on it never saw it.
 - The span name, every event's name, the status message, and every link's

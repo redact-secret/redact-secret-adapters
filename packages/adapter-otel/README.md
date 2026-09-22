@@ -22,11 +22,15 @@ hardcoding either convention.
 
 ## The load-bearing assumption
 
-`ReadableSpan.attributes` is typed `readonly` but is a plain mutable object at
-runtime, and this processor mutates it in place. If an SDK version freezes it,
-the adapter stops working. `test/otel-host.test.ts` builds a real span, passes
-it through a real `BasicTracerProvider`, and asserts the exporter saw redacted
-attributes. That assertion is not optional.
+`ReadableSpan`'s fields are typed `readonly` but are plain writable objects at
+runtime, and this processor writes the masked values back in place. Every write
+is read back; if one does not take (for example, an earlier processor froze the
+attributes), the span is **dropped** — not exported, and nothing is thrown out
+of `span.end()` — and a one-time process warning
+(`REDACT_SECRET_SPAN_DROPPED`) names the field, never its value.
+`test/otel-host.test.ts` builds a real span, passes it through a real
+`BasicTracerProvider`, and asserts the exporter saw redacted fields. That
+assertion is not optional.
 
 ## Exports
 
@@ -34,7 +38,7 @@ attributes. That assertion is not optional.
 | --- | --- |
 | `createRedactingSpanProcessor(next, options?)` | Live: awaits the core's `initialize()`, wraps `next` |
 | `RedactingSpanProcessorWith` | `new (next, scanAndRedact, options?)` — injected scanner |
-| `redactAttributesWith(scanAndRedact, attributes, options?)` | Mutates one attribute bag in place |
+| `redactAttributesWith(scanAndRedact, attributes, options?)` | Mutates one attribute bag in place; throws a `TypeError` (naming no value) if it cannot |
 
 `options` is `{ policy, maxStringLength }`. See
 [`@redact-secret/adapter`](../adapter#fail-closed-markers) for the markers.

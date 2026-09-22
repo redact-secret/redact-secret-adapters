@@ -21,6 +21,8 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ### Fixed
 
+- `maskLeafWith` fails closed to `[REDACTED:ERROR]` on a scanner result that
+  is not `{ text: string, findings: [] }`, instead of throwing.
 - `maskSecretsWith` and `maskLogValueWith` are now one walker, and it no
   longer passes non-plain objects through unmasked. A class instance,
   `IncomingMessage`, `URL` or any `toJSON()` object is masked as what JSON

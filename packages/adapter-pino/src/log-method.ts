@@ -56,7 +56,7 @@
  */
 
 import type { MaskOptions, ScanAndRedact } from "@redact-secret/adapter";
-import { maskLogValueWith } from "@redact-secret/adapter";
+import { ERROR_MARKER, maskLogValueWith } from "@redact-secret/adapter";
 import type { LogFn, Logger } from "pino";
 
 import { formatPinoMessage } from "./format-message.js";
@@ -100,6 +100,14 @@ function joinInterpolatedMessage(args: unknown[]): unknown[] {
   return msgIndex === 1 ? [args[0], joined] : [joined];
 }
 
+function redactArgs(scanAndRedact: ScanAndRedact, args: unknown[], options: MaskOptions): unknown[] {
+  const joined = joinInterpolatedMessage(args);
+  const redacted = maskLogValueWith(scanAndRedact, joined, options);
+  if (!Array.isArray(redacted)) return [ERROR_MARKER];
+  if (joined[0] instanceof Error) redacted[0] = asMaskedError(joined[0], redacted[0]);
+  return redacted;
+}
+
 /**
  * Builds a pino `hooks.logMethod` function. `scanAndRedact` is injected
  * (see `./index.ts` for the live factory over `@redact-secret/core`).
@@ -112,9 +120,13 @@ export function createRedactingLogMethodWith(
     throw new TypeError("createRedactingLogMethodWith: scanAndRedact must be a function");
   }
   return function redactingLogMethod(args, method, _level) {
-    const joined = joinInterpolatedMessage(Array.from(args));
-    const redacted = maskLogValueWith(scanAndRedact, joined, options) as unknown[];
-    if (joined[0] instanceof Error) redacted[0] = asMaskedError(joined[0], redacted[0]);
+    let redacted: unknown[];
+    try {
+      redacted = redactArgs(scanAndRedact, Array.from(args), options);
+    } catch {
+      // e.g. formatting `%d` with a Symbol: log the marker, never the raw arguments.
+      redacted = [ERROR_MARKER];
+    }
     method.apply(this, redacted as Parameters<LogFn>);
   };
 }

@@ -136,11 +136,15 @@ before delegating, redacts every free-text field an exporter sends: the span
 name, string and string-array attributes (keeping `null` holes in place), each
 event's name and attributes, the status message, and each link's attributes.
 
-One runtime assumption is load-bearing: `ReadableSpan.attributes` is typed
-`readonly` but is a plain mutable object at runtime. If an SDK version freezes
-it, this adapter becomes a silent no-op — which is exactly the failure mode the
-fail-closed rules exist to prevent. The test suite asserts mutation actually
-took effect on a real span, at both ends of the declared SDK range.
+One runtime assumption is load-bearing: `ReadableSpan`'s fields are typed
+`readonly` but are plain writable objects at runtime, so the masked values are
+written back in place. Every write is read back. If one does not take — a
+frozen bag, a setter that ignores the write — the span is dropped with a
+one-time process warning naming the field, never its value, rather than
+exported unredacted or thrown out of `span.end()`. A status is replaced, not
+mutated, since the object may be the caller's own. The real-host test asserts
+the writes take effect on a real span at both ends of the declared SDK range,
+and that a span frozen by an earlier processor is dropped without a throw.
 
 The Python SDK offers no mutable view at all: `ReadableSpan.name`, `.status`,
 `.attributes`, `.events` and `.links` are read-only, so

@@ -12,7 +12,7 @@
  */
 
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
 import { RedactingSpanProcessorWith } from "../src/index.js";
@@ -100,6 +100,33 @@ test("the SDK's onEnding reaches the wrapped processor exactly when the SDK call
   // sdk-trace-base 2.0.0 has no onEnding; later 2.x versions call it.
   expect(wrapped).toEqual(direct);
   await provider.shutdown();
+});
+
+test("span.end() never throws when an earlier processor froze the span's attributes; the span is dropped", async () => {
+  const emit = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+  try {
+    const exporter = new InMemorySpanExporter();
+    const freezer = {
+      onStart() {},
+      onEnd(span: { attributes: object }) {
+        Object.freeze(span.attributes);
+      },
+      shutdown: () => Promise.resolve(),
+      forceFlush: () => Promise.resolve(),
+    };
+    const provider = new BasicTracerProvider({
+      spanProcessors: [freezer, new RedactingSpanProcessorWith(new SimpleSpanProcessor(exporter), fakeScanAndRedact)],
+    });
+    const span = provider.getTracer("adapter-otel-host-test").startSpan("frozen");
+    span.setAttribute("key", "SECRET_TOKEN_1");
+    expect(() => span.end()).not.toThrow();
+    await provider.forceFlush();
+    expect(exporter.getFinishedSpans()).toEqual([]);
+    expect(emit).toHaveBeenCalledTimes(1);
+    await provider.shutdown();
+  } finally {
+    emit.mockRestore();
+  }
 });
 
 test("the SDK hands onEnd mutable attribute bags — the assumption this adapter rests on", async () => {

@@ -167,6 +167,26 @@ test("numbers and booleans are formatted into the joined message, matching pino'
   expect(calls[0]?.args).toEqual(["count is 3, active is true"]);
 });
 
+test("an argument that cannot be formatted fails closed to the error marker instead of throwing into pino", () => {
+  const { method, calls } = spyMethod();
+  const hook = createRedactingLogMethodWith(fakeScanAndRedact);
+  expect(() => callHook(hook, {}, ["count %d", Symbol("x"), "SECRET_TOKEN_1"], method, 30)).not.toThrow();
+  expect(calls[0]?.args).toEqual([ERROR_MARKER]);
+});
+
+test("a throwing getter in a merging object fails closed for that field only", () => {
+  const { method, calls } = spyMethod();
+  const hook = createRedactingLogMethodWith(fakeScanAndRedact);
+  const merging = {
+    ok: "SECRET_TOKEN_1",
+    get bad() {
+      throw new Error("SECRET_TOKEN_2");
+    },
+  };
+  callHook(hook, {}, [merging, "msg"], method, 30);
+  expect(calls[0]?.args).toEqual([{ ok: "<SECRET_1>", bad: ERROR_MARKER }, "msg"]);
+});
+
 test("rejects a non-function scanAndRedact", () => {
   expect(() => createRedactingLogMethodWith(null as unknown as ScanAndRedact)).toThrow(TypeError);
 });

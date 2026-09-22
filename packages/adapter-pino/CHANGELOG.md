@@ -35,6 +35,9 @@ tarball (`files` in `package.json`), so a consumer can read it from
   arguments into it. The hook now hands pino a masked copy of the error that
   keeps its prototype, so pino's own handling applies: the caller's message
   wins, and `logger.error(err)` still gets the masked `err.message`.
+- The `logMethod` hook no longer throws into pino when an argument cannot be
+  formatted (for example `%d` with a `Symbol`): pino logs `[REDACTED:ERROR]`
+  instead of the raw arguments.
 
 ## [0.1.0] - 2026-09-22
 
