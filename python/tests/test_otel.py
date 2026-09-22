@@ -57,6 +57,8 @@ class FakeNextProcessor:
     def __init__(self) -> None:
         self.started: list[tuple] = []
         self.exported: list[FakeSpan] = []
+        self.shutdown_calls = 0
+        self.flush_timeouts: list[int] = []
 
     def on_start(self, span, parent_context=None) -> None:
         self.started.append((span, parent_context))
@@ -64,11 +66,12 @@ class FakeNextProcessor:
     def on_end(self, span) -> None:
         self.exported.append(span)
 
-    def shutdown(self) -> str:
-        return "shutdown"
+    def shutdown(self) -> None:
+        self.shutdown_calls += 1
 
-    def force_flush(self, timeout_millis: int = 30000) -> str:
-        return "flushed"
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        self.flush_timeouts.append(timeout_millis)
+        return False  # distinguishable from the fallback's True
 
 
 class RedactingSpanProcessorWithTest(unittest.TestCase):
@@ -204,8 +207,26 @@ class RedactingSpanProcessorWithTest(unittest.TestCase):
 
         processor.on_start("span-1", "ctx-1")
         self.assertEqual(next_processor.started, [("span-1", "ctx-1")])
-        self.assertEqual(processor.shutdown(), None)
-        self.assertEqual(processor.force_flush(), "flushed")
+        processor.shutdown()
+        self.assertEqual(next_processor.shutdown_calls, 1)
+        self.assertIs(processor.force_flush(1234), False)
+        self.assertEqual(next_processor.flush_timeouts, [1234])
+
+    def test_a_next_processor_with_only_on_end_is_tolerated(self) -> None:
+        class OnEndOnly:
+            def __init__(self) -> None:
+                self.exported: list = []
+
+            def on_end(self, span) -> None:
+                self.exported.append(span)
+
+        next_processor = OnEndOnly()
+        processor = RedactingSpanProcessorWith(next_processor, fake_scan_and_redact)
+        processor.on_start("span-1", "ctx-1")  # must not raise
+        self.assertIs(processor.force_flush(), True)
+        span = FakeSpan({"k": "SECRET_TOKEN_1"})
+        processor.on_end(span)
+        self.assertEqual(next_processor.exported[0]._attributes, {"k": "<SECRET_1>"})
 
     def test_redact_attributes_with_is_a_noop_for_none(self) -> None:
         redact_attributes_with(fake_scan_and_redact, None)  # must not raise

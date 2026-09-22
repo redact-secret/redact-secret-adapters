@@ -150,7 +150,10 @@ class RedactingSpanProcessorWith:
         self._warned = False
 
     def on_start(self, span: "Span", parent_context: Optional["Context"] = None) -> None:
-        self._next.on_start(span, parent_context)
+        # Only on_end is required of next_processor (see __init__).
+        on_start = getattr(self._next, "on_start", None)
+        if callable(on_start):
+            on_start(span, parent_context)
 
     def _on_ending(self, span: "Span") -> None:
         # Not part of the duck-typed surface the original example assumed:
@@ -235,7 +238,8 @@ class RedactingSpanProcessorWith:
         self._next.shutdown()
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
-        return self._next.force_flush(timeout_millis)
+        force_flush = getattr(self._next, "force_flush", None)
+        return force_flush(timeout_millis) if callable(force_flush) else True
 
 
 def create_redacting_span_processor(

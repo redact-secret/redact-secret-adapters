@@ -54,6 +54,9 @@ can read it without leaving their environment.
   masked copy (the caller's object is not mutated).
 - `RedactSecretFilter`: a record with `exc_info=(None, None, None)` and a
   cached `exc_text` left that text unscanned; it is now masked.
+- `otel`: only `on_end` is required of the wrapped processor, as the
+  constructor already checked; a missing `on_start` is skipped and a
+  missing `force_flush` returns `True`, like the JS package.
 
 ## [0.1.0]
 
