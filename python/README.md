@@ -22,7 +22,10 @@ logging.getLogger().addHandler(handler)
 The filter formats `msg` with `args` before scanning, then clears the
 arguments so a downstream formatter cannot rebuild the original. It replaces
 `exc_info` with redacted traceback text, scans cached `exc_text` and
-`stack_info`, and redacts any `extra_fields=[...]` you name.
+`stack_info`, and redacts any `extra_fields=[...]` you name: a string extra is
+masked, and a dict/list/tuple extra is walked and replaced by a masked copy.
+If the message cannot be formatted (a bad `%` format, a raising `__str__`), it
+becomes `[REDACTED:ERROR]` rather than raising into the logging call.
 
 Attach it to each emitting **handler**: ancestor logger filters do not run for
 propagated child records.

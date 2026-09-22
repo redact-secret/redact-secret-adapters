@@ -161,6 +161,25 @@ class RedactSecretFilterTest(unittest.TestCase):
         self.assertEqual(captured[0].auth_header, "Bearer <SECRET_1>")
         self.assertEqual(captured[0].request_id, "req-2")
 
+    def test_a_bare_string_extra_fields_names_one_field(self) -> None:
+        handler = ListHandler()
+        handler.setFormatter(logging.Formatter("%(message)s %(auth)s"))
+        handler.addFilter(RedactSecretFilter(fake_scan_and_redact, extra_fields="auth"))
+        handler.handle(logging.makeLogRecord({"msg": "request", "auth": "Bearer SECRET_TOKEN_1"}))
+        self.assertEqual(handler.lines, ["request Bearer <SECRET_1>"])
+
+    def test_configured_dict_and_list_extras_are_walked_without_mutating_the_callers_object(self) -> None:
+        logger, handler = make_logger("logging-redaction.extra-containers", extra_fields=("headers", "tags"))
+        captured = []
+        handler.addFilter(lambda record: captured.append(record) or True)
+        headers = {"authorization": "Bearer SECRET_TOKEN_1", "nested": {"cookie": ("s=SECRET_TOKEN_2",)}}
+        logger.info("request", extra={"headers": headers, "tags": ["ok", "SECRET_TOKEN_3 x"]})
+        self.assertEqual(
+            captured[0].headers, {"authorization": "Bearer <SECRET_1>", "nested": {"cookie": ("s=<SECRET_1>",)}}
+        )
+        self.assertEqual(captured[0].tags, ["ok", "<SECRET_1> x"])
+        self.assertEqual(headers["authorization"], "Bearer SECRET_TOKEN_1")
+
     def test_unconfigured_extra_field_is_left_untouched(self) -> None:
         logger, handler = make_logger("logging-redaction.extra-unconfigured", extra_fields=())
         captured = []

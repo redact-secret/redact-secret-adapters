@@ -48,6 +48,10 @@ can read it without leaving their environment.
   walker that walks them; a tuple comes back as a plain `tuple`, a
   `dict`/`list` subclass as a plain `dict`/`list`. `mask_secrets_with` now
   also walks exceptions, as `mask_log_value_with` already did.
+- `RedactSecretFilter(extra_fields="auth")` named the fields `a`, `u`, `t`,
+  `h`; a bare string now names one field. A listed extra holding a
+  dict/list/tuple was left unscanned; it is now walked and replaced by a
+  masked copy (the caller's object is not mutated).
 
 ## [0.1.0]
 

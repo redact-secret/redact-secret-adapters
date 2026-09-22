@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional, Sequence
 
-from ._walk import mask_exception_text_with
+from ._walk import mask_exception_text_with, walk
 from .mask_leaf import ERROR_MARKER, mask_leaf_with
 
 __all__ = ["RedactSecretFilter"]
@@ -38,10 +38,11 @@ class RedactSecretFilter(logging.Filter):
     which resolves ``redact_secret.scan_and_redact`` on construction, or
     pass a fake for tests (this module is testable without the built
     native extension). ``extra_fields`` names attributes set via a log
-    call's ``extra={...}`` kwarg to also redact if their value is a
-    ``str``; unlisted attributes, and non-``str`` extras, are left
-    untouched, since this filter never assumes a wire format wide enough
-    to know every possible extra field.
+    call's ``extra={...}`` kwarg to also redact: a string is masked, and a
+    dict/list/tuple/exception is walked like ``mask_log_value_with`` and
+    replaced by its masked copy. Unlisted attributes are left untouched,
+    since this filter never assumes a wire format wide enough to know every
+    possible extra field.
     """
 
     def __init__(
@@ -63,7 +64,8 @@ class RedactSecretFilter(logging.Filter):
             raise TypeError("RedactSecretFilter: scan_and_redact must be callable")
         self._scan_and_redact = scan_and_redact
         self._policy = policy
-        self._extra_fields = tuple(extra_fields)
+        # A bare string names one field; tuple("auth") would name four.
+        self._extra_fields = (extra_fields,) if isinstance(extra_fields, str) else tuple(extra_fields)
         self._limits = limits
 
     def _mask(self, text: str) -> str:
@@ -96,8 +98,9 @@ class RedactSecretFilter(logging.Filter):
             record.stack_info = self._mask(record.stack_info)
 
         for field in self._extra_fields:
-            value = getattr(record, field, None)
-            if isinstance(value, str):
-                setattr(record, field, self._mask(value))
+            if hasattr(record, field):
+                # A new, masked container: the caller's own object is untouched.
+                masked = walk(self._scan_and_redact, getattr(record, field), policy=self._policy, limits=self._limits)
+                setattr(record, field, masked)
 
         return True
