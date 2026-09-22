@@ -4,7 +4,7 @@ import type { LogFn, Logger } from "pino";
 import { expect, test } from "vitest";
 
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
-import { createRedactingLogMethodWith, type RedactingLogMethod } from "../src/index.js";
+import { createRedactingLogMethodWith, createRedactingStreamWriteWith, type RedactingLogMethod } from "../src/index.js";
 
 interface Call {
   receiver: unknown;
@@ -214,6 +214,20 @@ test("a redaction that reaches into msgPrefix keeps the whole masked text, never
   const hook = createRedactingLogMethodWith(fakeScanAndRedact);
   callHook(hook, { msgPrefix: "SECRET_TOKEN_" }, ["1 rotated"], method, 30);
   expect(calls[0]?.args).toEqual(["<SECRET_1> rotated"]);
+});
+
+test("the policy option reaches scanAndRedact from both hooks", () => {
+  const policy = { evaluate: () => "redact" as const };
+  const seen: unknown[] = [];
+  const spy: ScanAndRedact = (text, options) => {
+    seen.push(options?.policy);
+    return { text, findings: [] };
+  };
+  const { method } = spyMethod();
+  callHook(createRedactingLogMethodWith(spy, { policy }), {}, [{ a: "x" }, "msg %s", "y"], method, 30);
+  createRedactingStreamWriteWith(spy, { policy })('{"a":"x"}');
+  expect(seen).toHaveLength(3);
+  expect(seen.every((received) => received === policy)).toBe(true);
 });
 
 test("rejects a non-function scanAndRedact", () => {

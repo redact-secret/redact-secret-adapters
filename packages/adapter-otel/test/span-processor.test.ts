@@ -163,6 +163,18 @@ test("redactAttributesWith throws a TypeError naming no value when it cannot wri
   }
 });
 
+test("the policy option reaches scanAndRedact for every field", () => {
+  const policy = { evaluate: () => "redact" as const };
+  const seen: unknown[] = [];
+  const spy: ScanAndRedact = (text, options) => {
+    seen.push(options?.policy);
+    return { text, findings: [] };
+  };
+  const processor = new RedactingSpanProcessorWith(fakeNextProcessor([]).next, spy, { policy });
+  processor.onEnd(asSpan({ name: "n", attributes: { a: "x" }, events: [{ name: "e", attributes: { b: "y" } }] }));
+  expect(seen).toEqual([policy, policy, policy, policy]);
+});
+
 test("onStart, shutdown, and forceFlush delegate to the wrapped processor", async () => {
   const { started, next } = fakeNextProcessor([]);
   const processor = new RedactingSpanProcessorWith(next, fakeScanAndRedact);

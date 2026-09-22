@@ -186,6 +186,20 @@ test("a string too long for the size limit is marked, not scanned", () => {
   expect(result.blob).toBe(LIMIT_MARKER);
 });
 
+test("the policy option reaches scanAndRedact for every leaf", () => {
+  const policy = { evaluate: () => "redact" as const };
+  const seen: unknown[] = [];
+  const spy: ScanAndRedact = (text, options) => {
+    seen.push(options?.policy);
+    return { text, findings: [] };
+  };
+  maskSecretsWith(spy, { a: "x", b: ["y", new Error("z")] }, { policy });
+  expect(seen.length).toBeGreaterThan(3);
+  expect(seen.every((received) => received === policy)).toBe(true);
+  expect(maskLeafWith(spy, "leaf", { policy })).toBe("leaf");
+  expect(seen.at(-1)).toBe(policy);
+});
+
 test("rejects a non-function scanAndRedact", () => {
   expect(() => maskSecretsWith(null as unknown as ScanAndRedact, {})).toThrow(TypeError);
 });
