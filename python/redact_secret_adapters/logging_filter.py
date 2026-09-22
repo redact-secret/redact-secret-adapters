@@ -15,8 +15,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional, Sequence
 
+from ._walk import mask_exception_text_with
 from .mask_leaf import ERROR_MARKER, mask_leaf_with
-from .mask_log_value import _mask_exception_text_with
 
 __all__ = ["RedactSecretFilter"]
 
@@ -85,7 +85,7 @@ class RedactSecretFilter(logging.Filter):
         if record.exc_info:
             _exc_type, exc_value, _exc_tb = record.exc_info
             if exc_value is not None:
-                record.exc_text = _mask_exception_text_with(
+                record.exc_text = mask_exception_text_with(
                     self._scan_and_redact, exc_value, policy=self._policy, limits=self._limits
                 )
             record.exc_info = None

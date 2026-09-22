@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import json
 import unittest
+from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fake_scanner import fake_scan_and_redact
 
 from redact_secret_adapters.mask_leaf import BLOCK_MARKER, CYCLE_MARKER, ERROR_MARKER, LIMIT_MARKER
+from redact_secret_adapters.mask_log_value import mask_log_value_with
 from redact_secret_adapters.mask_secrets import mask_secrets_with
 
 FIXTURES_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "mask-secrets-cases.json"
@@ -57,6 +59,52 @@ class MaskSecretsWithTest(unittest.TestCase):
         self.assertEqual(result["active"], False)
         self.assertIsNone(result["missing"])
         self.assertIs(result["when"], when)
+
+    def test_tuples_and_dict_list_subclasses_are_walked(self) -> None:
+        class TagList(list):
+            pass
+
+        data = {
+            "tuple": ("ok", "SECRET_TOKEN_1 a"),
+            "ordered": OrderedDict([("k", "SECRET_TOKEN_2 b")]),
+            "default": defaultdict(list, {"k": ["SECRET_TOKEN_3 c"]}),
+            "tags": TagList(["SECRET_TOKEN_4 d"]),
+        }
+        for mask in (mask_secrets_with, mask_log_value_with):
+            with self.subTest(mask=mask.__name__):
+                result = mask(fake_scan_and_redact, data)
+                self.assertEqual(
+                    result,
+                    {
+                        "tuple": ("ok", "<SECRET_1> a"),
+                        "ordered": {"k": "<SECRET_1> b"},
+                        "default": {"k": ["<SECRET_1> c"]},
+                        "tags": ["<SECRET_1> d"],
+                    },
+                )
+                # Subclasses come back as the plain container.
+                self.assertIs(type(result["tuple"]), tuple)
+                self.assertIs(type(result["ordered"]), dict)
+                self.assertIs(type(result["tags"]), list)
+
+    def test_exceptions_are_walked_by_the_masking_callback_too(self) -> None:
+        result = mask_secrets_with(fake_scan_and_redact, {"error": ValueError("SECRET_TOKEN_1 leaked")})
+        self.assertEqual(result["error"]["type"], "ValueError")
+        self.assertEqual(result["error"]["message"], "<SECRET_1> leaked")
+        self.assertNotIn("SECRET_TOKEN_1", json.dumps(result))
+
+    def test_tuple_limits_and_cycles_match_lists(self) -> None:
+        self.assertEqual(
+            mask_secrets_with(fake_scan_and_redact, ("a", "b", "c"), limits={"max_array_length": 2}), ("a", "b")
+        )
+        self.assertEqual(
+            mask_secrets_with(fake_scan_and_redact, {"t": ("SECRET_TOKEN_1",)}, limits={"max_depth": 1}),
+            {"t": LIMIT_MARKER},
+        )
+        inner: list = []
+        outer = (inner,)
+        inner.append(outer)
+        self.assertEqual(mask_secrets_with(fake_scan_and_redact, outer), ([CYCLE_MARKER],))
 
     def test_depth_beyond_limit_is_marked_rather_than_walked(self) -> None:
         data = {"a": {"b": {"c": "SECRET_TOKEN_1"}}}

@@ -42,6 +42,12 @@ can read it without leaving their environment.
   moved the field), the span is now dropped with a one-time
   `RuntimeWarning` instead of being exported unredacted. No redaction
   failure raises out of `on_end`.
+- `mask_secrets_with` / `mask_log_value_with`: tuples and `dict`/`list`
+  subclasses (`OrderedDict`, `defaultdict`, ...) were returned unscanned
+  because only exact `dict`/`list` were walked. Both functions now share one
+  walker that walks them; a tuple comes back as a plain `tuple`, a
+  `dict`/`list` subclass as a plain `dict`/`list`. `mask_secrets_with` now
+  also walks exceptions, as `mask_log_value_with` already did.
 
 ## [0.1.0]
 
