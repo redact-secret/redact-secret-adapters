@@ -66,9 +66,11 @@ Package tags: `adapter`, `adapter-pino`, `adapter-otel`, and
    3. **Publish** — each planned package, npm then PyPI, with npm provenance
       and PyPI trusted publishing. `@redact-secret/adapter` goes first
       because the other two npm packages depend on it.
-   4. **Tag and report** — a `<package>@<version>` tag per published
-      package, then `train/<train>` and a GitHub Release whose notes are each
-      shipped package's CHANGELOG section.
+   4. **Tag and report** — a `<package>@<version>` tag for every package
+      whose declared version is on its registry and not yet tagged (whether
+      this run published it or it was published out of band), then
+      `train/<train>` and a GitHub Release whose notes are each shipped
+      package's CHANGELOG section.
    5. **Reconcile** — verifies every declared version is on its registry and
       tagged, then opens `release → main` and `sync/<train> → develop`.
 5. **Merge the reconcile PRs.** Merge both with a merge commit, never

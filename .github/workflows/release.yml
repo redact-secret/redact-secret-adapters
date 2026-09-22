@@ -172,11 +172,15 @@ jobs:
           packages-dir: python/dist
 
   finalize:
-    # Tags per package, only for what this run actually published, only
-    # after publishing succeeded. Then tags the train and creates (or, on a
-    # re-run, refreshes) its GitHub Release, and reports what was attempted
-    # against what the registries now report, since a partial run across two
-    # registries is not transactional and must be diagnosable, not silent.
+    # Tags every package whose declared version is on its registry and has
+    # no tag yet: what this run published, and anything published out of
+    # band (a first publish by hand, or an earlier run that died before
+    # tagging). Reconcile requires every declared version to be tagged, so
+    # tagging only this run's publishes would strand those. Then tags the
+    # train and creates (or, on a re-run, refreshes) its GitHub Release, and
+    # reports what was attempted against what the registries now report,
+    # since a partial run across two registries is not transactional and
+    # must be diagnosable, not silent.
     name: Tag and report
     needs:
       - rehearsal
@@ -228,28 +232,54 @@ jobs:
           echo "train=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           echo "Train: ${BASH_REMATCH[1]}"
 
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+
+      - name: Check the registries now
+        # The same plan the rehearsal computed, re-read after publishing:
+        # publish_<id>=false now means "the declared version is on its
+        # registry", whoever put it there. A registry answering anything but
+        # 200/404 fails this step rather than being read as unpublished. The
+        # summary is suppressed: the report below covers this.
+        id: registry
+        run: GITHUB_STEP_SUMMARY='' node scripts/release-plan.mjs
+
       - name: Tag published packages
+        env:
+          ADAPTER_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter == 'false' }}
+          PINO_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_pino == 'false' }}
+          OTEL_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_otel == 'false' }}
+          PYTHON_ON_REGISTRY: ${{ steps.registry.outputs.publish_python == 'false' }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # A publish job's success counts as well as the registry check, so
+          # a registry that is slow to show a fresh publish still gets tagged.
+          # An existing tag is left alone: an unbumped package keeps the tag
+          # of the train that shipped it, and a re-run is a no-op.
           tag_if_published() {
-            local result="$1" tag="$2"
-            if [ "$result" = "success" ]; then
-              if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
-                echo "::warning::Tag $tag already exists on origin, skipping"
-                return
-              fi
-              git tag -a "$tag" -m "Release $tag"
-              git push origin "$tag"
+            local result="$1" on_registry="$2" tag="$3"
+            if [ "$result" != "success" ] && [ "$on_registry" != "true" ]; then
+              return
             fi
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "Tag $tag already exists on origin"
+              return
+            fi
+            if [ "$result" != "success" ]; then
+              echo "::notice::$tag is on its registry but was not published by this run; tagging it here"
+            fi
+            git tag -a "$tag" -m "Release $tag"
+            git push origin "$tag"
           }
 
-          tag_if_published "$ADAPTER_RESULT" "adapter@${ADAPTER_VERSION}"
-          tag_if_published "$PINO_RESULT" "adapter-pino@${PINO_VERSION}"
-          tag_if_published "$OTEL_RESULT" "adapter-otel@${OTEL_VERSION}"
-          tag_if_published "$PYTHON_RESULT" "redact-secret-adapters@${PYTHON_VERSION}"
+          tag_if_published "$ADAPTER_RESULT" "$ADAPTER_ON_REGISTRY" "adapter@${ADAPTER_VERSION}"
+          tag_if_published "$PINO_RESULT" "$PINO_ON_REGISTRY" "adapter-pino@${PINO_VERSION}"
+          tag_if_published "$OTEL_RESULT" "$OTEL_ON_REGISTRY" "adapter-otel@${OTEL_VERSION}"
+          tag_if_published "$PYTHON_RESULT" "$PYTHON_ON_REGISTRY" "redact-secret-adapters@${PYTHON_VERSION}"
 
       - name: Tag the train and publish its GitHub Release
         # Only once at least one package tag points at this commit. The
