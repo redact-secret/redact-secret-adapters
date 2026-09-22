@@ -1,5 +1,5 @@
-"""``mask_secrets_with``: the generic masking callback the issue asks for,
-shaped exactly like Langfuse Python's legacy ``mask`` hook signature
+"""``mask_secrets_with``: a generic masking callback, shaped exactly like
+Langfuse Python's legacy ``mask`` hook signature
 (``def masking_function(*, data: Any, **kwargs: Any) -> Any``), so
 ``mask_secrets`` (below) is a drop-in ``Langfuse(mask=mask_secrets)``.
 ``mask_secrets_with`` never touches ``redact_secret`` -- ``scan_and_redact``

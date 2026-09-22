@@ -3,8 +3,8 @@ https://github.com/open-telemetry/opentelemetry-python/blob/main/opentelemetry-s
 that redacts a span's name, status description, every string and
 string-sequence attribute -- including OpenInference and GenAI
 semantic-convention attributes -- every event's name and attributes, and
-every link's attributes before handing the span to the next processor. It does not
-allowlist those attribute names: every string-shaped attribute value is
+every link's attributes before handing the span to the next processor. It
+does not allowlist those attribute names: every string-shaped attribute value is
 scanned, which covers any semantic convention without hardcoding it and
 without a dependency on either convention's attribute list.
 
@@ -90,8 +90,8 @@ def redact_attributes_with(
     `attributes` is a plain dict in the duck-typed tests and a real SDK
     `BoundedAttributes` against a live SpanProcessor; the latter is a
     `MutableMapping` whose `__setitem__` raises once it's marked immutable
-    (every event's attributes, and every span's once `Span.end()` has run).
-    Writing through its backing `_dict` -- present only on that real type --
+    (event and link attributes always; span attributes once `Span.end()`
+    has run, from opentelemetry-sdk 1.43). Writing through its backing `_dict` -- present only on that real type --
     bypasses that guard instead of tripping it."""
     if attributes is None:
         return
@@ -125,9 +125,9 @@ def _check_written(obj: Any, public: str, expected: Any) -> None:
 
 
 class RedactingSpanProcessorWith:
-    """Wraps `next_processor` (any object shaped like a `SpanProcessor`)
-    and redacts every span's and event's string attributes before
-    delegating to it. `scan_and_redact` is injected so this class is
+    """Wraps `next_processor` (any object shaped like a `SpanProcessor`;
+    only `on_end` is required) and redacts each span's free text (see the
+    module docstring) before delegating to it. `scan_and_redact` is injected so this class is
     testable without the built native extension or a real OpenTelemetry
     dependency."""
 
@@ -156,13 +156,8 @@ class RedactingSpanProcessorWith:
             on_start(span, parent_context)
 
     def _on_ending(self, span: "Span") -> None:
-        # Not part of the duck-typed surface the original example assumed:
-        # opentelemetry-sdk 1.40 and above call this private hook on every
-        # registered processor, unconditionally, so a class without it
-        # raises AttributeError out of `Span.end()` on those versions --
-        # found by tests/test_otel_host.py, the first test to use a real
-        # SDK. Versions below 1.40 never call it at all, so this is a no-op
-        # there, not a version check.
+        # opentelemetry-sdk 1.40+ calls this private hook on every processor
+        # (older versions never do); without it Span.end() raises.
         on_ending = getattr(self._next, "_on_ending", None)
         if callable(on_ending):
             on_ending(span)

@@ -87,14 +87,8 @@ class ListHandler(logging.Handler):
 
 
 def _raise_with_secret(secret: str) -> None:
-    # `fake_scan_and_redact` (like every fixture fake in this repo)
-    # redacts only the first match per call, matching the real core's
-    # per-call behavior but not its ability to find every occurrence in
-    # one string; that's irrelevant here as long as the secret literal
-    # appears exactly once in the rendered traceback. Building the
-    # message from a variable, instead of a literal in the `raise` line,
-    # keeps it out of the traceback's source-context line, which would
-    # otherwise print the raw literal from this file a second time.
+    # A variable, not a literal, so the traceback's source line does not
+    # repeat the secret (see _SECRET).
     raise ValueError("db write failed: " + secret)
 
 
