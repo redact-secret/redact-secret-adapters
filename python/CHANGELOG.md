@@ -57,6 +57,9 @@ can read it without leaving their environment.
 - `otel`: only `on_end` is required of the wrapped processor, as the
   constructor already checked; a missing `on_start` is skipped and a
   missing `force_flush` returns `True`, like the JS package.
+- Build requirement raised from `hatchling>=1.25` to `hatchling>=1.27`:
+  1.25.0 cannot build this project (`license-files` must be a table), and
+  1.26.x builds a wheel whose metadata omits the `MIT` license expression.
 
 ## [0.1.0]
 

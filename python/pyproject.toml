@@ -1,5 +1,7 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+# 1.25 rejects a list `license-files`; 1.26.x builds but omits the license
+# expression from the metadata. 1.27 is the first to emit PEP 639 fields.
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
