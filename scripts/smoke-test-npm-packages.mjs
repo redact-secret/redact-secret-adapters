@@ -8,14 +8,15 @@
  *
  * Workspace resolution inside this monorepo papers over a wrong `exports`
  * entry, a missing `types` path, or a `dist` file that was never emitted —
- * none of that is visible to `npm test`. This script is what actually
- * proves the published shape works for an outside consumer.
+ * none of that is visible to `npm test`. This script checks the package
+ * shape the way an outside consumer would install it.
  *
  * Install order matters: `adapter` first, then `adapter-pino` and
- * `adapter-otel`, which depend on it. Neither is published yet, so if
- * `adapter` isn't already resolvable in the throwaway project when the
- * other two are installed, npm would otherwise try (and fail) to fetch
- * `@redact-secret/adapter` from the registry.
+ * `adapter-otel`, which depend on it. If `adapter` isn't already installed
+ * from its tarball when the other two are, npm resolves
+ * `@redact-secret/adapter` from the registry instead: a different build
+ * than the one under test, or a failed install when the checkout declares
+ * a version that isn't published yet.
  *
  *   node scripts/smoke-test-npm-packages.mjs
  */

@@ -90,8 +90,8 @@ jobs:
     # CI's own tests import every package from inside the workspace, which
     # resolves through node_modules symlinks and never touches `exports`,
     # `files`, or `dist`. This asserts the tarball `npm pack` would actually
-    # ship is exactly `dist` (mirroring `src`), `README.md`, `LICENSE`, and
-    # `package.json` — no test files, no `src`, no `tsconfig*`.
+    # ship is exactly `dist` (mirroring `src`), `CHANGELOG.md`, `README.md`,
+    # `LICENSE`, and `package.json` — no test files, no `src`, no `tsconfig*`.
     name: npm pack contents
     runs-on: ubuntu-latest
     permissions:
