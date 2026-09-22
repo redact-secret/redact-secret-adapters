@@ -100,7 +100,7 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - run: npm ci
-      - run: npm run build --workspace @redact-secret/adapter-pino
+      - run: npm run build --workspace @redact-secret/adapter --workspace @redact-secret/adapter-pino
 
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@latest
@@ -130,7 +130,7 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - run: npm ci
-      - run: npm run build --workspace @redact-secret/adapter-otel
+      - run: npm run build --workspace @redact-secret/adapter --workspace @redact-secret/adapter-otel
 
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@latest
@@ -150,6 +150,7 @@ jobs:
       needs.publish-adapter-otel.result != 'failure' &&
       needs.rehearsal.outputs.publish_python == 'true'
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
       id-token: write
