@@ -100,8 +100,20 @@ and reports an empty plan.
 
 ## One-time setup
 
-- npm (per package) and PyPI trusted publishers point at this repository and
-  the workflow file `release.yml`.
+- npm (per package) and PyPI trusted publishers point at this repository,
+  the workflow file `release.yml`, and the environment `release`. Every
+  publish job runs in that environment. The environment field is optional
+  on both registries, but a trusted publisher that names it only accepts
+  tokens from jobs in it, so set it.
+- The `release` environment (*Settings → Environments*) has a deployment
+  branch policy that allows only the `release` branch:
+
+  ```bash
+  gh api -X PUT repos/redact-secret/redact-secret-adapters/environments/release \
+    --input - <<<'{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'
+  gh api -X POST repos/redact-secret/redact-secret-adapters/environments/release/deployment-branch-policies \
+    -f name=release -f type=branch
+  ```
 - *Settings → Actions → General*: "Allow GitHub Actions to create and approve
   pull requests" on (cut and reconcile open PRs).
 - Rulesets from [.github/rulesets](.github/rulesets), applied with

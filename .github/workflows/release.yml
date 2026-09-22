@@ -12,7 +12,10 @@ name: Release
 # only what is still missing, never overwrites.
 #
 # The publish jobs stay in this file: npm and PyPI trusted publishing are
-# bound to the calling workflow's filename (release.yml).
+# bound to the calling workflow's filename (release.yml). Every publish job
+# runs in the `release` environment, whose deployment branch policy admits
+# only the release branch (RELEASING.md § One-time setup), so an OIDC token
+# for a publish can't be minted from any other ref.
 
 on:
   push:
@@ -58,6 +61,7 @@ jobs:
       !inputs.dry_run && github.ref == 'refs/heads/release' &&
       needs.rehearsal.outputs.publish_adapter == 'true'
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
       id-token: write
@@ -90,6 +94,7 @@ jobs:
       needs.rehearsal.result == 'success' && needs.publish-adapter.result != 'failure' &&
       needs.rehearsal.outputs.publish_adapter_pino == 'true'
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
       id-token: write
@@ -120,6 +125,7 @@ jobs:
       needs.rehearsal.result == 'success' && needs.publish-adapter.result != 'failure' &&
       needs.rehearsal.outputs.publish_adapter_otel == 'true'
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
       id-token: write
