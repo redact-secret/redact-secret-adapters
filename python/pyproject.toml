@@ -46,9 +46,6 @@ packages = ["redact_secret_adapters"]
 [tool.hatch.build.targets.sdist]
 include = ["redact_secret_adapters", "README.md", "LICENSE", "CHANGELOG.md"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-
 [tool.ruff]
 line-length = 120
 target-version = "py310"
