@@ -128,21 +128,35 @@ fail-closed rules exist to prevent. The test suite asserts mutation actually
 took effect on a real span, at both ends of the declared SDK range. That
 assertion is not optional.
 
-The Python SDK makes the same assumption false by construction rather than by
-version drift: `opentelemetry-sdk`'s `BoundedAttributes` marks every event's
-attributes immutable unconditionally, and a span's attributes immutable once
-`Span.end()` runs, in every declared version — always before any processor
-hook fires. `redact_secret_adapters.otel` writes through `BoundedAttributes`'
-backing `_dict` instead of `__setitem__`, which is the same bypass
-`BoundedAttributes.__deepcopy__` uses internally, not a version-specific
-workaround. The real-host test is otherwise the same shape as the JS one, at
-both ends of the Python SDK's declared range.
+The Python SDK offers no mutable view at all: `ReadableSpan.name`, `.status`,
+`.attributes`, `.events` and `.links` are read-only, so
+`redact_secret_adapters.otel` writes the private fields behind them (`_name`,
+`_status`, `_attributes`, each event's `_name`/`_attributes`, each link's
+`_attributes`). Event and link attributes are always an immutable
+`BoundedAttributes`; span attributes are marked immutable in `Span.end()`
+from 1.43 on, but still mutable in `on_end` on 1.16.0. Writes therefore go
+through `BoundedAttributes`' backing `_dict`, the same bypass
+`BoundedAttributes.__deepcopy__` uses, which works either way. Because the
+fields are private, every write is read back through the public accessor; a
+missing field or a write that does not show through drops the span with a
+one-time `RuntimeWarning` rather than exporting it unredacted. The real-host
+test checks all of this at both ends of the Python SDK's declared range.
 
 ### Python `logging`
 
-The filter walks the record's `msg`, `args` and any exception info through the
-same L2/L1 layers, so a secret in a format string, in an interpolation argument,
-or in an exception message is redacted before any handler formats the record.
+The filter formats `msg` with `args` (`record.getMessage()`) and masks the
+result as one L1 leaf, so a secret split across the format string and an
+argument is still seen whole; the arguments are then cleared. An exception is
+masked as its formatted traceback, also one L1 leaf, and cached `exc_text` and
+`stack_info` likewise. Only the `extra_fields` a caller names go through the L2
+walker.
+
+A `logging.Filter` runs only where it is attached. On a handler, it redacts the
+record before that handler formats it, and since the record is mutated in
+place, before any handler that runs afterwards; a handler without the filter
+that runs earlier sees plaintext. On a logger, it runs for records logged on
+that logger before any handler, but not for records propagated from child
+loggers. Attach it to every emitting handler.
 
 ## Cross-language contract
 
