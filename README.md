@@ -22,12 +22,19 @@ hosts actually move at.
 
 ## Packages
 
-| Package | Registry | Host | Status |
+| Package | Registry | Host | Published |
 | --- | --- | --- | --- |
-| `@redact-secret/adapter` | npm | — (shared base) | Beta |
-| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | Beta |
-| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | Beta |
-| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | Beta |
+| `@redact-secret/adapter` | npm | — (shared base) | `0.1.0`, beta |
+| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.0`, beta |
+| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.0`, beta |
+| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.0`, beta |
+
+All four were published on 2026-09-22 in release train
+[`2026.09.22`](https://github.com/redact-secret/redact-secret-adapters/releases/tag/train/2026.09.22)
+and require core `0.1.0-beta.6` or later. This README describes `develop`.
+Anything marked **Unreleased** below is not in the published `0.1.0`
+packages; the [`0.1.0` README](https://github.com/redact-secret/redact-secret-adapters/blob/2368d8c99f6b10e18874df0bcfec1818afd588ec/README.md)
+describes exactly what they contain.
 
 Every package declares a compatibility range against `@redact-secret/core` /
 `redact-secret` and is tested against the host versions it claims. Each host
@@ -56,13 +63,10 @@ it directly only when building your own integration.
 
 ```js
 import pino from "pino";
-import { createRedactingLogMethod, createRedactingStreamWrite } from "@redact-secret/adapter-pino";
+import { createRedactingLogMethod } from "@redact-secret/adapter-pino";
 
 const logger = pino({
-  hooks: {
-    logMethod: await createRedactingLogMethod(),
-    streamWrite: await createRedactingStreamWrite(), // child bindings and mixin() output
-  },
+  hooks: { logMethod: await createRedactingLogMethod() },
   redact: ["req.headers.authorization"], // pino's own path-based redact still applies, on top
 });
 
@@ -72,7 +76,10 @@ logger.info("token is %s", secretValue); // the secret never reaches the transpo
 pino's own `redact` option censors by object *path*. It cannot see a token
 inside a message string or an error message. This adapter redacts by *value*,
 alongside that mechanism rather than instead of it. `logMethod` alone does not
-see child-logger bindings or `mixin()` output; `streamWrite` does — see the
+see child-logger bindings or `mixin()` output.
+
+**Unreleased:** `createRedactingStreamWrite`, a `streamWrite` hook that also
+covers child bindings and `mixin()` output, is not exported by `0.1.0`. See the
 [package README](./packages/adapter-pino#readme).
 
 ### OpenTelemetry
@@ -86,9 +93,9 @@ const provider = new NodeTracerProvider({
 });
 ```
 
-The span name, every string and string-array attribute, every event's name and
-attributes, the status message, and every link's attributes are redacted before
-the span reaches the next processor. Attribute names are not
+Every string and string-array attribute on a span and its events is redacted
+before the span reaches the next processor. **Unreleased:** redaction of the span
+name, event names, the status message and link attributes is not in `0.1.0`. Attribute names are not
 allowlisted, so OpenInference (`llm.input_messages`, `input.value`, …) and GenAI
 semantic-convention attributes (`gen_ai.prompt`, …) are covered without
 hardcoding either convention.
@@ -134,7 +141,7 @@ API: they are what a host sees, and they change only in a major version.
 | Marker | When |
 | --- | --- |
 | `[REDACTED:BLOCKED]` | A `block` finding — the **entire** leaf is replaced, not just the matched span |
-| `[REDACTED:ERROR]` | Any failure inside the core call, including an uninitialized core or a malformed result, and any value that cannot be read (a throwing getter or `toJSON()`). Never the original text, never the error's own message |
+| `[REDACTED:ERROR]` | Any failure inside the core call, including an uninitialized core. **Unreleased:** also a malformed result, and any value that cannot be read (a throwing getter or `toJSON()`). Never the original text, never the error's own message |
 | `[REDACTED:LIMIT_EXCEEDED]` | A value past a walk budget. It is never scanned and never passed through unmasked |
 | `[REDACTED:CYCLE]` | A self-referencing object |
 
