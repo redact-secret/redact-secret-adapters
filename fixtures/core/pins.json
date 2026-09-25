@@ -4,7 +4,7 @@
     {
       "path": "fixtures/core/ai-context-boundary.json",
       "repository": "redact-secret/redact-secret",
-      "commit": "d3f2956bd12df09474582d7e3eb91add5ae4f2c5",
+      "commit": "0e3ba9592b6fa80fafdea47639921987c36ba323",
       "sourcePath": "conformance/fixtures/ai-context-boundary.json",
       "sha256": "cddb5b9e4f0137cab46213b291f7ab4a6e29188257cb996beae10135664bbe46"
     }

@@ -64,8 +64,9 @@ from a throwaway project outside the repository.
 | `buildContext(parts, { signal })` | ordered `{ role, text }` / `{ role, value }` parts, each with an optional `boundary` | the above per part; returns `[{ role, content }]` |
 | `openStream({ boundary, signal })` | chunks of one logical text: `append`, then `finalize`, or `abort` | one incremental session, staged |
 
-`boundary` is `"user-input"`, `"tool-result"`, or `"context"` (the
-default). It goes to telemetry only and never changes an outcome. `signal`
+`boundary` is `"user-input"`, `"tool-result"`, `"tool-arguments"` (the
+arguments of a tool call), or `"context"` (the default). It goes to
+telemetry only and never changes an outcome. `signal`
 is an `AbortSignal` (or anything with an `aborted` flag).
 
 `createAiContextBoundary(options)` loads the core, awaits `initialize()`, and
@@ -141,6 +142,12 @@ Nothing else is emitted.
   even when the core emits sanitized text from `append`. A `block` finding, a
   limit failure, or a callback failure mid-stream aborts the core session at
   once, and later appends are discarded unscanned.
+- **Early failure.** `stream.accepting` is `true` until the stream fails (a
+  `block` finding, a limit, a lifecycle or core failure), is aborted, or is
+  finalized. Read it after every `append`: once it is `false`, stop pulling
+  from the producer and close it, since later chunks would be discarded
+  unscanned. It is input-free and never says why; the reason arrives at
+  `finalize`.
 - **Single use.** The first `finalize` returns the outcome; every later
   `finalize` is `blocked` / `lifecycle`. An `append` after `finalize` is
   discarded unscanned, and `abort()` after a successful `finalize` does

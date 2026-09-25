@@ -31,8 +31,15 @@ drop `"private"`, wire it into `scripts/release-plan.mjs`,
   boundary as allowlisted copies (`SAFE_FINDING_FIELDS`); initialization,
   callback, lifecycle and limit failures map to fixed, input-free outcomes.
   Nested values go through `@redact-secret/adapter`'s `walkStrict`.
+- `"tool-arguments"` in `BoundaryLabel`, for the arguments of a tool call
+  (the MCP boundary's opt-in argument sanitation, redact-secret/redact-secret#612).
+  Telemetry only; it never changes an outcome.
+- `AiContextStream.accepting`: a read-only, input-free boolean that is `true`
+  until the stream fails, is aborted, or is finalized, so a host can stop
+  pulling from a producer whose output would be discarded unscanned
+  (redact-secret/redact-secret#612).
 - Qualified by replaying the core's `conformance/fixtures/ai-context-boundary.json`,
-  vendored at core commit `d3f2956bd12df09474582d7e3eb91add5ae4f2c5`
+  vendored at core commit `0e3ba9592b6fa80fafdea47639921987c36ba323`
   (`fixtures/core/pins.json`), through the public API on the real core, before
   and after `initialize()`.
 - Declared range: `@redact-secret/core ^0.1.0-beta.6`, as a required peer
