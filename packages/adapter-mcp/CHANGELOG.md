@@ -8,18 +8,15 @@ independently; see [ARCHITECTURE.md § Versioning](../../ARCHITECTURE.md#version
 A change to a range this package declares, against `@redact-secret/core` or an
 MCP SDK, is always its own entry and names the test that backs the new range.
 
-This package is not published yet: its manifest is `"private": true` and it
-is not in the release plan. It depends on `@redact-secret/adapter-ai-context`,
-which is unreleased too, so that package ships first. To release this one for
-the first time, follow
-[RELEASING.md § A brand-new npm package](../../RELEASING.md#a-brand-new-npm-package):
-drop `"private"`, wire it into `scripts/release-plan.mjs`,
-`scripts/release-notes.mjs` and `release.yml` (a publish job with
-`--provenance` after `adapter-ai-context`'s), raise its
-`@redact-secret/adapter-ai-context` range to that package's first published
-version, and move the entries below under a version heading.
+Its first release is the prerelease `0.1.0-alpha`, published under the npm
+dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
+not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
+
+## [0.1.0-alpha] - 2026-09-25
+
+First release, as a prerelease.
 
 ### Added
 
@@ -55,3 +52,5 @@ version, and move the entries below under a version heading.
   `test/e2e.test.ts` at both endpoints of every range in CI
   (`range-endpoints`). 1.13.0 negotiates protocol 2025-06-18; 1.30.1, 2.0.0
   and 2.1.0 negotiate 2025-11-25.
+- Depends on `@redact-secret/adapter-ai-context ^0.1.0-alpha` (which pulls in
+  `@redact-secret/adapter ^0.1.1`).

@@ -20,8 +20,15 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-25
+
 ### Changed
 
+- `@redact-secret/adapter` range raised from `^0.1.0` to `^0.1.1`, the
+  version with the fail-closed walker fixes this release relies on (a
+  malformed scanner result, non-plain objects, throwing getters). Backed
+  by this package's tests, which run against the workspace's
+  `@redact-secret/adapter` 0.1.1, and by the npm install smoke test.
 - `createRedactingSpanProcessor` loads `@redact-secret/core` on call, like
   `@redact-secret/adapter`'s `createMaskSecrets`, so importing the injected
   API never loads the native core. No API change.

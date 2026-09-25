@@ -1,6 +1,6 @@
 {
   "name": "@redact-secret/adapter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared fail-closed masking primitives for Redact Secret host adapters: mask one leaf, walk a value tree.",
   "license": "MIT",
   "type": "module",

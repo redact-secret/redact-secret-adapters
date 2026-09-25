@@ -47,7 +47,7 @@ maskLogValueWith(scanAndRedact, { err: new Error("also walks Errors") });
 | `maskSecretsWith(scan, data, { policy, limits })` | Walk a value tree and mask every string in it (see below) |
 | `maskLogValueWith(scan, data, { policy, limits })` | The same walk, under its logging-side name |
 | `createMaskSecrets({ policy, limits })` | Live wrapper over the real core |
-| `walkStrict(value, { maxDepth, maxNodes }, { string, key })` | **Unreleased.** The all-or-nothing walk (see below) |
+| `walkStrict(value, { maxDepth, maxNodes }, { string, key })` | The all-or-nothing walk (see below; since `0.1.1`) |
 | `ScanAndRedact` | The injected scanner's type |
 
 The walk returns a masked copy of everything JSON serialization would emit:
@@ -66,7 +66,7 @@ walk itself never throws.
 
 ## The all-or-nothing walk
 
-**Unreleased.** `walkStrict` is the walker for hosts where a partially
+Since `0.1.1`, `walkStrict` is the walker for hosts where a partially
 scanned value is not a safe value, such as a model context
 (`@redact-secret/adapter-ai-context`). It scans nothing itself: every string
 and every own enumerable object key goes to the caller's visitor, which

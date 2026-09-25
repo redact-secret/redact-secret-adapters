@@ -19,6 +19,8 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-25
+
 ### Added
 
 - `walkStrict(value, limits, visitors)`, the all-or-nothing variant of the

@@ -184,17 +184,115 @@ jobs:
           [ -n "$DIST_TAG" ] || { echo "::error::The plan gave no dist-tag for @redact-secret/adapter-otel"; exit 1; }
           npm publish --workspace @redact-secret/adapter-otel --access public --provenance --tag "$DIST_TAG"
 
+  publish-adapter-ai-context:
+    # Depends on @redact-secret/adapter (walkStrict), so it waits for that
+    # publish; a skipped one (already on the registry) does not block it.
+    name: Publish @redact-secret/adapter-ai-context
+    needs: [rehearsal, publish-adapter]
+    if: >-
+      !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/release' &&
+      needs.rehearsal.result == 'success' && needs.publish-adapter.result != 'failure' &&
+      needs.rehearsal.outputs.publish_adapter_ai_context == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+      - run: npm run build --workspace @redact-secret/adapter --workspace @redact-secret/adapter-ai-context
+
+      - name: Upgrade npm for OIDC trusted publishing
+        # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10.
+        # Pinned, not @latest: this job holds id-token: write, so whatever
+        # npm resolves here runs with a token that can publish. Bump it
+        # deliberately, together with release-rehearsal.yml.
+        run: npm install -g npm@11.19.1
+
+      - name: Publish
+        # --tag from the plan: `latest` for a release, the prerelease's name
+        # (alpha, beta, rc) otherwise, so a prerelease never moves `latest`.
+        env:
+          DIST_TAG: ${{ needs.rehearsal.outputs.adapter_ai_context_dist_tag }}
+        run: |
+          set -euo pipefail
+          [ -n "$DIST_TAG" ] || { echo "::error::The plan gave no dist-tag for @redact-secret/adapter-ai-context"; exit 1; }
+          npm publish --workspace @redact-secret/adapter-ai-context --access public --provenance --tag "$DIST_TAG"
+
+  publish-adapter-mcp:
+    # Depends on @redact-secret/adapter-ai-context, so it publishes after it.
+    name: Publish @redact-secret/adapter-mcp
+    needs: [rehearsal, publish-adapter, publish-adapter-ai-context]
+    if: >-
+      !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/release' &&
+      needs.rehearsal.result == 'success' && needs.publish-adapter.result != 'failure' &&
+      needs.publish-adapter-ai-context.result != 'failure' &&
+      needs.rehearsal.outputs.publish_adapter_mcp == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+      - run: npm run build --workspace @redact-secret/adapter --workspace @redact-secret/adapter-ai-context --workspace @redact-secret/adapter-mcp
+
+      - name: Upgrade npm for OIDC trusted publishing
+        # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10.
+        # Pinned, not @latest: this job holds id-token: write, so whatever
+        # npm resolves here runs with a token that can publish. Bump it
+        # deliberately, together with release-rehearsal.yml.
+        run: npm install -g npm@11.19.1
+
+      - name: Publish
+        # --tag from the plan: `latest` for a release, the prerelease's name
+        # (alpha, beta, rc) otherwise, so a prerelease never moves `latest`.
+        env:
+          DIST_TAG: ${{ needs.rehearsal.outputs.adapter_mcp_dist_tag }}
+        run: |
+          set -euo pipefail
+          [ -n "$DIST_TAG" ] || { echo "::error::The plan gave no dist-tag for @redact-secret/adapter-mcp"; exit 1; }
+          npm publish --workspace @redact-secret/adapter-mcp --access public --provenance --tag "$DIST_TAG"
+
   publish-python:
     # Independently versioned from the npm side, but ordered after it: a
     # train whose npm side failed stops before it reaches a second registry.
     name: Publish redact-secret-adapters (PyPI)
-    needs: [rehearsal, publish-adapter, publish-adapter-pino, publish-adapter-otel]
+    needs:
+      - rehearsal
+      - publish-adapter
+      - publish-adapter-pino
+      - publish-adapter-otel
+      - publish-adapter-ai-context
+      - publish-adapter-mcp
     if: >-
       !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/release' &&
       needs.rehearsal.result == 'success' &&
       needs.publish-adapter.result != 'failure' &&
       needs.publish-adapter-pino.result != 'failure' &&
       needs.publish-adapter-otel.result != 'failure' &&
+      needs.publish-adapter-ai-context.result != 'failure' &&
+      needs.publish-adapter-mcp.result != 'failure' &&
       needs.rehearsal.outputs.publish_python == 'true'
     runs-on: ubuntu-latest
     environment: release
@@ -234,6 +332,8 @@ jobs:
       - publish-adapter
       - publish-adapter-pino
       - publish-adapter-otel
+      - publish-adapter-ai-context
+      - publish-adapter-mcp
       - publish-python
     if: >-
       always() && !inputs.dry_run && github.ref == 'refs/heads/release' &&
@@ -248,10 +348,14 @@ jobs:
       ADAPTER_RESULT: ${{ needs.publish-adapter.result }}
       PINO_RESULT: ${{ needs.publish-adapter-pino.result }}
       OTEL_RESULT: ${{ needs.publish-adapter-otel.result }}
+      AI_CONTEXT_RESULT: ${{ needs.publish-adapter-ai-context.result }}
+      MCP_RESULT: ${{ needs.publish-adapter-mcp.result }}
       PYTHON_RESULT: ${{ needs.publish-python.result }}
       ADAPTER_VERSION: ${{ needs.rehearsal.outputs.adapter_version }}
       PINO_VERSION: ${{ needs.rehearsal.outputs.adapter_pino_version }}
       OTEL_VERSION: ${{ needs.rehearsal.outputs.adapter_otel_version }}
+      AI_CONTEXT_VERSION: ${{ needs.rehearsal.outputs.adapter_ai_context_version }}
+      MCP_VERSION: ${{ needs.rehearsal.outputs.adapter_mcp_version }}
       PYTHON_VERSION: ${{ needs.rehearsal.outputs.python_version }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -297,6 +401,8 @@ jobs:
           ADAPTER_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter == 'false' }}
           PINO_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_pino == 'false' }}
           OTEL_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_otel == 'false' }}
+          AI_CONTEXT_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_ai_context == 'false' }}
+          MCP_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_mcp == 'false' }}
           PYTHON_ON_REGISTRY: ${{ steps.registry.outputs.publish_python == 'false' }}
         run: |
           set -euo pipefail
@@ -326,6 +432,8 @@ jobs:
           tag_if_published "$ADAPTER_RESULT" "$ADAPTER_ON_REGISTRY" "adapter@${ADAPTER_VERSION}"
           tag_if_published "$PINO_RESULT" "$PINO_ON_REGISTRY" "adapter-pino@${PINO_VERSION}"
           tag_if_published "$OTEL_RESULT" "$OTEL_ON_REGISTRY" "adapter-otel@${OTEL_VERSION}"
+          tag_if_published "$AI_CONTEXT_RESULT" "$AI_CONTEXT_ON_REGISTRY" "adapter-ai-context@${AI_CONTEXT_VERSION}"
+          tag_if_published "$MCP_RESULT" "$MCP_ON_REGISTRY" "adapter-mcp@${MCP_VERSION}"
           tag_if_published "$PYTHON_RESULT" "$PYTHON_ON_REGISTRY" "redact-secret-adapters@${PYTHON_VERSION}"
 
       - name: Tag the train and publish its GitHub Release
@@ -379,6 +487,8 @@ jobs:
             echo "| @redact-secret/adapter | ${ADAPTER_VERSION} | ${ADAPTER_RESULT} | $(npm_registry_version "@redact-secret/adapter" "$ADAPTER_VERSION") |"
             echo "| @redact-secret/adapter-pino | ${PINO_VERSION} | ${PINO_RESULT} | $(npm_registry_version "@redact-secret/adapter-pino" "$PINO_VERSION") |"
             echo "| @redact-secret/adapter-otel | ${OTEL_VERSION} | ${OTEL_RESULT} | $(npm_registry_version "@redact-secret/adapter-otel" "$OTEL_VERSION") |"
+            echo "| @redact-secret/adapter-ai-context | ${AI_CONTEXT_VERSION} | ${AI_CONTEXT_RESULT} | $(npm_registry_version "@redact-secret/adapter-ai-context" "$AI_CONTEXT_VERSION") |"
+            echo "| @redact-secret/adapter-mcp | ${MCP_VERSION} | ${MCP_RESULT} | $(npm_registry_version "@redact-secret/adapter-mcp" "$MCP_VERSION") |"
             echo "| redact-secret-adapters (PyPI) | ${PYTHON_VERSION} | ${PYTHON_RESULT} | $(pypi_registry_version "redact-secret-adapters" "$PYTHON_VERSION") |"
             echo
             echo "_\`skipped\` means the declared version was already published: not part of this train._"
