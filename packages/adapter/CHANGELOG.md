@@ -19,6 +19,19 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Added
+
+- `walkStrict(value, limits, visitors)`, the all-or-nothing variant of the
+  shared walker, for hosts where a partially scanned value is not a safe value
+  (the AI-context boundary, `@redact-secret/adapter-ai-context`). It accepts
+  only JSON-shaped values (strings, finite numbers, booleans, `null`, arrays,
+  plain objects), hands every string and every object key to the caller's
+  visitor, and returns the first failure instead of a value:
+  `limit_exceeded` past `maxDepth` (containers, root included) or `maxNodes`
+  (every visited value), `unsupported_value` for anything else, a cycle, or a
+  value that cannot be read. `isStrictWalkLimits` and the `StrictWalk*` types
+  are exported with it. The marker-based walker is unchanged.
+
 ### Changed
 
 - `@redact-secret/core` is now a required peer dependency (was optional). The

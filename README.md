@@ -1,9 +1,9 @@
 # Redact Secret adapters
 
 Host integrations for [Redact Secret](https://github.com/redact-secret/redact-secret):
-installable packages that wire a logging or tracing host into the deterministic
-core, so a secret never reaches a log line, a span attribute, or an
-observability backend.
+installable packages that wire a logging, tracing, or AI-context host into the
+deterministic core, so a secret never reaches a log line, a span attribute, an
+observability backend, or a model's context.
 
 > The core decides what a secret is. These packages decide nothing — they carry
 > text into the core and carry the core's answer back out.
@@ -28,8 +28,9 @@ hosts actually move at.
 | `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.0`, beta |
 | `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.0`, beta |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.0`, beta |
+| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | **Unreleased**, not published |
 
-All four were published on 2026-09-22 in release train
+The first four were published on 2026-09-22 in release train
 [`2026.09.22`](https://github.com/redact-secret/redact-secret-adapters/releases/tag/train/2026.09.22)
 and require core `0.1.0-beta.6` or later. This README describes `develop`.
 Anything marked **Unreleased** below is not in the published `0.1.0`
@@ -114,6 +115,27 @@ logging.getLogger().addHandler(handler)
 Python's standard library has no value-based redaction at all. This filter adds
 it.
 
+### AI context (unreleased)
+
+```js
+import { createAiContextBoundary } from "@redact-secret/adapter-ai-context";
+
+const boundary = await createAiContextBoundary({ wholeInputLimits, incrementalLimits, traversalLimits });
+const context = boundary.buildContext([
+  { role: "user", boundary: "user-input", text: userText },
+  { role: "tool", boundary: "tool-result", value: toolResult },
+]);
+if (context.outcome === "ok") callModel(context.value); // otherwise nothing of the input is returned
+```
+
+The core's framework-neutral
+[AI-context boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/ai-context-boundary.md):
+user input, tool results, nested values, constructed context and staged
+streams, each ending in `ok` / `blocked` / `aborted`, fail-closed and
+all-or-nothing, with allowlisted finding metadata. It is qualified by
+replaying the core's own conformance fixture, pinned to a core commit. Not on
+npm yet; see the [package README](./packages/adapter-ai-context#readme).
+
 ### Masking callbacks (Langfuse and similar)
 
 Hosts that hand you a value to mask need no dedicated package — the shared
@@ -169,6 +191,7 @@ exercises, at both ends of the declared range.
 | `adapter-otel` | `@opentelemetry/sdk-trace-base ^2.0.0` | real spans through `SimpleSpanProcessor` and `BatchSpanProcessor`, concurrent spans, a failing exporter, flush and shutdown |
 | `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger`: filter before formatter, `QueueHandler`/`QueueListener`, threads sharing one handler, a failing handler |
 | `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | real spans through simple and batch processors, spans from threads, a failing exporter, flush and shutdown |
+| `adapter-ai-context` (unreleased) | `@redact-secret/core ^0.1.0-beta.6` (no host) | the core's AI-context conformance fixture replayed on the real core before and after `initialize()`, and an end-to-end agent turn with every limit |
 
 [`compatibility.json`](./compatibility.json) is the machine-readable form of
 this table: every declared range, the endpoints CI installs, the runtimes it
@@ -209,11 +232,23 @@ npm run build && node scripts/measure-overhead.mjs --out overhead-js.json
 pip install -e "./python[otel]" && python scripts/measure-overhead.py --out overhead-python.json
 ```
 
+One-off costs are measured apart from per-event ones:
+`scripts/measure-footprint.mjs` (`npm run footprint`) records each npm
+package's packed and unpacked size, and its initialization time in a fresh
+process (importing the package, the core's own `initialize()` alone, and the
+package's live factory end to end), so the adapter's share of start-up is
+separable from the core's. The `ai-context-js` host in `measure-overhead.mjs`
+measures `adapter-ai-context`'s traversal and scan overhead per context.
+
 ## Relationship to the core
 
-These packages depend on a narrow, deliberately small part of the core:
-`initialize()`, `scanAndRedact()` and its result shape, and whether a finding's
-action is `block` or `warn`. Nothing else. That surface is what the declared
+The logging and tracing packages depend on a narrow, deliberately small part
+of the core: `initialize()`, `scanAndRedact()` and its result shape, and
+whether a finding's action is `block` or `warn`. Nothing else. The AI-context
+package alone also uses the whole-input `policy`/`limits` options, the
+incremental session, `SecretScanError.code`, and the safe finding fields, as
+the core's AI-context contract allows
+([ARCHITECTURE.md § The core contract](./ARCHITECTURE.md#the-core-contract)). That surface is what the declared
 compatibility range protects, and — because these packages are written in
 TypeScript against the core's own exported types — a change to it fails the
 build rather than degrading silently.
@@ -226,8 +261,8 @@ packages are not part of that lockstep: a new pino release moves
 
 No detection: deciding what a secret is stays in the core. Also out of scope
 are stream adapters (Node `Transform` and Web `TransformStream` ship inside
-`@redact-secret/core` as `./node-stream` and `./web-stream`), MCP and
-model-context wiring, LangChain, and a Langfuse package;
+`@redact-secret/core` as `./node-stream` and `./web-stream`), MCP transport
+wiring, model-vendor or LangChain wrappers, and a Langfuse package;
 [ARCHITECTURE.md § Deliberate exclusions](./ARCHITECTURE.md#deliberate-exclusions)
 gives the reason for each.
 

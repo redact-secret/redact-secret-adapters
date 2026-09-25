@@ -65,8 +65,8 @@
     {
       "id": "mask-payload",
       "shape": "payload",
-      "hosts": ["mask-js", "mask-python"],
-      "description": "A masking-callback payload: eight chat messages and two tool calls with arguments and results.",
+      "hosts": ["mask-js", "mask-python", "ai-context-js"],
+      "description": "A masking-callback or AI-context payload: eight chat messages and two tool calls with arguments and results.",
       "params": { "messages": 8, "toolCalls": 2, "stringWords": 40, "secretEvery": 8 }
     }
   ]

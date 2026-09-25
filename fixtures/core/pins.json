@@ -1,0 +1,12 @@
+{
+  "description": "Core-owned contract files vendored byte-for-byte from redact-secret/redact-secret at an immutable 40-hex commit. The adapter qualifies by replaying them through its own public API (packages/adapter-ai-context/test/conformance*.test.ts). Never edit a vendored file here: to move the pin, copy the file from the new core commit, then update commit and sha256 below. packages/adapter-ai-context/test/core-pins.test.ts fails when a file and its recorded digest disagree. Biome ignores this directory so the bytes stay exactly the core's.",
+  "files": [
+    {
+      "path": "fixtures/core/ai-context-boundary.json",
+      "repository": "redact-secret/redact-secret",
+      "commit": "d3f2956bd12df09474582d7e3eb91add5ae4f2c5",
+      "sourcePath": "conformance/fixtures/ai-context-boundary.json",
+      "sha256": "cddb5b9e4f0137cab46213b291f7ab4a6e29188257cb996beae10135664bbe46"
+    }
+  ]
+}

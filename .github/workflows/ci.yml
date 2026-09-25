@@ -199,7 +199,8 @@ jobs:
       - run: ruff format --check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py
 
   overhead-harness:
-    # The adapter-overhead harnesses (#11) in --quick mode: proves they still
+    # The adapter-overhead harnesses (#11) and the footprint harness (package
+    # size and initialization time, #12) in --quick mode: proves they still
     # run against the current packages and emit the overhead-v1 shape
     # redact-secret-benchmarks reads. The numbers from this job are
     # meaningless (three tiny repetitions on a shared runner) and are not
@@ -222,9 +223,10 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node scripts/measure-overhead.mjs --quick --out overhead-js.json
+      - run: node scripts/measure-footprint.mjs --quick --out footprint-js.json
       - run: python -m pip install -e "./python[otel]"
       - run: python scripts/measure-overhead.py --quick --out overhead-python.json
-      - name: Check both outputs carry the overhead-v1 shape
+      - name: Check the outputs carry the overhead-v1 and footprint-v1 shapes
         run: |
           node -e '
             for (const file of ["overhead-js.json", "overhead-python.json"]) {
@@ -232,6 +234,14 @@ jobs:
               if (out.schema !== "redact-secret-adapters/overhead-v1" || out.results.length === 0) throw new Error(file);
               for (const r of out.results) for (const m of ["host", "adapter-identity", "adapter-core", "core-direct"]) {
                 if (!(r.modes[m].samples.length > 0)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m}`);
+              }
+            }
+            const footprint = JSON.parse(require("fs").readFileSync("footprint-js.json", "utf-8"));
+            if (footprint.schema !== "redact-secret-adapters/footprint-v1" || footprint.results.length === 0) throw new Error("footprint-js.json");
+            for (const r of footprint.results) {
+              if (!(r.packageSize.tarballBytes > 0)) throw new Error(`footprint-js.json: ${r.package} packageSize`);
+              for (const m of ["import", "core", "live-factory"]) {
+                if (!(r.initialization[m].samples.length > 0)) throw new Error(`footprint-js.json: ${r.package} ${m}`);
               }
             }'
 

@@ -15,6 +15,7 @@ const HARNESS_HOSTS = new Set([
   "pino-streamwrite",
   "otel-js",
   "mask-js",
+  "ai-context-js",
   "python-logging",
   "otel-python",
   "mask-python",
