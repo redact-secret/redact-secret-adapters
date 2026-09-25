@@ -20,11 +20,14 @@ endpoints of every supported line, over stdio and Streamable HTTP.
 It imports no MCP SDK at runtime or for types. A `CallToolResult` is a
 structural shape, as it is on the wire.
 
-> **Unreleased.** This package is not on npm yet: its manifest has
-> `"private": true`, and it is not in the release train. Its dependency
-> `@redact-secret/adapter-ai-context` is unreleased too. To consume it before
-> then, build publish-shaped tarballs of both from an immutable commit of this
-> repository; see [Consuming it unreleased](#consuming-it-unreleased).
+> **Prerelease.** `0.1.0-alpha` is published under the npm dist-tag `alpha`,
+> not `latest`, so install it by tag or exact version. It pulls in
+> `@redact-secret/adapter-ai-context@^0.1.0-alpha`; the core is a required
+> peer, and the MCP SDK line you use is an optional one:
+>
+> ```bash
+> npm install @redact-secret/adapter-mcp@alpha @redact-secret/core
+> ```
 
 ## Example
 
@@ -238,20 +241,3 @@ It also does not cover:
   detection (an `ok` with no findings is not proof that no secret was
   present), plaintext in process memory, and your own callbacks, which are
   trusted code.
-
-## Consuming it unreleased
-
-Until this package is published, pack it, `@redact-secret/adapter-ai-context`,
-and `@redact-secret/adapter` from the same immutable 40-hex commit of this
-repository, and install the tarballs in dependency order:
-
-```sh
-git clone https://github.com/redact-secret/redact-secret-adapters && cd redact-secret-adapters
-git checkout <40-hex commit>
-npm ci && npm run build
-npm pack --workspace @redact-secret/adapter --workspace @redact-secret/adapter-ai-context --workspace @redact-secret/adapter-mcp
-# in your project, in this order:
-npm install /path/to/redact-secret-adapter-0.1.0.tgz
-npm install /path/to/redact-secret-adapter-ai-context-0.1.0.tgz
-npm install /path/to/redact-secret-adapter-mcp-0.1.0.tgz @redact-secret/core@^0.1.0-beta.6
-```

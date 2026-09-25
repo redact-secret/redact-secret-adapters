@@ -12,10 +12,13 @@ conformance fixture, vendored byte-for-byte at a pinned core commit
 ([`fixtures/core/pins.json`](../../fixtures/core/pins.json)), through this
 package's public API. It names no model vendor, agent framework, or transport.
 
-> **Unreleased.** This package is not on npm yet (`"private": true` in its
-> manifest, and it is not wired into the release train). To consume it
-> before then, build a publish-shaped tarball from an immutable commit of this
-> repository with `npm pack`; see [Consuming it unreleased](#consuming-it-unreleased).
+> **Prerelease.** `0.1.0-alpha` is published under the npm dist-tag `alpha`,
+> not `latest`, so install it by tag or exact version. The core is a required
+> peer:
+>
+> ```bash
+> npm install @redact-secret/adapter-ai-context@alpha @redact-secret/core
+> ```
 
 ## Example
 
@@ -199,21 +202,6 @@ partition. The conformance replay checks this directly.
   `toJSON()` objects are refused, not serialized: convert them yourself, so
   what is scanned is exactly what you send.
 - No secret restoration, prompt-injection detection, or tool authorization.
-
-## Consuming it unreleased
-
-Until this package is published, build it from an immutable 40-hex commit of
-this repository, and install `@redact-secret/adapter` from the same commit:
-this package uses `walkStrict`, which is not in the published
-`@redact-secret/adapter@0.1.0`.
-
-```bash
-git clone https://github.com/redact-secret/redact-secret-adapters && cd redact-secret-adapters
-git checkout <40-hex commit>
-npm ci && npm run build
-npm pack --workspace @redact-secret/adapter --workspace @redact-secret/adapter-ai-context --pack-destination <dir>
-# in the consumer, install the adapter tarball first, then this one
-```
 
 ## Measuring it
 

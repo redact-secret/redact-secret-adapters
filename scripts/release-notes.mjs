@@ -28,6 +28,16 @@ const CHANGELOGS = {
     changelog: "packages/adapter-otel/CHANGELOG.md",
     url: "https://www.npmjs.com/package/@redact-secret/adapter-otel/v/",
   },
+  "adapter-ai-context": {
+    name: "@redact-secret/adapter-ai-context",
+    changelog: "packages/adapter-ai-context/CHANGELOG.md",
+    url: "https://www.npmjs.com/package/@redact-secret/adapter-ai-context/v/",
+  },
+  "adapter-mcp": {
+    name: "@redact-secret/adapter-mcp",
+    changelog: "packages/adapter-mcp/CHANGELOG.md",
+    url: "https://www.npmjs.com/package/@redact-secret/adapter-mcp/v/",
+  },
   "redact-secret-adapters": {
     name: "redact-secret-adapters (PyPI)",
     changelog: "python/CHANGELOG.md",

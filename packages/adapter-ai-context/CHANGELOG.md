@@ -9,15 +9,15 @@ A change to the range this package declares against `@redact-secret/core` is
 always its own entry, naming the test that backs the new range, never folded
 into a generic "bump dependency" line.
 
-This package is not published yet: its manifest is `"private": true` and it
-is not in the release plan. To release it for the first time, follow
-[RELEASING.md § A brand-new npm package](../../RELEASING.md#a-brand-new-npm-package):
-drop `"private"`, wire it into `scripts/release-plan.mjs`,
-`scripts/release-notes.mjs` and `release.yml`, raise its
-`@redact-secret/adapter` range to the first version that exports
-`walkStrict`, and move the entries below under a version heading.
+Its first release is the prerelease `0.1.0-alpha`, published under the npm
+dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
+not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
+
+## [0.1.0-alpha] - 2026-09-25
+
+First release, as a prerelease.
 
 ### Added
 
@@ -45,3 +45,5 @@ drop `"private"`, wire it into `scripts/release-plan.mjs`,
 - Declared range: `@redact-secret/core ^0.1.0-beta.6`, as a required peer
   dependency, backed by the conformance replay and
   `test/e2e.test.ts` at both range endpoints in CI.
+- Depends on `@redact-secret/adapter ^0.1.1`, the first version that exports
+  `walkStrict`. `0.1.0` lacks it, so the import failed against it.

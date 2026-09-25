@@ -24,19 +24,23 @@ hosts actually move at.
 
 | Package | Registry | Host | Published |
 | --- | --- | --- | --- |
-| `@redact-secret/adapter` | npm | — (shared base) | `0.1.0`, beta |
-| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.0`, beta |
-| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.0`, beta |
+| `@redact-secret/adapter` | npm | — (shared base) | `0.1.1`, beta |
+| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.1`, beta |
+| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.1`, beta |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.0`, beta |
-| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | **Unreleased**, not published |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | **Unreleased**, not published |
+| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha`, prerelease (dist-tag `alpha`) |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha`, prerelease (dist-tag `alpha`) |
 
-The first four were published on 2026-09-22 in release train
-[`2026.09.22`](https://github.com/redact-secret/redact-secret-adapters/releases/tag/train/2026.09.22)
-and require core `0.1.0-beta.6` or later. This README describes `develop`.
-Anything marked **Unreleased** below is not in the published `0.1.0`
-packages; the [`0.1.0` README](https://github.com/redact-secret/redact-secret-adapters/blob/2368d8c99f6b10e18874df0bcfec1818afd588ec/README.md)
-describes exactly what they contain.
+Every `0.1.0` was published on 2026-09-22 in release train
+[`2026.09.22`](https://github.com/redact-secret/redact-secret-adapters/releases/tag/train/2026.09.22);
+the npm versions above ship in the train after it. All of them require core
+`0.1.0-beta.6` or later. The two `0.1.0-alpha` packages are prereleases: they
+publish under the npm dist-tag `alpha`, not `latest`, so install them as
+`@alpha` or by exact version. This README describes `develop`. Anything marked
+**Unreleased** below is not in a published package: the Python package is
+still `0.1.0`, and the
+[`0.1.0` README](https://github.com/redact-secret/redact-secret-adapters/blob/2368d8c99f6b10e18874df0bcfec1818afd588ec/README.md)
+describes exactly what it contains.
 
 Every package declares a compatibility range against `@redact-secret/core` /
 `redact-secret` and is tested against the host versions it claims. Each host
@@ -80,9 +84,9 @@ inside a message string or an error message. This adapter redacts by *value*,
 alongside that mechanism rather than instead of it. `logMethod` alone does not
 see child-logger bindings or `mixin()` output.
 
-**Unreleased:** `createRedactingStreamWrite`, a `streamWrite` hook that also
-covers child bindings and `mixin()` output, is not exported by `0.1.0`. See the
-[package README](./packages/adapter-pino#readme).
+Since `0.1.1`, `createRedactingStreamWrite`, a `streamWrite` hook, also
+covers child bindings and `mixin()` output; install both hooks. `0.1.0` does
+not export it. See the [package README](./packages/adapter-pino#readme).
 
 ### OpenTelemetry
 
@@ -96,8 +100,9 @@ const provider = new NodeTracerProvider({
 ```
 
 Every string and string-array attribute on a span and its events is redacted
-before the span reaches the next processor. **Unreleased:** redaction of the span
-name, event names, the status message and link attributes is not in `0.1.0`. Attribute names are not
+before the span reaches the next processor. Since `0.1.1` the span
+name, event names, the status message and link attributes are redacted too
+(**Unreleased** in the Python package). Attribute names are not
 allowlisted, so OpenInference (`llm.input_messages`, `input.value`, …) and GenAI
 semantic-convention attributes (`gen_ai.prompt`, …) are covered without
 hardcoding either convention.
@@ -116,7 +121,7 @@ logging.getLogger().addHandler(handler)
 Python's standard library has no value-based redaction at all. This filter adds
 it.
 
-### AI context (unreleased)
+### AI context (prerelease)
 
 ```js
 import { createAiContextBoundary } from "@redact-secret/adapter-ai-context";
@@ -134,10 +139,11 @@ The core's framework-neutral
 user input, tool results, nested values, constructed context and staged
 streams, each ending in `ok` / `blocked` / `aborted`, fail-closed and
 all-or-nothing, with allowlisted finding metadata. It is qualified by
-replaying the core's own conformance fixture, pinned to a core commit. Not on
-npm yet; see the [package README](./packages/adapter-ai-context#readme).
+replaying the core's own conformance fixture, pinned to a core commit. Published as the
+prerelease `0.1.0-alpha` (`npm install @redact-secret/adapter-ai-context@alpha`);
+see the [package README](./packages/adapter-ai-context#readme).
 
-### MCP (unreleased)
+### MCP (prerelease)
 
 ```js
 import { createMcpBoundary, toCallToolResult } from "@redact-secret/adapter-mcp";
@@ -153,7 +159,8 @@ result (text, `structuredContent`, `_meta`, resources, links) before the result
 is logged, persisted, or placed into model context. It also offers opt-in
 argument sanitation, streamed tool output that stops reading on failure, and
 fixed `isError` results in place of errors. It names every security non-goal
-in its [package README](./packages/adapter-mcp#readme). Not on npm yet.
+in its [package README](./packages/adapter-mcp#readme). Published as the
+prerelease `0.1.0-alpha` (`npm install @redact-secret/adapter-mcp@alpha`).
 
 ### Masking callbacks (Langfuse and similar)
 
@@ -182,7 +189,7 @@ API: they are what a host sees, and they change only in a major version.
 | Marker | When |
 | --- | --- |
 | `[REDACTED:BLOCKED]` | A `block` finding — the **entire** leaf is replaced, not just the matched span |
-| `[REDACTED:ERROR]` | Any failure inside the core call, including an uninitialized core. **Unreleased:** also a malformed result, and any value that cannot be read (a throwing getter or `toJSON()`). Never the original text, never the error's own message |
+| `[REDACTED:ERROR]` | Any failure inside the core call, including an uninitialized core. Since `@redact-secret/adapter` `0.1.1`: also a malformed result, and any value that cannot be read (a throwing getter or `toJSON()`). Never the original text, never the error's own message |
 | `[REDACTED:LIMIT_EXCEEDED]` | A value past a walk budget. It is never scanned and never passed through unmasked |
 | `[REDACTED:CYCLE]` | A self-referencing object |
 
@@ -210,8 +217,8 @@ exercises, at both ends of the declared range.
 | `adapter-otel` | `@opentelemetry/sdk-trace-base ^2.0.0` | real spans through `SimpleSpanProcessor` and `BatchSpanProcessor`, concurrent spans, a failing exporter, flush and shutdown |
 | `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger`: filter before formatter, `QueueHandler`/`QueueListener`, threads sharing one handler, a failing handler |
 | `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | real spans through simple and batch processors, spans from threads, a failing exporter, flush and shutdown |
-| `adapter-ai-context` (unreleased) | `@redact-secret/core ^0.1.0-beta.6` (no host) | the core's AI-context conformance fixture replayed on the real core before and after `initialize()`, and an end-to-end agent turn with every limit |
-| `adapter-mcp` (unreleased) | `@modelcontextprotocol/sdk >=1.13.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-06-18 and 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
+| `adapter-ai-context` (prerelease) | `@redact-secret/core ^0.1.0-beta.6` (no host) | the core's AI-context conformance fixture replayed on the real core before and after `initialize()`, and an end-to-end agent turn with every limit |
+| `adapter-mcp` (prerelease) | `@modelcontextprotocol/sdk >=1.13.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-06-18 and 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
 
 [`compatibility.json`](./compatibility.json) is the machine-readable form of
 this table: every declared range, the endpoints CI installs, the runtimes it

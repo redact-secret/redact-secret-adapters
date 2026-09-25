@@ -31,6 +31,10 @@ on:
         value: ${{ jobs.plan.outputs.publish_adapter_pino }}
       publish_adapter_otel:
         value: ${{ jobs.plan.outputs.publish_adapter_otel }}
+      publish_adapter_ai_context:
+        value: ${{ jobs.plan.outputs.publish_adapter_ai_context }}
+      publish_adapter_mcp:
+        value: ${{ jobs.plan.outputs.publish_adapter_mcp }}
       publish_python:
         value: ${{ jobs.plan.outputs.publish_python }}
       adapter_version:
@@ -45,6 +49,14 @@ on:
         value: ${{ jobs.plan.outputs.adapter_otel_version }}
       adapter_otel_dist_tag:
         value: ${{ jobs.plan.outputs.adapter_otel_dist_tag }}
+      adapter_ai_context_version:
+        value: ${{ jobs.plan.outputs.adapter_ai_context_version }}
+      adapter_ai_context_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_ai_context_dist_tag }}
+      adapter_mcp_version:
+        value: ${{ jobs.plan.outputs.adapter_mcp_version }}
+      adapter_mcp_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_mcp_dist_tag }}
       python_version:
         value: ${{ jobs.plan.outputs.python_version }}
 
@@ -61,6 +73,8 @@ jobs:
       publish_adapter: ${{ steps.plan.outputs.publish_adapter }}
       publish_adapter_pino: ${{ steps.plan.outputs.publish_adapter_pino }}
       publish_adapter_otel: ${{ steps.plan.outputs.publish_adapter_otel }}
+      publish_adapter_ai_context: ${{ steps.plan.outputs.publish_adapter_ai_context }}
+      publish_adapter_mcp: ${{ steps.plan.outputs.publish_adapter_mcp }}
       publish_python: ${{ steps.plan.outputs.publish_python }}
       adapter_version: ${{ steps.plan.outputs.adapter_version }}
       adapter_dist_tag: ${{ steps.plan.outputs.adapter_dist_tag }}
@@ -68,6 +82,10 @@ jobs:
       adapter_pino_dist_tag: ${{ steps.plan.outputs.adapter_pino_dist_tag }}
       adapter_otel_version: ${{ steps.plan.outputs.adapter_otel_version }}
       adapter_otel_dist_tag: ${{ steps.plan.outputs.adapter_otel_dist_tag }}
+      adapter_ai_context_version: ${{ steps.plan.outputs.adapter_ai_context_version }}
+      adapter_ai_context_dist_tag: ${{ steps.plan.outputs.adapter_ai_context_dist_tag }}
+      adapter_mcp_version: ${{ steps.plan.outputs.adapter_mcp_version }}
+      adapter_mcp_dist_tag: ${{ steps.plan.outputs.adapter_mcp_dist_tag }}
       python_version: ${{ steps.plan.outputs.python_version }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -97,7 +115,9 @@ jobs:
     if: >-
       needs.plan.outputs.publish_adapter == 'true' ||
       needs.plan.outputs.publish_adapter_pino == 'true' ||
-      needs.plan.outputs.publish_adapter_otel == 'true'
+      needs.plan.outputs.publish_adapter_otel == 'true' ||
+      needs.plan.outputs.publish_adapter_ai_context == 'true' ||
+      needs.plan.outputs.publish_adapter_mcp == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -125,16 +145,22 @@ jobs:
           ADAPTER: ${{ needs.plan.outputs.publish_adapter }}
           PINO: ${{ needs.plan.outputs.publish_adapter_pino }}
           OTEL: ${{ needs.plan.outputs.publish_adapter_otel }}
+          AI_CONTEXT: ${{ needs.plan.outputs.publish_adapter_ai_context }}
+          MCP: ${{ needs.plan.outputs.publish_adapter_mcp }}
           # The dist-tag each publish job passes as --tag (release-plan.mjs):
           # npm refuses a prerelease without one, dry run included.
           ADAPTER_TAG: ${{ needs.plan.outputs.adapter_dist_tag }}
           PINO_TAG: ${{ needs.plan.outputs.adapter_pino_dist_tag }}
           OTEL_TAG: ${{ needs.plan.outputs.adapter_otel_dist_tag }}
+          AI_CONTEXT_TAG: ${{ needs.plan.outputs.adapter_ai_context_dist_tag }}
+          MCP_TAG: ${{ needs.plan.outputs.adapter_mcp_dist_tag }}
         run: |
           set -euo pipefail
           [ "$ADAPTER" = "true" ] && npm publish --workspace @redact-secret/adapter --access public --tag "$ADAPTER_TAG" --dry-run
           [ "$PINO" = "true" ] && npm publish --workspace @redact-secret/adapter-pino --access public --tag "$PINO_TAG" --dry-run
           [ "$OTEL" = "true" ] && npm publish --workspace @redact-secret/adapter-otel --access public --tag "$OTEL_TAG" --dry-run
+          [ "$AI_CONTEXT" = "true" ] && npm publish --workspace @redact-secret/adapter-ai-context --access public --tag "$AI_CONTEXT_TAG" --dry-run
+          [ "$MCP" = "true" ] && npm publish --workspace @redact-secret/adapter-mcp --access public --tag "$MCP_TAG" --dry-run
           true
 
   python:

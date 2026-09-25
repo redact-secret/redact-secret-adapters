@@ -66,6 +66,22 @@ export const PACKAGES = [
     tag: "adapter-otel",
   },
   {
+    id: "adapter_ai_context",
+    name: "@redact-secret/adapter-ai-context",
+    registry: "npm",
+    manifest: "packages/adapter-ai-context/package.json",
+    changelog: "packages/adapter-ai-context/CHANGELOG.md",
+    tag: "adapter-ai-context",
+  },
+  {
+    id: "adapter_mcp",
+    name: "@redact-secret/adapter-mcp",
+    registry: "npm",
+    manifest: "packages/adapter-mcp/package.json",
+    changelog: "packages/adapter-mcp/CHANGELOG.md",
+    tag: "adapter-mcp",
+  },
+  {
     id: "python",
     name: "redact-secret-adapters",
     registry: "pypi",

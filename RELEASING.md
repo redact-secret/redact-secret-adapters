@@ -41,8 +41,8 @@ version: package versions stay per package.
 | Package tag | `<package>@<version>` | `adapter-pino@0.2.0` |
 | Train tag + GitHub Release | `train/<train>` | `train/2026.09.22` |
 
-Package tags: `adapter`, `adapter-pino`, `adapter-otel`, and
-`redact-secret-adapters` (PyPI).
+Package tags: `adapter`, `adapter-pino`, `adapter-otel`,
+`adapter-ai-context`, `adapter-mcp`, and `redact-secret-adapters` (PyPI).
 
 ### Prereleases and npm dist-tags
 
@@ -79,7 +79,8 @@ has no dist-tags: pip skips a pre-release unless it is asked for one.
    2. **Rehearsal** — as above; it also fixes the plan the publish uses.
    3. **Publish** — each planned package, npm then PyPI, with npm provenance
       and PyPI trusted publishing. `@redact-secret/adapter` goes first
-      because the other two npm packages depend on it.
+      because every other npm package depends on it, and
+      `adapter-ai-context` before `adapter-mcp`, which depends on it.
    4. **Tag and report** — a `<package>@<version>` tag for every package
       whose declared version is on its registry and not yet tagged (whether
       this run published it or it was published out of band), then
@@ -161,10 +162,11 @@ publish job in `release.yml`), then bootstrap it once by hand:
 
 A new package lands on `develop` unreleased: `"private": true` in its
 manifest and absent from `PACKAGES`, so no train plans it and `npm publish`
-refuses it even by hand. `@redact-secret/adapter-ai-context` and
-`@redact-secret/adapter-mcp` are in that state; each CHANGELOG lists what its
-first release has to change (`adapter-mcp` depends on `adapter-ai-context`,
-so that one ships first).
+refuses it even by hand. Wiring it in means dropping `"private"` and the
+steps above; `@redact-secret/adapter-ai-context` and
+`@redact-secret/adapter-mcp` were wired in this way for their first
+release, `0.1.0-alpha` (`adapter-mcp` depends on `adapter-ai-context`, so
+that one publishes first).
 
 PRs that cut and reconcile open use `GITHUB_TOKEN`, which fires no
 `pull_request` event; those workflows dispatch CI, Branch guard and
