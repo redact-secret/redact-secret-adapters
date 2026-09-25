@@ -1,0 +1,73 @@
+{
+  "description": "Adapter-only operational-overhead workloads (#11), read by scripts/measure-overhead.mjs and scripts/measure-overhead.py. Each profile is built from these parameters by both harnesses, so an event is reproduced from its profile rather than committed. All text is filler or one synthetic token built at runtime (secret.prefix + secret.fill repeated secret.length times); nothing is real or real-derived. The harnesses measure and record; they carry no threshold and no verdict. Budgets and judgement live in redact-secret-benchmarks.",
+  "schemaVersion": 1,
+  "secret": { "prefix": "ghp_", "fill": "x", "length": 36 },
+  "filler": [
+    "alpha",
+    "bravo",
+    "charlie",
+    "delta",
+    "echo",
+    "foxtrot",
+    "golf",
+    "hotel",
+    "india",
+    "juliet",
+    "kilo",
+    "lima"
+  ],
+  "distinctEvents": 64,
+  "workloadDigest": "0a00b415c375082d45b261b8c6e3a126fa3ea7fca74d31525fef2fd12273b243",
+  "profiles": [
+    {
+      "id": "log-flat",
+      "shape": "log-event",
+      "hosts": ["pino", "pino-streamwrite", "python-logging"],
+      "description": "A request log line: a printf-style message with two values and eight flat string fields.",
+      "params": {
+        "messageArgs": 2,
+        "fields": 8,
+        "nestedDepth": 0,
+        "arrayLength": 0,
+        "stringWords": 6,
+        "secretEvery": 8
+      }
+    },
+    {
+      "id": "log-nested",
+      "shape": "log-event",
+      "hosts": ["pino", "pino-streamwrite", "python-logging"],
+      "description": "A structured log line: eight fields, one nested four levels deep, and one array of sixteen strings.",
+      "params": {
+        "messageArgs": 2,
+        "fields": 8,
+        "nestedDepth": 4,
+        "arrayLength": 16,
+        "stringWords": 6,
+        "secretEvery": 8
+      }
+    },
+    {
+      "id": "span-attributes",
+      "shape": "span",
+      "hosts": ["otel-js", "otel-python"],
+      "description": "An LLM-call span: sixteen string attributes, two string-array attributes of eight, and two events with four attributes each.",
+      "params": {
+        "attributes": 16,
+        "arrayAttributes": 2,
+        "arrayLength": 8,
+        "events": 2,
+        "eventAttributes": 4,
+        "stringWords": 12,
+        "secretEvery": 8
+      }
+    },
+    {
+      "id": "mask-payload",
+      "shape": "payload",
+      "hosts": ["mask-js", "mask-python"],
+      "description": "A masking-callback payload: eight chat messages and two tool calls with arguments and results.",
+      "params": { "messages": 8, "toolCalls": 2, "stringWords": 40, "secretEvery": 8 }
+    }
+  ]
+}

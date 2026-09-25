@@ -1,0 +1,61 @@
+{
+  "description": "Pathological value trees for the shared walker (#11). Each case names a shape that both languages build from the same parameters, instead of storing multi-megabyte JSON. Every case asserts that the walk terminates, never passes the planted synthetic secret through, and calls the scanner no more often than the named limit allows. `maxScannerCalls` is an upper bound, not an expected count.",
+  "cases": [
+    {
+      "name": "deeply_nested_arrays",
+      "shape": { "kind": "nested-arrays", "depth": 10000, "leaf": "SECRET_TOKEN_1" },
+      "limits": {},
+      "maxScannerCalls": 0,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "deeply_nested_objects",
+      "shape": { "kind": "nested-objects", "depth": 10000, "leaf": "SECRET_TOKEN_1" },
+      "limits": {},
+      "maxScannerCalls": 0,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "secret_at_every_level_of_a_deep_chain",
+      "shape": { "kind": "nested-objects-with-leaves", "depth": 10000, "leaf": "SECRET_TOKEN_1" },
+      "limits": {},
+      "maxScannerCalls": 8,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "very_wide_array",
+      "shape": { "kind": "wide-array", "width": 100000, "leaf": "SECRET_TOKEN_1" },
+      "limits": {},
+      "maxScannerCalls": 1000,
+      "mustContain": "<SECRET_1>"
+    },
+    {
+      "name": "very_wide_object",
+      "shape": { "kind": "wide-object", "width": 10000, "leaf": "SECRET_TOKEN_1" },
+      "limits": {},
+      "maxScannerCalls": 200,
+      "mustContain": "<SECRET_1>"
+    },
+    {
+      "name": "dense_cube_exhausts_the_leaf_budget",
+      "shape": { "kind": "cube", "side": 50, "leaf": "SECRET_TOKEN_1" },
+      "limits": {},
+      "maxScannerCalls": 5000,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "overlong_string_is_never_scanned",
+      "shape": { "kind": "long-string", "length": 1000000, "leaf": "SECRET_TOKEN_1" },
+      "limits": {},
+      "maxScannerCalls": 0,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "tightened_limits_bound_a_mixed_tree",
+      "shape": { "kind": "cube", "side": 20, "leaf": "SECRET_TOKEN_1" },
+      "limits": { "maxDepth": 3, "maxArrayLength": 10, "maxTotalLeaves": 50 },
+      "maxScannerCalls": 50,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    }
+  ]
+}

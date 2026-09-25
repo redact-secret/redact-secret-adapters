@@ -25,7 +25,9 @@
     "format": "biome check --write .",
     "range-endpoint": "node scripts/install-range-endpoint.mjs",
     "verify-pack-contents": "node scripts/verify-pack-contents.mjs",
-    "smoke-test": "node scripts/smoke-test-npm-packages.mjs"
+    "smoke-test": "node scripts/smoke-test-npm-packages.mjs",
+    "compat:check": "node scripts/check-compatibility-record.mjs",
+    "overhead": "node scripts/measure-overhead.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

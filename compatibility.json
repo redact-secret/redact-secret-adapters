@@ -1,0 +1,182 @@
+{
+  "schema": "redact-secret-adapters/compatibility-v1",
+  "description": "What each package here is qualified against, and how an unqualified host is refused or disclosed (#11). A range is qualified only because CI installs both of its endpoints from the registry on every push and pull request (range-endpoints, python-range-endpoints) and runs the real-host tests listed under qualifiedBy against them. `npm run compat:check` fails when this record, the package manifests, and CI disagree. Endpoints are the versions the range resolved to on endpointsResolvedAt; `npm run compat:check -- --resolve` re-resolves them.",
+  "endpointsResolvedAt": "2026-09-25",
+  "packages": [
+    {
+      "name": "@redact-secret/adapter",
+      "registry": "npm",
+      "manifest": "packages/adapter/package.json",
+      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "ciExercised": ["20", "22", "24"] },
+      "requires": [
+        {
+          "name": "@redact-secret/core",
+          "range": "^0.1.0-beta.6",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.8" }
+        }
+      ],
+      "qualifiedBy": [
+        "packages/adapter/test/live.test.ts",
+        "packages/adapter/test/mask-secrets.test.ts",
+        "packages/adapter/test/bounded-traversal.test.ts"
+      ]
+    },
+    {
+      "name": "@redact-secret/adapter-pino",
+      "registry": "npm",
+      "manifest": "packages/adapter-pino/package.json",
+      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "ciExercised": ["20", "22", "24"] },
+      "requires": [
+        {
+          "name": "@redact-secret/core",
+          "range": "^0.1.0-beta.6",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.8" }
+        },
+        {
+          "name": "pino",
+          "range": "^10.0.0",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "10.0.0", "highest": "10.3.1" }
+        }
+      ],
+      "lifecycle": [
+        "hooks.logMethod and hooks.streamWrite on a real pino logger",
+        "interleaved async loggers and child loggers sharing one hook",
+        "pino.destination (sonic-boom) buffered asynchronous writes",
+        "pino.transport worker-thread transport with its own buffering",
+        "a destination that throws while echoing its chunk, and one that reports backpressure"
+      ],
+      "qualifiedBy": [
+        "packages/adapter-pino/test/pino-host.test.ts",
+        "packages/adapter-pino/test/pino-lifecycle.test.ts",
+        "packages/adapter-pino/test/live.test.ts"
+      ]
+    },
+    {
+      "name": "@redact-secret/adapter-otel",
+      "registry": "npm",
+      "manifest": "packages/adapter-otel/package.json",
+      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "ciExercised": ["20", "22", "24"] },
+      "requires": [
+        {
+          "name": "@opentelemetry/sdk-trace-base",
+          "range": "^2.0.0",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "2.0.0", "highest": "2.11.0" }
+        },
+        {
+          "name": "@redact-secret/core",
+          "range": "^0.1.0-beta.6",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.8" }
+        }
+      ],
+      "lifecycle": [
+        "SimpleSpanProcessor and BatchSpanProcessor wrapped by the redacting processor",
+        "span name, string and string-array attributes, events, status message, and link attributes",
+        "concurrent spans from interleaved async tasks",
+        "an exporter that fails through its result callback or by throwing, with SDK diagnostics captured",
+        "forceFlush and shutdown forwarding, and spans ended after shutdown"
+      ],
+      "qualifiedBy": [
+        "packages/adapter-otel/test/otel-host.test.ts",
+        "packages/adapter-otel/test/otel-lifecycle.test.ts"
+      ]
+    },
+    {
+      "name": "redact-secret-adapters",
+      "registry": "pypi",
+      "manifest": "python/pyproject.toml",
+      "runtime": { "name": "cpython", "range": ">=3.10", "ciExercised": ["3.10", "3.11", "3.12", "3.13", "3.14"] },
+      "requires": [
+        {
+          "name": "redact-secret",
+          "range": ">=0.1.0b6,<0.2",
+          "kind": "dependency",
+          "endpoints": { "lowest": "0.1.0b6", "highest": "0.1.0b8" }
+        },
+        {
+          "name": "opentelemetry-sdk",
+          "range": ">=1.16.0,<2",
+          "kind": "extra:otel",
+          "endpoints": { "lowest": "1.16.0", "highest": "1.45.0" }
+        }
+      ],
+      "lifecycle": [
+        "logging.Filter on a handler, ahead of the formatter, the cached exc_text, and a second handler",
+        "QueueHandler to QueueListener hand-off across threads",
+        "concurrent emitters on threads sharing one filtered handler",
+        "a handler whose emit fails into logging.handleError",
+        "SimpleSpanProcessor and BatchSpanProcessor, concurrent spans from threads",
+        "an exporter that fails by result or by raising, with SDK logging captured",
+        "force_flush and shutdown forwarding, and spans ended after shutdown"
+      ],
+      "qualifiedBy": [
+        "python/tests/test_logging_filter.py",
+        "python/tests/test_logging_lifecycle.py",
+        "python/tests/test_otel_host.py",
+        "python/tests/test_otel_lifecycle.py",
+        "python/tests/test_bounded_traversal.py",
+        "python/tests/test_live.py"
+      ]
+    }
+  ],
+  "unqualified": [
+    {
+      "host": "pino",
+      "versions": "<10.0.0 or >=11.0.0",
+      "enforcement": "refused",
+      "how": "peerDependencies pino ^10.0.0: npm 7 and later stop with ERESOLVE (checked 2026-09-25 with npm 11.4.1: adapter-pino@0.1.0 with pino@9 fails) unless --legacy-peer-deps or --force overrides it"
+    },
+    {
+      "host": "@opentelemetry/sdk-trace-base",
+      "versions": "<2.0.0 or >=3.0.0",
+      "enforcement": "refused",
+      "how": "peerDependencies ^2.0.0: npm 7 and later stop with ERESOLVE (checked 2026-09-25 with npm 11.4.1: adapter-otel@0.1.0 with sdk-trace-base@1 fails) unless --legacy-peer-deps or --force overrides it"
+    },
+    {
+      "host": "@redact-secret/core",
+      "versions": "<0.1.0-beta.6 or >=0.2.0-0",
+      "enforcement": "refused",
+      "how": "peerDependencies ^0.1.0-beta.6 on every npm package: npm 7 and later stop with ERESOLVE"
+    },
+    {
+      "host": "opentelemetry-sdk",
+      "versions": "<1.16.0 or >=2",
+      "enforcement": "refused",
+      "how": "the otel extra requires opentelemetry-sdk>=1.16.0,<2: pip's resolver refuses a conflicting pin (checked 2026-09-25 with pip 26.2.1 and opentelemetry-sdk==1.15.0)"
+    },
+    {
+      "host": "redact-secret (Python core)",
+      "versions": "<0.1.0b6 or >=0.2",
+      "enforcement": "refused",
+      "how": "dependency redact-secret>=0.1.0b6,<0.2: pip's resolver refuses a conflicting pin"
+    },
+    {
+      "host": "CPython",
+      "versions": "<3.10",
+      "enforcement": "refused",
+      "how": "requires-python >=3.10: pip finds no installable distribution (checked 2026-09-25 for 3.9)"
+    },
+    {
+      "host": "CPython",
+      "versions": ">=3.15",
+      "enforcement": "documented",
+      "how": "requires-python has no upper bound, so pip installs it; 3.15 and later are not exercised by CI and are unqualified"
+    },
+    {
+      "host": "Node.js",
+      "versions": "anything outside 20.x, 22.x and 24.x",
+      "enforcement": "documented",
+      "how": "engines is advisory: npm only warns unless engine-strict is set, so an install succeeds; those runtimes are not exercised by CI and are unqualified"
+    },
+    {
+      "host": "OpenTelemetry string-array attribute width (JavaScript and Python span processors)",
+      "versions": "all qualified versions",
+      "enforcement": "documented",
+      "how": "the span processors apply maxStringLength per element but no element-count bound of their own to a string-array attribute; the SDK's attribute limits are the only bound, so a very wide array costs one scan per element"
+    }
+  ]
+}
