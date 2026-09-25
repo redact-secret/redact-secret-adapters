@@ -19,10 +19,62 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
-## [0.1.0]
+## [0.1.1] - 2026-09-25
 
-Initial release. Not yet published — this heading gains a release date once
-the Release workflow first publishes this package.
+### Added
+
+- `createRedactingStreamWrite` / `createRedactingStreamWriteWith`, a pino
+  `hooks.streamWrite` that masks every string value in the finished JSON line.
+  `hooks.logMethod` never sees child-logger bindings (`child()`,
+  `setBindings()`) or `mixin()` output, so with `logMethod` alone a secret in
+  either reached the destination in plaintext. Install both hooks.
+
+### Changed
+
+- `@redact-secret/adapter` range raised from `^0.1.0` to `^0.1.1`, the
+  version with the fail-closed walker fixes this release relies on (a
+  malformed scanner result, non-plain objects, throwing getters). Backed
+  by this package's tests, which run against the workspace's
+  `@redact-secret/adapter` 0.1.1, and by the npm install smoke test.
+- `createRedactingLogMethod` and `createRedactingStreamWrite` load
+  `@redact-secret/core` on call, like `@redact-secret/adapter`'s
+  `createMaskSecrets`, so importing the injected API never loads the native
+  core. No API change.
+- `formatPinoMessage` is marked `@internal`: still exported for
+  compatibility, but not a supported API.
+- `@redact-secret/core ^0.1.0-beta.6` moves from `dependencies` to
+  `peerDependencies`, same range. As a regular dependency, a core version in
+  the application outside that range installed a second, separately
+  initialized copy of the native core. Now there is exactly one. npm 7+ and
+  pnpm install a required peer automatically. Backed by the same range-endpoint
+  CI jobs, which already resolved the core range from either field.
+
+### Fixed
+
+- `logger.error(err, "custom")` now logs `"custom"` as `msg`. Before, a leading
+  `Error` was rewritten to `[{ err }, err.message, ...rest]`, which replaced
+  the caller's message with `err.message` and interpolated the caller's
+  arguments into it. The hook now hands pino a masked copy of the error that
+  keeps its prototype, so pino's own handling applies: the caller's message
+  wins, and `logger.error(err)` still gets the masked `err.message`.
+- A masked `Error` keeps its class: pino's `err` serializer now logs
+  `type: "TypeError"` (or whatever the class is) instead of `"Object"`, for a
+  leading `Error` and for one under a merging-object key, whatever the
+  logger's `errorKey` is. Nothing in the hook assumes the key is `err` any
+  more.
+- `logger.info(undefined, fmt, ...values)` (or `null` first) now joins the
+  message with its values before scanning, as pino formats it; before, the
+  parts were scanned separately and a secret split across them was missed.
+- A logger's `msgPrefix` is now scanned together with the message, so a
+  prefix such as `"api_key="` gives the core the context to detect the value
+  that follows it.
+- The `logMethod` hook no longer throws into pino when an argument cannot be
+  formatted (for example `%d` with a `Symbol`): pino logs `[REDACTED:ERROR]`
+  instead of the raw arguments.
+
+## [0.1.0] - 2026-09-22
+
+Initial release.
 
 ### Added
 

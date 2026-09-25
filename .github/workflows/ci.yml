@@ -90,8 +90,8 @@ jobs:
     # CI's own tests import every package from inside the workspace, which
     # resolves through node_modules symlinks and never touches `exports`,
     # `files`, or `dist`. This asserts the tarball `npm pack` would actually
-    # ship is exactly `dist` (mirroring `src`), `README.md`, `LICENSE`, and
-    # `package.json` — no test files, no `src`, no `tsconfig*`.
+    # ship is exactly `dist` (mirroring `src`), `CHANGELOG.md`, `README.md`,
+    # `LICENSE`, and `package.json` — no test files, no `src`, no `tsconfig*`.
     name: npm pack contents
     runs-on: ubuntu-latest
     permissions:
@@ -188,14 +188,62 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run compat:check
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
       - run: python -m pip install ruff==0.16.8
       - run: ruff check python
       - run: ruff format --check python
-      - run: ruff check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py
-      - run: ruff format --check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py
+      - run: ruff check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py
+      - run: ruff format --check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py
+
+  overhead-harness:
+    # The adapter-overhead harnesses (#11) and the footprint harness (package
+    # size and initialization time, #12) in --quick mode: proves they still
+    # run against the current packages and emit the overhead-v1 shape
+    # redact-secret-benchmarks reads. The numbers from this job are
+    # meaningless (three tiny repetitions on a shared runner) and are not
+    # kept; measurement and judgement belong to redact-secret-benchmarks.
+    name: Overhead harness smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/measure-overhead.mjs --quick --out overhead-js.json
+      - run: node scripts/measure-footprint.mjs --quick --out footprint-js.json
+      - run: python -m pip install -e "./python[otel]"
+      - run: python scripts/measure-overhead.py --quick --out overhead-python.json
+      - name: Check the outputs carry the overhead-v1 and footprint-v1 shapes
+        run: |
+          node -e '
+            for (const file of ["overhead-js.json", "overhead-python.json"]) {
+              const out = JSON.parse(require("fs").readFileSync(file, "utf-8"));
+              if (out.schema !== "redact-secret-adapters/overhead-v1" || out.results.length === 0) throw new Error(file);
+              for (const r of out.results) for (const m of ["host", "adapter-identity", "adapter-core", "core-direct"]) {
+                if (!(r.modes[m].samples.length > 0)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m}`);
+              }
+            }
+            const footprint = JSON.parse(require("fs").readFileSync("footprint-js.json", "utf-8"));
+            if (footprint.schema !== "redact-secret-adapters/footprint-v1" || footprint.results.length === 0) throw new Error("footprint-js.json");
+            for (const r of footprint.results) {
+              if (!(r.packageSize.tarballBytes > 0)) throw new Error(`footprint-js.json: ${r.package} packageSize`);
+              for (const m of ["import", "core", "live-factory"]) {
+                if (!(r.initialization[m].samples.length > 0)) throw new Error(`footprint-js.json: ${r.package} ${m}`);
+              }
+            }'
 
   ci-passed:
     # The single required status check for develop, release and main, so
@@ -212,6 +260,7 @@ jobs:
       - python-wheel-smoke
       - python-range-endpoints
       - lint
+      - overhead-harness
     runs-on: ubuntu-latest
     permissions: {}
     steps:

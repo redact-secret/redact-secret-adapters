@@ -22,7 +22,10 @@ logging.getLogger().addHandler(handler)
 The filter formats `msg` with `args` before scanning, then clears the
 arguments so a downstream formatter cannot rebuild the original. It replaces
 `exc_info` with redacted traceback text, scans cached `exc_text` and
-`stack_info`, and redacts any `extra_fields=[...]` you name.
+`stack_info`, and redacts any `extra_fields=[...]` you name: a string extra is
+masked, and a dict/list/tuple extra is walked and replaced by a masked copy.
+If the message cannot be formatted (a bad `%` format, a raising `__str__`), it
+becomes `[REDACTED:ERROR]` rather than raising into the logging call.
 
 Attach it to each emitting **handler**: ancestor logger filters do not run for
 propagated child records.
@@ -61,15 +64,18 @@ provider = TracerProvider()
 provider.add_span_processor(create_redacting_span_processor(BatchSpanProcessor(otlp_exporter)))
 ```
 
-Every string and string-sequence attribute on a span and its events is
-redacted before the span reaches the next processor, including OpenInference
-and GenAI semantic-convention attributes, without hardcoding either
-convention's attribute list. `opentelemetry-sdk` never hands a processor a
-public, mutable view of a span's attributes; the adapter reaches into the
-private `_attributes` field, and past that into its backing `_dict` to get
-past the SDK's own immutability guard on frozen attribute bags. See
-`redact_secret_adapters.otel` for why that's the SDK's own accepted
-mechanism, not a version-specific hack.
+A span's name and status description, every string and string-sequence
+attribute (a `None` inside a sequence stays in place), every event's name and
+attributes, and every link's attributes are redacted before the span reaches
+the next processor, including OpenInference and GenAI semantic-convention
+attributes, without hardcoding either convention's attribute list.
+
+`opentelemetry-sdk` has no public way to change a span before export, so the
+adapter writes the private fields behind the read-only accessors (`_name`,
+`_status`, `_attributes` and its backing `_dict`) and reads each write back
+through the public accessor. If an SDK release moves one of those fields, the
+span is **dropped** rather than exported unredacted, and a `RuntimeWarning` is
+issued once per processor. See `redact_secret_adapters.otel` for details.
 
 Supported range: `opentelemetry-sdk>=1.16.0,<2` — CI runs
 `tests/test_otel_host.py`, a real `TracerProvider`/exporter round trip, at

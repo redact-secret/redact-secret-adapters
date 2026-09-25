@@ -15,3 +15,15 @@ python/dist/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Per-developer agent tooling. graft regenerates its wiring on every session
+# start (hooks and helpers carry machine-local paths), and RTK / local notes
+# are personal. Shared agent rules live in AGENTS.md.
+/.claude/helpers/
+/.claude/settings.json
+/.claude/settings.local.json
+/.claude/skills/graft/
+/.mcp.json
+/.rtk/
+/RTK.md
+/CLAUDE.local.md

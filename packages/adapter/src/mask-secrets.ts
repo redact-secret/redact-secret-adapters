@@ -1,67 +1,34 @@
 /**
- * `maskSecretsWith`: the generic masking callback, shaped so
- * `(data) => maskSecretsWith(scanAndRedact, data)` is a drop-in Langfuse JS
- * `mask` hook (`mask: ({ data }) => maskSecrets(data)`, see
- * `./create-mask-secrets.ts`). It never imports `@redact-secret/core`
- * itself — `scanAndRedact` is injected — so this file is testable without
- * the built native addon.
+ * The two public entry points to the shared walker in `./walk.ts`. They are
+ * the same walk: `maskSecretsWith` is shaped for masking callbacks
+ * (`mask: ({ data }) => maskSecretsWith(scanAndRedact, data)` in Langfuse
+ * JS), `maskLogValueWith` for logging hooks. Neither imports the core —
+ * `scanAndRedact` is injected.
  */
 
-import { CYCLE_MARKER, LIMIT_MARKER } from "./mask-leaf.js";
 import type { MaskOptions, ScanAndRedact } from "./types.js";
-import { createWalkContext, defineDataKey, isPlainObject, maskString, type WalkContext } from "./walk.js";
+import { walkValue } from "./walk.js";
 
-function maskValue(
-  scanAndRedact: ScanAndRedact,
-  value: unknown,
-  ctx: WalkContext,
-  depth: number,
-  seen: Set<object>,
-): unknown {
-  if (typeof value === "string") {
-    return maskString(scanAndRedact, value, ctx);
+function assertScanner(caller: string, scanAndRedact: unknown): void {
+  if (typeof scanAndRedact !== "function") {
+    throw new TypeError(`${caller}: scanAndRedact must be a function`);
   }
-
-  if (Array.isArray(value)) {
-    if (depth >= ctx.limits.maxDepth) return LIMIT_MARKER;
-    if (seen.has(value)) return CYCLE_MARKER;
-    seen.add(value);
-    // Elements beyond the limit are dropped, never passed through unmasked.
-    const bounded = value.slice(0, ctx.limits.maxArrayLength);
-    const masked = bounded.map((item) => maskValue(scanAndRedact, item, ctx, depth + 1, seen));
-    seen.delete(value);
-    return masked;
-  }
-
-  if (isPlainObject(value)) {
-    if (depth >= ctx.limits.maxDepth) return LIMIT_MARKER;
-    if (seen.has(value)) return CYCLE_MARKER;
-    seen.add(value);
-    // Keys beyond the limit are dropped, never passed through unmasked.
-    const keys = Object.keys(value).slice(0, ctx.limits.maxObjectKeys);
-    const out = {};
-    for (const key of keys) {
-      defineDataKey(out, key, maskValue(scanAndRedact, value[key], ctx, depth + 1, seen));
-    }
-    seen.delete(value);
-    return out;
-  }
-
-  // Numbers, booleans, null, undefined, and non-plain objects (Date, class
-  // instances, ...) are left unchanged: only plain objects, arrays, and
-  // strings are walked.
-  return value;
 }
 
 /**
- * Recursively masks every string inside a plain object/array tree.
- * `scanAndRedact` is called once per leaf string, so a `<SECRET_1>`-style
- * placeholder index restarts at each leaf — identical to calling
- * `scanAndRedact` directly on that one string.
+ * Masks every string reachable in `data`: plain objects, arrays, `Error`s
+ * (as a redacted `{ type, message, stack, ...ownProps, cause }`), and any
+ * other object as JSON would serialize it (its `toJSON()` result, else its
+ * own enumerable properties). `scanAndRedact` is called once per leaf
+ * string, so a `<SECRET_1>`-style placeholder index restarts at each leaf.
  */
 export function maskSecretsWith(scanAndRedact: ScanAndRedact, data: unknown, options: MaskOptions = {}): unknown {
-  if (typeof scanAndRedact !== "function") {
-    throw new TypeError("maskSecretsWith: scanAndRedact must be a function");
-  }
-  return maskValue(scanAndRedact, data, createWalkContext(options), 0, new Set());
+  assertScanner("maskSecretsWith", scanAndRedact);
+  return walkValue(scanAndRedact, data, options);
+}
+
+/** The same walk as {@link maskSecretsWith}; kept as the logging-side name. */
+export function maskLogValueWith(scanAndRedact: ScanAndRedact, data: unknown, options: MaskOptions = {}): unknown {
+  assertScanner("maskLogValueWith", scanAndRedact);
+  return walkValue(scanAndRedact, data, options);
 }

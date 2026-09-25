@@ -12,6 +12,16 @@ on:
     branches: [release]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      allow_nothing_to_publish:
+        # The Release workflow sets this. A PR into release (and cut-rc.yml)
+        # must still ship something, but a Release re-run after every
+        # package is published — to finish tagging or the GitHub Release —
+        # or a dry run on an unbumped branch legitimately plans no publish.
+        # It only relaxes the "at least one" check: whatever is planned is
+        # still dry-run here before any publish job can start.
+        type: boolean
+        default: false
     outputs:
       any_publish:
         value: ${{ jobs.plan.outputs.any_publish }}
@@ -21,14 +31,32 @@ on:
         value: ${{ jobs.plan.outputs.publish_adapter_pino }}
       publish_adapter_otel:
         value: ${{ jobs.plan.outputs.publish_adapter_otel }}
+      publish_adapter_ai_context:
+        value: ${{ jobs.plan.outputs.publish_adapter_ai_context }}
+      publish_adapter_mcp:
+        value: ${{ jobs.plan.outputs.publish_adapter_mcp }}
       publish_python:
         value: ${{ jobs.plan.outputs.publish_python }}
       adapter_version:
         value: ${{ jobs.plan.outputs.adapter_version }}
+      adapter_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_dist_tag }}
       adapter_pino_version:
         value: ${{ jobs.plan.outputs.adapter_pino_version }}
+      adapter_pino_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_pino_dist_tag }}
       adapter_otel_version:
         value: ${{ jobs.plan.outputs.adapter_otel_version }}
+      adapter_otel_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_otel_dist_tag }}
+      adapter_ai_context_version:
+        value: ${{ jobs.plan.outputs.adapter_ai_context_version }}
+      adapter_ai_context_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_ai_context_dist_tag }}
+      adapter_mcp_version:
+        value: ${{ jobs.plan.outputs.adapter_mcp_version }}
+      adapter_mcp_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_mcp_dist_tag }}
       python_version:
         value: ${{ jobs.plan.outputs.python_version }}
 
@@ -45,10 +73,19 @@ jobs:
       publish_adapter: ${{ steps.plan.outputs.publish_adapter }}
       publish_adapter_pino: ${{ steps.plan.outputs.publish_adapter_pino }}
       publish_adapter_otel: ${{ steps.plan.outputs.publish_adapter_otel }}
+      publish_adapter_ai_context: ${{ steps.plan.outputs.publish_adapter_ai_context }}
+      publish_adapter_mcp: ${{ steps.plan.outputs.publish_adapter_mcp }}
       publish_python: ${{ steps.plan.outputs.publish_python }}
       adapter_version: ${{ steps.plan.outputs.adapter_version }}
+      adapter_dist_tag: ${{ steps.plan.outputs.adapter_dist_tag }}
       adapter_pino_version: ${{ steps.plan.outputs.adapter_pino_version }}
+      adapter_pino_dist_tag: ${{ steps.plan.outputs.adapter_pino_dist_tag }}
       adapter_otel_version: ${{ steps.plan.outputs.adapter_otel_version }}
+      adapter_otel_dist_tag: ${{ steps.plan.outputs.adapter_otel_dist_tag }}
+      adapter_ai_context_version: ${{ steps.plan.outputs.adapter_ai_context_version }}
+      adapter_ai_context_dist_tag: ${{ steps.plan.outputs.adapter_ai_context_dist_tag }}
+      adapter_mcp_version: ${{ steps.plan.outputs.adapter_mcp_version }}
+      adapter_mcp_dist_tag: ${{ steps.plan.outputs.adapter_mcp_dist_tag }}
       python_version: ${{ steps.plan.outputs.python_version }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -61,7 +98,16 @@ jobs:
 
       - name: Plan
         id: plan
-        run: node scripts/release-plan.mjs --check-changelog --require-publish
+        env:
+          # Empty outside workflow_call, so PR and dispatch runs require a publish.
+          ALLOW_NOTHING_TO_PUBLISH: ${{ inputs.allow_nothing_to_publish }}
+        run: |
+          set -euo pipefail
+          if [ "$ALLOW_NOTHING_TO_PUBLISH" = "true" ]; then
+            node scripts/release-plan.mjs --check-changelog
+          else
+            node scripts/release-plan.mjs --check-changelog --require-publish
+          fi
 
   npm:
     name: npm publish dry run
@@ -69,7 +115,9 @@ jobs:
     if: >-
       needs.plan.outputs.publish_adapter == 'true' ||
       needs.plan.outputs.publish_adapter_pino == 'true' ||
-      needs.plan.outputs.publish_adapter_otel == 'true'
+      needs.plan.outputs.publish_adapter_otel == 'true' ||
+      needs.plan.outputs.publish_adapter_ai_context == 'true' ||
+      needs.plan.outputs.publish_adapter_mcp == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -87,19 +135,32 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      - name: Upgrade npm to the version the publish jobs use
-        run: npm install -g npm@latest
+      - name: Install the npm version the publish jobs use
+        # Pinned to the same exact version as release.yml, so the dry run
+        # exercises the npm that will publish.
+        run: npm install -g npm@11.19.1
 
       - name: Dry-run every planned publish
         env:
           ADAPTER: ${{ needs.plan.outputs.publish_adapter }}
           PINO: ${{ needs.plan.outputs.publish_adapter_pino }}
           OTEL: ${{ needs.plan.outputs.publish_adapter_otel }}
+          AI_CONTEXT: ${{ needs.plan.outputs.publish_adapter_ai_context }}
+          MCP: ${{ needs.plan.outputs.publish_adapter_mcp }}
+          # The dist-tag each publish job passes as --tag (release-plan.mjs):
+          # npm refuses a prerelease without one, dry run included.
+          ADAPTER_TAG: ${{ needs.plan.outputs.adapter_dist_tag }}
+          PINO_TAG: ${{ needs.plan.outputs.adapter_pino_dist_tag }}
+          OTEL_TAG: ${{ needs.plan.outputs.adapter_otel_dist_tag }}
+          AI_CONTEXT_TAG: ${{ needs.plan.outputs.adapter_ai_context_dist_tag }}
+          MCP_TAG: ${{ needs.plan.outputs.adapter_mcp_dist_tag }}
         run: |
           set -euo pipefail
-          [ "$ADAPTER" = "true" ] && npm publish --workspace @redact-secret/adapter --access public --dry-run
-          [ "$PINO" = "true" ] && npm publish --workspace @redact-secret/adapter-pino --access public --dry-run
-          [ "$OTEL" = "true" ] && npm publish --workspace @redact-secret/adapter-otel --access public --dry-run
+          [ "$ADAPTER" = "true" ] && npm publish --workspace @redact-secret/adapter --access public --tag "$ADAPTER_TAG" --dry-run
+          [ "$PINO" = "true" ] && npm publish --workspace @redact-secret/adapter-pino --access public --tag "$PINO_TAG" --dry-run
+          [ "$OTEL" = "true" ] && npm publish --workspace @redact-secret/adapter-otel --access public --tag "$OTEL_TAG" --dry-run
+          [ "$AI_CONTEXT" = "true" ] && npm publish --workspace @redact-secret/adapter-ai-context --access public --tag "$AI_CONTEXT_TAG" --dry-run
+          [ "$MCP" = "true" ] && npm publish --workspace @redact-secret/adapter-mcp --access public --tag "$MCP_TAG" --dry-run
           true
 
   python:

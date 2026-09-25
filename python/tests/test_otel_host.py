@@ -28,6 +28,7 @@ from fake_scanner import fake_scan_and_redact  # noqa: E402
 from opentelemetry.sdk.trace import TracerProvider  # noqa: E402
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter  # noqa: E402
+from opentelemetry.trace import Link, Status, StatusCode  # noqa: E402
 
 from redact_secret_adapters.otel import RedactingSpanProcessorWith  # noqa: E402
 
@@ -41,6 +42,7 @@ def test_a_real_spans_attributes_are_actually_mutated_before_the_exporter_sees_t
     span = tracer.start_span("llm-call")
     span.set_attribute("llm.input_messages", "call SECRET_TOKEN_1 now")
     span.set_attribute("llm.tags", ["ok", "BLOCK_ME here"])
+    span.set_attribute("llm.optional", ["SECRET_TOKEN_3 x", None])
     span.set_attribute("retry.count", 3)
     span.set_attribute("retry.ok", True)
     span.set_attribute("boom", "trigger BOOM here")
@@ -52,6 +54,7 @@ def test_a_real_spans_attributes_are_actually_mutated_before_the_exporter_sees_t
     assert dict(exported.attributes) == {
         "llm.input_messages": "call <SECRET_1> now",
         "llm.tags": ("ok", "[REDACTED:BLOCKED]"),
+        "llm.optional": ("<SECRET_1> x", None),
         "retry.count": 3,
         "retry.ok": True,
         "boom": "[REDACTED:ERROR]",
@@ -59,7 +62,43 @@ def test_a_real_spans_attributes_are_actually_mutated_before_the_exporter_sees_t
     assert [dict(event.attributes) for event in exported.events] == [{"tool.args": "value <SECRET_1> done"}]
 
     serialized = exported.to_json() + json.dumps([dict(event.attributes) for event in exported.events])
-    for plaintext in ("SECRET_TOKEN_1", "SECRET_TOKEN_2", "BLOCK_ME", "BOOM", "simulated core failure"):
+    for plaintext in (
+        "SECRET_TOKEN_1",
+        "SECRET_TOKEN_2",
+        "SECRET_TOKEN_3",
+        "BLOCK_ME",
+        "BOOM",
+        "simulated core failure",
+    ):
+        assert plaintext not in serialized
+
+    provider.shutdown()
+
+
+def test_a_real_spans_name_status_event_names_and_link_attributes_are_redacted() -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(RedactingSpanProcessorWith(SimpleSpanProcessor(exporter), fake_scan_and_redact))
+    tracer = provider.get_tracer("redact-secret-adapters-host-test")
+
+    linked = tracer.start_span("linked")
+    link = Link(linked.get_span_context(), {"peer.token": "SECRET_TOKEN_4 here"})
+    span = tracer.start_span("GET SECRET_TOKEN_1", links=[link])
+    span.add_event("retry SECRET_TOKEN_2")
+    span.set_status(Status(StatusCode.ERROR, "failed with SECRET_TOKEN_3"))
+    span.end()
+    linked.end()
+    provider.force_flush()
+
+    exported = next(s for s in exporter.get_finished_spans() if s.name != "linked")
+    assert exported.name == "GET <SECRET_1>"
+    assert exported.status.status_code is StatusCode.ERROR
+    assert exported.status.description == "failed with <SECRET_1>"
+    assert [event.name for event in exported.events] == ["retry <SECRET_1>"]
+    assert [dict(link.attributes) for link in exported.links] == [{"peer.token": "<SECRET_1> here"}]
+
+    serialized = exported.to_json()
+    for plaintext in ("SECRET_TOKEN_1", "SECRET_TOKEN_2", "SECRET_TOKEN_3", "SECRET_TOKEN_4"):
         assert plaintext not in serialized
 
     provider.shutdown()

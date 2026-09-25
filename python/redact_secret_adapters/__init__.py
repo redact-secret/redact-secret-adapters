@@ -6,11 +6,17 @@ Importing this package imports neither ``redact_secret`` nor any host SDK.
 needs them.
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .mask_leaf import BLOCK_MARKER, CYCLE_MARKER, DEFAULT_LIMITS, ERROR_MARKER, LIMIT_MARKER, mask_leaf_with
 from .mask_log_value import mask_log_value_with
 from .mask_secrets import mask_secrets_with
 
-__version__ = "0.1.0"
+# pyproject.toml is the single source of the version.
+try:
+    __version__ = version("redact-secret-adapters")
+except PackageNotFoundError:  # imported from a source tree that was never installed
+    __version__ = "0+unknown"
 
 __all__ = [
     "BLOCK_MARKER",

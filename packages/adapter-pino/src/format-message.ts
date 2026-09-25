@@ -1,48 +1,17 @@
 /**
- * Joins a pino `msg` format string with its printf-style interpolation
- * values into the exact string pino itself would write -- the scanning
- * boundary `./log-method.ts` needs (a secret split across
- * `msg` and an interpolation value, or across two interpolation values, was
- * invisible to a hook that scanned each argument as its own leaf).
+ * A line-for-line port of the string branch of `quick-format-unescaped`
+ * 4.0.4 (MIT, https://github.com/pinojs/quick-format-unescaped), the
+ * formatter pino applies to `msg` after `hooks.logMethod` returns. The
+ * hook joins with it so the scanner sees the exact string pino will write —
+ * including its quirks: an unmatched placeholder stays literal, an unused
+ * trailing value is dropped, and `%%` consumes no value.
+ * `test/format-message.test.ts` checks it byte for byte against the real
+ * package.
  *
- * pino never formats `msg` inside `hooks.logMethod` -- confirmed reading
- * `lib/tools.js`'s `genLog`/`LOG`, pino `10.3.1`: the hook runs first, and
- * only afterward does `LOG` call `format(msg, formatParams, this[formatOptsSym])`,
- * where `format` is pino's own direct dependency, the `quick-format-unescaped`
- * package (`require('quick-format-unescaped')`, `lib/tools.js:6`; pino's
- * `package.json` pins `^4.0.3`, resolving to `4.0.4` as of this writing).
- * `formatPinoMessage` below is a line-for-line port of that package's
- * string-formatting branch (`typeof f === 'string'`) -- MIT licensed,
- * https://github.com/pinojs/quick-format-unescaped -- not a reimplementation
- * from the docs, so it reproduces pino's exact placeholder consumption,
- * including the parts that read as bugs at first glance: an unmatched
- * placeholder (more `%s` than values) is left as literal text; an unused
- * trailing value (more values than placeholders) is silently dropped, never
- * appended; and `%%` does not consume a value. `test/format-message.test.ts`
- * asserts this port byte-for-byte against the real package (an explicit
- * devDependency, pinned to the same `4.0.4`) across a case table.
- *
- * ## Trust boundary
- *
- * - `%s`, `%d`, `%i`, `%f`, and `%%` are reproduced exactly: pino computes
- *   them with `String(value)`/`Number(value)`/`Math.floor(Number(value))`,
- *   and so does this port.
- * - `%j`, `%o`, and `%O` stringify a non-string, non-function value with
- *   `JSON.stringify` (falling back to the literal `"[Circular]"` if it
- *   throws), matching `quick-format-unescaped`'s own *default* `tryStringify`.
- *   pino itself never takes that default: it always supplies its own
- *   `stringify` (`pino.js`'s `formatOpts`, fast-safe-stringify-based, and
- *   additionally redaction-aware whenever the `redact` option is
- *   configured). A value that would render differently under fast-safe
- *   stringification -- a circular reference beyond `JSON.stringify`'s single
- *   top-level catch, a `BigInt`, or a path `redact` would have censored --
- *   renders differently here. This does not weaken redaction: the scan
- *   below still runs against this function's own JSON text, so a secret
- *   inside such a value is still caught by value; only pino's *unrelated*
- *   path-based `redact` censoring of that same value is not reproduced.
- *   A merging-object field is unaffected either way -- it is walked and
- *   redacted independently by `maskLogValueWith`, in its original shape,
- *   never funneled through this formatter.
+ * One known divergence: `%j`/`%o`/`%O` use `JSON.stringify` (the
+ * package default), where pino passes its own safe, `redact`-aware
+ * stringifier. Output can differ for circular values, bigints, or paths
+ * pino's `redact` would censor; the joined text is still scanned by value.
  */
 
 function tryStringify(value: unknown): string | undefined {
@@ -54,12 +23,12 @@ function tryStringify(value: unknown): string | undefined {
 }
 
 /**
- * `fmt`: the pino `msg` positional argument; must already be a `string` --
- * callers only invoke this once they know `msg` is a string with further
- * positional arguments to consume (see `./log-method.ts`'s
- * `joinInterpolatedMessage`). `values`: the arguments positionally after
- * `msg`, 0-indexed to the first interpolation value -- exactly the
- * `formatParams` array pino's own `LOG` passes to `format`.
+ * Formats `fmt` with `values` (the arguments after `msg`) exactly as pino
+ * would.
+ *
+ * @internal Exported for `@redact-secret/adapter-pino`'s own tests and kept
+ * for compatibility; not part of the supported API and may change in any
+ * release.
  */
 export function formatPinoMessage(fmt: string, values: readonly unknown[]): string {
   const argLen = values.length;
