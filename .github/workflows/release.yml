@@ -86,7 +86,15 @@ jobs:
         # deliberately, together with release-rehearsal.yml.
         run: npm install -g npm@11.19.1
 
-      - run: npm publish --workspace @redact-secret/adapter --access public --provenance
+      - name: Publish
+        # --tag from the plan: `latest` for a release, the prerelease's name
+        # (alpha, beta, rc) otherwise, so a prerelease never moves `latest`.
+        env:
+          DIST_TAG: ${{ needs.rehearsal.outputs.adapter_dist_tag }}
+        run: |
+          set -euo pipefail
+          [ -n "$DIST_TAG" ] || { echo "::error::The plan gave no dist-tag for @redact-secret/adapter"; exit 1; }
+          npm publish --workspace @redact-secret/adapter --access public --provenance --tag "$DIST_TAG"
 
   publish-adapter-pino:
     # A skipped adapter publish (not in this train) doesn't block this one;
@@ -123,7 +131,15 @@ jobs:
         # deliberately, together with release-rehearsal.yml.
         run: npm install -g npm@11.19.1
 
-      - run: npm publish --workspace @redact-secret/adapter-pino --access public --provenance
+      - name: Publish
+        # --tag from the plan: `latest` for a release, the prerelease's name
+        # (alpha, beta, rc) otherwise, so a prerelease never moves `latest`.
+        env:
+          DIST_TAG: ${{ needs.rehearsal.outputs.adapter_pino_dist_tag }}
+        run: |
+          set -euo pipefail
+          [ -n "$DIST_TAG" ] || { echo "::error::The plan gave no dist-tag for @redact-secret/adapter-pino"; exit 1; }
+          npm publish --workspace @redact-secret/adapter-pino --access public --provenance --tag "$DIST_TAG"
 
   publish-adapter-otel:
     name: Publish @redact-secret/adapter-otel
@@ -158,7 +174,15 @@ jobs:
         # deliberately, together with release-rehearsal.yml.
         run: npm install -g npm@11.19.1
 
-      - run: npm publish --workspace @redact-secret/adapter-otel --access public --provenance
+      - name: Publish
+        # --tag from the plan: `latest` for a release, the prerelease's name
+        # (alpha, beta, rc) otherwise, so a prerelease never moves `latest`.
+        env:
+          DIST_TAG: ${{ needs.rehearsal.outputs.adapter_otel_dist_tag }}
+        run: |
+          set -euo pipefail
+          [ -n "$DIST_TAG" ] || { echo "::error::The plan gave no dist-tag for @redact-secret/adapter-otel"; exit 1; }
+          npm publish --workspace @redact-secret/adapter-otel --access public --provenance --tag "$DIST_TAG"
 
   publish-python:
     # Independently versioned from the npm side, but ordered after it: a
