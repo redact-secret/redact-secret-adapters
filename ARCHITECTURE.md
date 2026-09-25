@@ -13,6 +13,7 @@ bottom; the top two are host-specific, the bottom two are shared.
 ```text
   L3  host seam          pino hooks.logMethod + hooks.streamWrite · SpanProcessor.onEnd · logging.Filter.filter
        |                 · the AI-context boundary's operations (no host: the caller is the seam)
+       |                 · the MCP boundary's operations and structural tool-handler wrappers
        |                 structural (duck-typed) match against the host's extension point
        |                 no runtime import of the host package
   L2  value-tree walker  recursive descent over everything JSON would emit:
@@ -74,6 +75,11 @@ conformance fixture, vendored byte-for-byte at a pinned 40-hex core commit
 range endpoints. `test/dependency-surface.test.ts` fails if the built package
 reads any other core member. The logging and tracing adapters keep the
 four-item surface above.
+
+`@redact-secret/adapter-mcp` reads no core member at all. It reaches the core
+only through `adapter-ai-context`'s boundary (`sanitizeValue`,
+`sanitizeText`, `openStream`), and its `test/dependency-surface.test.ts`
+fails if its built output imports anything else.
 
 Because a typecheck only covers the core version that is installed, CI
 typechecks at **both ends of every declared range**, host packages included.
@@ -212,6 +218,41 @@ replay the same vendored fixture (the core already runs its Python twin of
 the runner against every wheel), and `walkStrict` would get a Python twin
 with it.
 
+### MCP
+
+`adapter-mcp` implements the core's MCP boundary contract
+(redact-secret/redact-secret#612) as a thin specialization of
+`adapter-ai-context`. It contains no scan, walk, policy, or core-error
+mapping: a whole `CallToolResult` is one `sanitizeValue`, a streamed result
+is one `openStream`, and the key-context check is one `sanitizeText` per
+serialized part. What it adds is MCP shape only:
+
+- **Block types.** The five types of protocol revisions 2025-06-18 and
+  2025-11-25. Any other type, and any malformed shape, blocks as
+  `unsupported_value`, so a later revision fails closed.
+- **Binary payloads** are removed from the scan view and either block (the
+  default) or are put back unscanned at their original key position.
+- **Stopping a stream.** After every chunk it reads the stream's
+  `accepting` flag. On `false` it pulls no more and closes the producer
+  without waiting: `return()`, and `destroy()` when the source has one,
+  because a Node.js `Readable`'s async iterator queues `return()` behind a
+  pending `next()`.
+- **Fixed results.** Every non-`ok` outcome becomes a fixed `isError` result
+  and never a JSON-RPC error. The server wrappers catch a handler's throw
+  before the SDK can turn `error.message` into result text.
+
+The host seam is structural for both SDK lines, which differ in shape: a
+handler's signal is `extra.signal` on 1.x and `ctx.mcpReq.signal` on 2.x,
+and `client.callTool` takes `(params, schema, options)` on 1.x and
+`(params, options)` on 2.x. The wrappers read either signal, and the host
+passes its own `callTool` invocation to `sanitizeToolCall`, so no SDK is
+imported. The tests import the SDKs for real: both lines, at both endpoints
+of each declared range, over stdio and Streamable HTTP.
+
+The core's MCP fixture is replayed by the core's own runner
+(`fixtures/core/mcp-boundary.mjs`), vendored with the fixture, and not by a
+port of it.
+
 ### Python `logging`
 
 The filter formats `msg` with `args` (`record.getMessage()`) and masks the
@@ -275,12 +316,11 @@ holding the two languages together, so they are shared — one copy, read by bot
   means an external host integration; the core repository additionally uses
   "host adapter" for the CLI and the language bindings. Three distinct meanings,
   one word — do not consolidate them by moving code.
-- **MCP transport wiring** stays out until the core's supported MCP boundary
-  (redact-secret/redact-secret#612) is defined; the MCP adapter
-  (redact-secret-adapters#13) is then a thin specialization of
-  `adapter-ai-context`. Model-context wiring itself is no longer excluded:
-  the incremental surface it needs is now a published core contract (#610),
-  implemented by `adapter-ai-context`.
+- **MCP beyond `tools/call`.** `adapter-mcp` covers tool arguments and
+  results, which is the core's MCP boundary (#612). Resources, prompts,
+  sampling, elicitation, notifications, other-language SDKs, HTTP+SSE, and
+  `experimental.tasks` stay out until a contract covers them. Transport
+  wiring stays with the host: the adapter acts on the parsed result.
 - **Model-vendor wrappers** (OpenAI, Anthropic clients) and **model output
   scanning**: the AI-context boundary covers what goes into a context, and
   never patches a client.
@@ -297,6 +337,7 @@ packages/
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
   adapter-otel/         @redact-secret/adapter-otel     L3 + live wrapper
   adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper (unreleased)
+  adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context (unreleased)
 python/
   redact_secret_adapters/                               shared + logging + otel extra
 fixtures/                                               cross-language contract, shared

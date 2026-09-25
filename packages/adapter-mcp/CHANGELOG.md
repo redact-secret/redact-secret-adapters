@@ -1,0 +1,57 @@
+# Changelog
+
+All notable changes to `@redact-secret/adapter-mcp` are documented in this
+file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+Every package in this repository carries its own SemVer and is released
+independently; see [ARCHITECTURE.md § Versioning](../../ARCHITECTURE.md#versioning).
+A change to a range this package declares, against `@redact-secret/core` or an
+MCP SDK, is always its own entry and names the test that backs the new range.
+
+This package is not published yet: its manifest is `"private": true` and it
+is not in the release plan. It depends on `@redact-secret/adapter-ai-context`,
+which is unreleased too, so that package ships first. To release this one for
+the first time, follow
+[RELEASING.md § A brand-new npm package](../../RELEASING.md#a-brand-new-npm-package):
+drop `"private"`, wire it into `scripts/release-plan.mjs`,
+`scripts/release-notes.mjs` and `release.yml` (a publish job with
+`--provenance` after `adapter-ai-context`'s), raise its
+`@redact-secret/adapter-ai-context` range to that package's first published
+version, and move the entries below under a version heading.
+
+## [Unreleased]
+
+### Added
+
+- The supported MCP redaction boundary (redact-secret/redact-secret#612,
+  redact-secret-adapters#13), as a thin specialization of
+  `@redact-secret/adapter-ai-context`: `createMcpBoundary(options)` (live)
+  and `createMcpBoundaryWith(aiContextBoundary, options)` (injected), each
+  returning `sanitizeToolResult`, `sanitizeToolArguments` (opt-in, label
+  `tool-arguments`), `sanitizeToolCall`, `sanitizeStreamedToolResult`,
+  `wrapToolHandler`, and `wrapStreamedToolHandler`. The whole
+  `CallToolResult` is one AI-context `sanitizeValue`, followed by the
+  key-context check. Binary payloads block by default (`binaryContent:
+  "pass"` to opt out), and unknown block types block. A streamed result
+  stops pulling from its producer, and closes it, once the stream stops
+  accepting. Tool and handler errors become `tool_error` and are never
+  read. Every non-`ok` outcome maps to a fixed `isError: true`
+  `CallToolResult` (`toCallToolResult`), never to a JSON-RPC error.
+  Cancellation delivers nothing. `onAudit` receives one
+  `{ stage, outcome, reason?, code? }` record per crossing.
+- Qualified by replaying the core's `conformance/fixtures/mcp-boundary.json`
+  with the core's own runner (`conformance/mcp-boundary.mjs`), both vendored
+  at core commit `0e3ba9592b6fa80fafdea47639921987c36ba323`
+  (`fixtures/core/pins.json`), through the public API on the real core,
+  before and after `initialize()` (`test/conformance*.test.ts`). The same
+  fixture is replayed with real SDK clients and servers over stdio and
+  Streamable HTTP (`test/transport.test.ts`), and end to end through a host's
+  log, store and model context, including a real subprocess producer
+  (`test/e2e.test.ts`).
+- Declared ranges: `@redact-secret/core ^0.1.0-beta.6` (required peer), and as
+  optional peers `@modelcontextprotocol/sdk >=1.13.0 <=1.30.1` and
+  `@modelcontextprotocol/client` / `@modelcontextprotocol/server
+  >=2.0.0 <=2.1.0`. These are backed by `test/transport.test.ts` and
+  `test/e2e.test.ts` at both endpoints of every range in CI
+  (`range-endpoints`). 1.13.0 negotiates protocol 2025-06-18; 1.30.1, 2.0.0
+  and 2.1.0 negotiate 2025-11-25.

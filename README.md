@@ -29,6 +29,7 @@ hosts actually move at.
 | `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.0`, beta |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.0`, beta |
 | `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | **Unreleased**, not published |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | **Unreleased**, not published |
 
 The first four were published on 2026-09-22 in release train
 [`2026.09.22`](https://github.com/redact-secret/redact-secret-adapters/releases/tag/train/2026.09.22)
@@ -136,6 +137,24 @@ all-or-nothing, with allowlisted finding metadata. It is qualified by
 replaying the core's own conformance fixture, pinned to a core commit. Not on
 npm yet; see the [package README](./packages/adapter-ai-context#readme).
 
+### MCP (unreleased)
+
+```js
+import { createMcpBoundary, toCallToolResult } from "@redact-secret/adapter-mcp";
+
+const mcp = await createMcpBoundary({ wholeInputLimits, incrementalLimits, traversalLimits });
+const outcome = await mcp.sanitizeToolCall(({ signal }) => client.callTool(params, undefined, { signal }));
+const safe = toCallToolResult(outcome); // sanitized result, a fixed isError result, or null if cancelled
+```
+
+The core's [MCP boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/mcp-boundary.md),
+as a thin specialization of `adapter-ai-context`. It scans the whole tool
+result (text, `structuredContent`, `_meta`, resources, links) before the result
+is logged, persisted, or placed into model context. It also offers opt-in
+argument sanitation, streamed tool output that stops reading on failure, and
+fixed `isError` results in place of errors. It names every security non-goal
+in its [package README](./packages/adapter-mcp#readme). Not on npm yet.
+
 ### Masking callbacks (Langfuse and similar)
 
 Hosts that hand you a value to mask need no dedicated package — the shared
@@ -192,6 +211,7 @@ exercises, at both ends of the declared range.
 | `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger`: filter before formatter, `QueueHandler`/`QueueListener`, threads sharing one handler, a failing handler |
 | `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | real spans through simple and batch processors, spans from threads, a failing exporter, flush and shutdown |
 | `adapter-ai-context` (unreleased) | `@redact-secret/core ^0.1.0-beta.6` (no host) | the core's AI-context conformance fixture replayed on the real core before and after `initialize()`, and an end-to-end agent turn with every limit |
+| `adapter-mcp` (unreleased) | `@modelcontextprotocol/sdk >=1.13.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-06-18 and 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
 
 [`compatibility.json`](./compatibility.json) is the machine-readable form of
 this table: every declared range, the endpoints CI installs, the runtimes it
@@ -261,8 +281,8 @@ packages are not part of that lockstep: a new pino release moves
 
 No detection: deciding what a secret is stays in the core. Also out of scope
 are stream adapters (Node `Transform` and Web `TransformStream` ship inside
-`@redact-secret/core` as `./node-stream` and `./web-stream`), MCP transport
-wiring, model-vendor or LangChain wrappers, and a Langfuse package;
+`@redact-secret/core` as `./node-stream` and `./web-stream`), MCP messages
+other than `tools/call`, model-vendor or LangChain wrappers, and a Langfuse package;
 [ARCHITECTURE.md § Deliberate exclusions](./ARCHITECTURE.md#deliberate-exclusions)
 gives the reason for each.
 

@@ -114,6 +114,55 @@
       ]
     },
     {
+      "name": "@redact-secret/adapter-mcp",
+      "registry": "npm",
+      "manifest": "packages/adapter-mcp/package.json",
+      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "ciExercised": ["20", "22", "24"] },
+      "requires": [
+        {
+          "name": "@modelcontextprotocol/client",
+          "range": ">=2.0.0 <=2.1.0",
+          "kind": "peerDependency (optional)",
+          "endpoints": { "lowest": "2.0.0", "highest": "2.1.0" }
+        },
+        {
+          "name": "@modelcontextprotocol/sdk",
+          "range": ">=1.13.0 <=1.30.1",
+          "kind": "peerDependency (optional)",
+          "endpoints": { "lowest": "1.13.0", "highest": "1.30.1" }
+        },
+        {
+          "name": "@modelcontextprotocol/server",
+          "range": ">=2.0.0 <=2.1.0",
+          "kind": "peerDependency (optional)",
+          "endpoints": { "lowest": "2.0.0", "highest": "2.1.0" }
+        },
+        {
+          "name": "@redact-secret/core",
+          "range": "^0.1.0-beta.6",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.8" }
+        }
+      ],
+      "lifecycle": [
+        "the core's mcp-boundary conformance fixture and runner, vendored at a pinned core commit, replayed through the public API on the real core before and after initialize()",
+        "the same fixture carried by real SDK 1.x and 2.x clients and servers over stdio (child process) and Streamable HTTP (127.0.0.1), protocol 2025-06-18 (1.13.0) and 2025-11-25 (1.30.1, 2.0.0, 2.1.0)",
+        "opt-in argument sanitation before dispatch: a blocked argument set never reaches the server",
+        "server wrappers on the low-level Server and McpServer.registerTool: a throwing handler caught before the SDK converts its message",
+        "cancellation over the wire: the host delivers nothing, the server closes its producer and sends no response",
+        "a host that logs, persists and builds model context only from the boundary's output, including a real subprocess producer: split, block, limit, cancellation",
+        "failing onAudit and onFinding callbacks, a JSON-RPC error, and a core that fails to initialize"
+      ],
+      "qualifiedBy": [
+        "packages/adapter-mcp/test/conformance.test.ts",
+        "packages/adapter-mcp/test/conformance-uninitialized.test.ts",
+        "packages/adapter-mcp/test/transport.test.ts",
+        "packages/adapter-mcp/test/e2e.test.ts",
+        "packages/adapter-mcp/test/boundary.test.ts",
+        "packages/adapter-mcp/test/live-init-failure.test.ts"
+      ]
+    },
+    {
       "name": "redact-secret-adapters",
       "registry": "pypi",
       "manifest": "python/pyproject.toml",
@@ -171,6 +220,18 @@
       "how": "peerDependencies ^0.1.0-beta.6 on every npm package: npm 7 and later stop with ERESOLVE"
     },
     {
+      "host": "@modelcontextprotocol/sdk",
+      "versions": "<1.13.0 or >1.30.1",
+      "enforcement": "refused",
+      "how": "optional peerDependency >=1.13.0 <=1.30.1 on adapter-mcp: when the SDK is installed, npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it. The cap is the highest tested release: a newer one is unqualified until it is added as an endpoint here"
+    },
+    {
+      "host": "@modelcontextprotocol/client and @modelcontextprotocol/server",
+      "versions": "<2.0.0 or >2.1.0",
+      "enforcement": "refused",
+      "how": "optional peerDependencies >=2.0.0 <=2.1.0 on adapter-mcp: npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it"
+    },
+    {
       "host": "opentelemetry-sdk",
       "versions": "<1.16.0 or >=2",
       "enforcement": "refused",
@@ -205,6 +266,12 @@
       "versions": "all qualified versions",
       "enforcement": "documented",
       "how": "the span processors apply maxStringLength per element but no element-count bound of their own to a string-array attribute; the SDK's attribute limits are the only bound, so a very wide array costs one scan per element"
+    },
+    {
+      "host": "MCP SDKs for other languages (the Python mcp SDK included), the HTTP+SSE transport, experimental.tasks and partial results, MCP messages other than tools/call",
+      "versions": "all",
+      "enforcement": "documented",
+      "how": "packages/adapter-mcp/README.md names them as unsupported; no Python MCP adapter exists, and the boundary acts only on tools/call arguments and results"
     }
   ]
 }

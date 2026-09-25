@@ -3,9 +3,11 @@
  * Packs every workspace, installs the tarballs into a throwaway project
  * OUTSIDE the checkout, then imports each package through its public entry
  * point, exercises it against a real host (`pino`,
- * `@opentelemetry/sdk-trace-base`), runs `adapter-ai-context`'s documented
- * README example verbatim on the real core, and typechecks a consumer file
- * against the installed `.d.ts` files.
+ * `@opentelemetry/sdk-trace-base`, both MCP SDK lines), runs
+ * `adapter-ai-context`'s and `adapter-mcp`'s documented README examples
+ * verbatim on the real core, and typechecks a consumer file against the
+ * installed `.d.ts` files, including a wrapped handler passed to each SDK
+ * line's `registerTool`.
  *
  * Workspace resolution inside this monorepo papers over a wrong `exports`
  * entry, a missing `types` path, or a `dist` file that was never emitted —
@@ -13,7 +15,8 @@
  * shape the way an outside consumer would install it.
  *
  * Install order matters: `adapter` first, then `adapter-pino`,
- * `adapter-otel` and `adapter-ai-context`, which depend on it. If `adapter` isn't already installed
+ * `adapter-otel` and `adapter-ai-context`, which depend on it, then
+ * `adapter-mcp`, which depends on `adapter-ai-context`. If `adapter` isn't already installed
  * from its tarball when the other two are, npm resolves
  * `@redact-secret/adapter` from the registry instead: a different build
  * than the one under test, or a failed install when the checkout declares
@@ -29,7 +32,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const PACKAGE_ORDER = ["adapter", "adapter-pino", "adapter-otel", "adapter-ai-context"];
+const PACKAGE_ORDER = ["adapter", "adapter-pino", "adapter-otel", "adapter-ai-context", "adapter-mcp"];
 
 function manifestFor(pkgDir) {
   return JSON.parse(readFileSync(join(repoRoot, "packages", pkgDir, "package.json"), "utf-8"));
@@ -83,11 +86,13 @@ function main() {
     // 3. Install in dependency order: adapter, then its dependents.
     npm(["install", tarballs.adapter], projectDir);
     npm(["install", tarballs["adapter-pino"], tarballs["adapter-otel"], tarballs["adapter-ai-context"]], projectDir);
+    npm(["install", tarballs["adapter-mcp"]], projectDir);
 
     // 4. The peer hosts and the type-only peer, at the ranges this repo declares.
     const adapterManifest = manifestFor("adapter");
     const pinoManifest = manifestFor("adapter-pino");
     const otelManifest = manifestFor("adapter-otel");
+    const mcpPeers = manifestFor("adapter-mcp").peerDependencies;
     const rootManifest = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf-8"));
     npm(
       [
@@ -95,6 +100,9 @@ function main() {
         `pino@${pinoManifest.peerDependencies.pino}`,
         `@opentelemetry/sdk-trace-base@${otelManifest.peerDependencies["@opentelemetry/sdk-trace-base"]}`,
         `@redact-secret/core@${adapterManifest.peerDependencies["@redact-secret/core"]}`,
+        `@modelcontextprotocol/sdk@${mcpPeers["@modelcontextprotocol/sdk"]}`,
+        `@modelcontextprotocol/client@${mcpPeers["@modelcontextprotocol/client"]}`,
+        `@modelcontextprotocol/server@${mcpPeers["@modelcontextprotocol/server"]}`,
         `typescript@${rootManifest.devDependencies.typescript}`,
         `@types/node@${rootManifest.devDependencies["@types/node"]}`,
       ],
@@ -119,6 +127,24 @@ function main() {
       throw new Error("adapter-ai-context: the README example did not print the redacted context");
     }
     console.log("@redact-secret/adapter-ai-context: README example ok");
+
+    // 5c. adapter-mcp's README example, verbatim, on the real core.
+    writeFileSync(join(projectDir, "mcp-example.mjs"), readmeExample("adapter-mcp"));
+    console.log("+ node mcp-example.mjs");
+    const mcpPrinted = execFileSync(process.execPath, ["mcp-example.mjs"], {
+      cwd: projectDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    const mcpResult = JSON.parse(mcpPrinted.trim().split("\n").at(-1));
+    if (
+      mcpResult.content?.[0]?.text !== "deploy ok\nAPI_KEY=<SECRET_1>" ||
+      mcpResult.structuredContent?.env?.[0] !== "API_KEY=<SECRET_1>" ||
+      mcpPrinted.includes("ghp_SYNTHETIC")
+    ) {
+      throw new Error("adapter-mcp: the README example did not print the redacted result");
+    }
+    console.log("@redact-secret/adapter-mcp: README example ok");
 
     // 6. Types resolve for a consumer, typechecked against the installed `.d.ts`.
     writeFileSync(join(projectDir, "smoke-test.ts"), SMOKE_TEST_TS);
@@ -168,6 +194,9 @@ import { BLOCK_MARKER, ERROR_MARKER, maskSecretsWith } from "@redact-secret/adap
 import { createRedactingLogMethodWith } from "@redact-secret/adapter-pino";
 import { RedactingSpanProcessorWith } from "@redact-secret/adapter-otel";
 import { createAiContextBoundaryWith } from "@redact-secret/adapter-ai-context";
+import { createMcpBoundaryWith, mcpBlockedResult, toCallToolResult } from "@redact-secret/adapter-mcp";
+import { McpServer as McpServerV1 } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer as McpServerV2 } from "@modelcontextprotocol/server";
 ${FAKE_SCANNER}
 // @redact-secret/adapter: mask a value through maskSecretsWith with an injected scanner.
 assert.equal(typeof BLOCK_MARKER, "string");
@@ -213,6 +242,17 @@ assert.deepEqual(boundary.sanitizeValue({ note: "token SECRET_TOKEN_1 here" }).v
 assert.deepEqual(boundary.sanitizeText("BLOCK_ME"), { outcome: "blocked", reason: "policy" });
 assert.deepEqual(boundary.sanitizeText("BOOM"), { outcome: "blocked", reason: "core_error" });
 console.log("@redact-secret/adapter-ai-context: ok");
+
+// @redact-secret/adapter-mcp: the injected API over the same boundary, and a wrapped handler registered on both SDK lines.
+const mcp = createMcpBoundaryWith(boundary);
+const sanitized = mcp.sanitizeToolResult({ content: [{ type: "text", text: "token SECRET_TOKEN_1 here" }] });
+assert.deepEqual(toCallToolResult(sanitized), { content: [{ type: "text", text: "token <SECRET_1> here" }] });
+assert.deepEqual(toCallToolResult(mcp.sanitizeToolResult({ content: [{ type: "text", text: "BLOCK_ME" }] })), mcpBlockedResult());
+const wrapped = mcp.wrapToolHandler(() => { throw new Error("SECRET_TOKEN_1"); });
+new McpServerV1({ name: "smoke", version: "0.0.0" }).registerTool("t", { description: "d" }, wrapped);
+new McpServerV2({ name: "smoke", version: "0.0.0" }).registerTool("t", { description: "d" }, wrapped);
+assert.equal(JSON.stringify(await wrapped({})).includes("SECRET_TOKEN_1"), false);
+console.log("@redact-secret/adapter-mcp: ok");
 `;
 
 const SMOKE_TEST_TS = `import pino from "pino";
@@ -252,6 +292,17 @@ import {
   type AiContextOutcome,
   type SafeFinding,
 } from "@redact-secret/adapter-ai-context";
+import {
+  MCP_BLOCKED_TEXT,
+  createMcpBoundary,
+  createMcpBoundaryWith,
+  toCallToolResult,
+  type McpAuditRecord,
+  type McpBoundary,
+  type McpOutcome,
+} from "@redact-secret/adapter-mcp";
+import { McpServer as McpServerV1 } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer as McpServerV2 } from "@modelcontextprotocol/server";
 import { initialize, scanAndRedact, createIncrementalSanitizer } from "@redact-secret/core";
 
 const scanner: ScanAndRedact = (text) => ({ text, findings: [] });
@@ -290,13 +341,31 @@ if (aiOutcome.outcome === "blocked") void aiOutcome.reason;
 void createAiContextBoundary;
 void BLOCK_REASONS;
 void SAFE_FINDING_FIELDS;
+
+const mcpBoundary: McpBoundary = createMcpBoundaryWith(aiBoundary, {
+  binaryContent: "block",
+  onAudit: (record: McpAuditRecord) => void [record.stage, record.outcome],
+});
+const mcpOutcome: McpOutcome<unknown> = mcpBoundary.sanitizeToolResult({ content: [] });
+void toCallToolResult(mcpOutcome);
+void createMcpBoundary;
+void MCP_BLOCKED_TEXT;
+// A wrapped handler is assignable to each SDK line's tool callback.
+const handler = mcpBoundary.wrapToolHandler(() => ({ content: [{ type: "text" as const, text: "ok" }] }));
+new McpServerV1({ name: "smoke", version: "0.0.0" }).registerTool("t", { description: "d" }, handler);
+new McpServerV2({ name: "smoke", version: "0.0.0" }).registerTool("t", { description: "d" }, handler);
+const streamed = mcpBoundary.wrapStreamedToolHandler(async function* () { yield "chunk"; });
+new McpServerV1({ name: "smoke", version: "0.0.0" }).registerTool("s", { description: "d" }, streamed);
+new McpServerV2({ name: "smoke", version: "0.0.0" }).registerTool("s", { description: "d" }, streamed);
 `;
 
+// `dom` because `@modelcontextprotocol/sdk`'s own declarations name
+// `HeadersInit`; with `skipLibCheck: false` they are checked too.
 const TSCONFIG_JSON = JSON.stringify(
   {
     compilerOptions: {
       target: "es2022",
-      lib: ["es2022"],
+      lib: ["es2022", "dom"],
       module: "nodenext",
       moduleResolution: "nodenext",
       strict: true,

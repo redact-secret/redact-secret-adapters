@@ -183,7 +183,7 @@ partition. The conformance replay checks this directly.
 
 - **No vendor or framework wiring.** No OpenAI, Anthropic, LangChain, or
   LangGraph client wrapping or monkey-patching, and no MCP transport handling
-  (an MCP specialization is redact-secret-adapters#13). Call the boundary
+  (for MCP tool calls, use [`@redact-secret/adapter-mcp`](../adapter-mcp#readme)). Call the boundary
   yourself where your framework builds context or receives a tool result.
 - **No model output.** This covers what goes *into* context. Scanning a
   model's response is a different boundary.
