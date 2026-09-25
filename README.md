@@ -165,13 +165,49 @@ exercises, at both ends of the declared range.
 
 | Adapter | Declared range | Verified by |
 | --- | --- | --- |
-| `adapter-pino` | `pino ^10.0.0` | a real `pino` logger writing to a captured stream |
-| `adapter-otel` | `@opentelemetry/sdk-trace-base ^2.0.0` | a real span passed through `onEnd` |
-| `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger` with the filter attached |
-| `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | a real span passed through a real `TracerProvider` |
+| `adapter-pino` | `pino ^10.0.0` | a real `pino` logger: captured stream, sonic-boom async destination, worker-thread transport, concurrent loggers, a failing destination |
+| `adapter-otel` | `@opentelemetry/sdk-trace-base ^2.0.0` | real spans through `SimpleSpanProcessor` and `BatchSpanProcessor`, concurrent spans, a failing exporter, flush and shutdown |
+| `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger`: filter before formatter, `QueueHandler`/`QueueListener`, threads sharing one handler, a failing handler |
+| `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | real spans through simple and batch processors, spans from threads, a failing exporter, flush and shutdown |
+
+[`compatibility.json`](./compatibility.json) is the machine-readable form of
+this table: every declared range, the endpoints CI installs, the runtimes it
+exercises, and the test files that qualify each package.
+`npm run compat:check` fails CI when the record, the manifests, and `ci.yml`
+disagree.
+
+An unqualified host is either refused at install time or listed as
+unqualified there:
+
+- **Refused.** An out-of-range `pino`, `@opentelemetry/sdk-trace-base` or
+  `@redact-secret/core` stops `npm install` with `ERESOLVE`, unless you
+  override it with `--legacy-peer-deps` or `--force`. pip refuses an
+  `opentelemetry-sdk` or `redact-secret` outside the declared range, and any
+  CPython older than 3.10.
+- **Documented, not refused.** Node.js outside 20.x, 22.x and 24.x (`engines`
+  only warns) and CPython 3.15 or later install but are not tested.
 
 pino `9.x` is deliberately **not** in the declared range. It may work; it is not
 tested, so it is not claimed.
+
+## Operational overhead
+
+`scripts/measure-overhead.mjs` (pino, OpenTelemetry JS, `maskSecrets`) and
+`scripts/measure-overhead.py` (`logging`, OpenTelemetry Python,
+`mask_secrets`) time the same workloads, built from
+[`fixtures/overhead-profiles.json`](./fixtures/overhead-profiles.json). Each
+harness keeps four costs apart: the host alone, the adapter's own traversal
+(over a scanner that finds nothing), the core's scan of exactly the leaves the
+adapter hands it, and the host plus adapter plus the real core. Neither
+harness carries a threshold or a verdict. The numbers depend on the host, so
+the baseline and any budget over it live in
+[redact-secret-benchmarks](https://github.com/redact-secret/redact-secret-benchmarks),
+not here.
+
+```bash
+npm run build && node scripts/measure-overhead.mjs --out overhead-js.json
+pip install -e "./python[otel]" && python scripts/measure-overhead.py --out overhead-python.json
+```
 
 ## Relationship to the core
 
