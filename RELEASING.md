@@ -44,6 +44,18 @@ version: package versions stay per package.
 Package tags: `adapter`, `adapter-pino`, `adapter-otel`, and
 `redact-secret-adapters` (PyPI).
 
+### Prereleases and npm dist-tags
+
+Every npm publish passes `--tag`, taken from the plan
+(`distTagFor` in `scripts/release-plan.mjs`): `latest` for a release version,
+and the first prerelease identifier for a prerelease, so `0.1.0-alpha` and
+`0.1.0-alpha.2` publish under `alpha`, `1.0.0-rc.1` under `rc`. A prerelease
+never moves `latest`, and npm 11 refuses to publish (or dry-run) a prerelease
+without `--tag` anyway. A prerelease whose first identifier can't be a tag
+(`1.0.0-0`, `1.0.0-latest`) fails the plan. A consumer installs a prerelease
+by its exact version or tag (`npm install <package>@alpha`). The PyPI package
+has no dist-tags: pip skips a pre-release unless it is asked for one.
+
 ## Cutting a release
 
 1. **Bump on `develop`.** In a normal PR, bump each package you're
@@ -134,7 +146,9 @@ publish job in `release.yml`), then bootstrap it once by hand:
 
 1. Cut the train as usual. On the `rc/<train>` head, build and publish the
    new package from your machine:
-   `npm ci && npm run build && npm publish --workspace <package> --access public`.
+   `npm ci && npm run build && npm publish --workspace <package> --access public --tag <dist-tag>`,
+   where `<dist-tag>` is the package's entry in the plan (`node scripts/release-plan.mjs`
+   prints it: `latest`, or `alpha` for a `-alpha` prerelease).
    This version has no provenance attestation; later ones will.
 2. On npmjs.com, add the package's trusted publisher (this repository,
    `release.yml`, environment `release`), then under *Publishing access*

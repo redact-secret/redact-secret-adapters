@@ -35,10 +35,16 @@ on:
         value: ${{ jobs.plan.outputs.publish_python }}
       adapter_version:
         value: ${{ jobs.plan.outputs.adapter_version }}
+      adapter_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_dist_tag }}
       adapter_pino_version:
         value: ${{ jobs.plan.outputs.adapter_pino_version }}
+      adapter_pino_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_pino_dist_tag }}
       adapter_otel_version:
         value: ${{ jobs.plan.outputs.adapter_otel_version }}
+      adapter_otel_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_otel_dist_tag }}
       python_version:
         value: ${{ jobs.plan.outputs.python_version }}
 
@@ -57,8 +63,11 @@ jobs:
       publish_adapter_otel: ${{ steps.plan.outputs.publish_adapter_otel }}
       publish_python: ${{ steps.plan.outputs.publish_python }}
       adapter_version: ${{ steps.plan.outputs.adapter_version }}
+      adapter_dist_tag: ${{ steps.plan.outputs.adapter_dist_tag }}
       adapter_pino_version: ${{ steps.plan.outputs.adapter_pino_version }}
+      adapter_pino_dist_tag: ${{ steps.plan.outputs.adapter_pino_dist_tag }}
       adapter_otel_version: ${{ steps.plan.outputs.adapter_otel_version }}
+      adapter_otel_dist_tag: ${{ steps.plan.outputs.adapter_otel_dist_tag }}
       python_version: ${{ steps.plan.outputs.python_version }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -116,11 +125,16 @@ jobs:
           ADAPTER: ${{ needs.plan.outputs.publish_adapter }}
           PINO: ${{ needs.plan.outputs.publish_adapter_pino }}
           OTEL: ${{ needs.plan.outputs.publish_adapter_otel }}
+          # The dist-tag each publish job passes as --tag (release-plan.mjs):
+          # npm refuses a prerelease without one, dry run included.
+          ADAPTER_TAG: ${{ needs.plan.outputs.adapter_dist_tag }}
+          PINO_TAG: ${{ needs.plan.outputs.adapter_pino_dist_tag }}
+          OTEL_TAG: ${{ needs.plan.outputs.adapter_otel_dist_tag }}
         run: |
           set -euo pipefail
-          [ "$ADAPTER" = "true" ] && npm publish --workspace @redact-secret/adapter --access public --dry-run
-          [ "$PINO" = "true" ] && npm publish --workspace @redact-secret/adapter-pino --access public --dry-run
-          [ "$OTEL" = "true" ] && npm publish --workspace @redact-secret/adapter-otel --access public --dry-run
+          [ "$ADAPTER" = "true" ] && npm publish --workspace @redact-secret/adapter --access public --tag "$ADAPTER_TAG" --dry-run
+          [ "$PINO" = "true" ] && npm publish --workspace @redact-secret/adapter-pino --access public --tag "$PINO_TAG" --dry-run
+          [ "$OTEL" = "true" ] && npm publish --workspace @redact-secret/adapter-otel --access public --tag "$OTEL_TAG" --dry-run
           true
 
   python:

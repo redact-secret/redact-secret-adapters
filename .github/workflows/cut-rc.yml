@@ -96,9 +96,9 @@ jobs:
           {
             echo "Release train \`$TRAIN\`, cut from develop at $(git rev-parse --short HEAD)."
             echo
-            echo "| Package | Registry | Version | Plan |"
-            echo "|---|---|---|---|"
-            echo "$PLAN" | jq -r '.[] | "| \(.name) | \(.registry) | \(.version) | \(if .publish then "**publish**" else "already published, skip" end) |"'
+            echo "| Package | Registry | Version | Dist-tag | Plan |"
+            echo "|---|---|---|---|---|"
+            echo "$PLAN" | jq -r '.[] | "| \(.name) | \(.registry) | \(.version) | \(.distTag // "—") | \(if .publish then "**publish**" else "already published, skip" end) |"'
             echo
             echo "Fixes for this train go in as PRs into \`rc/$TRAIN\`; they reach develop through the sync PR opened after release."
             echo "Merging this PR (merge commit) runs **Release**: rehearsal, publish, then reconcile."
