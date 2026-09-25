@@ -47,6 +47,7 @@ maskLogValueWith(scanAndRedact, { err: new Error("also walks Errors") });
 | `maskSecretsWith(scan, data, { policy, limits })` | Walk a value tree and mask every string in it (see below) |
 | `maskLogValueWith(scan, data, { policy, limits })` | The same walk, under its logging-side name |
 | `createMaskSecrets({ policy, limits })` | Live wrapper over the real core |
+| `walkStrict(value, { maxDepth, maxNodes }, { string, key })` | **Unreleased.** The all-or-nothing walk (see below) |
 | `ScanAndRedact` | The injected scanner's type |
 
 The walk returns a masked copy of everything JSON serialization would emit:
@@ -62,6 +63,25 @@ The walk returns a masked copy of everything JSON serialization would emit:
 Numbers, booleans, `null`, `undefined`, bigints and functions pass through. A
 getter or `toJSON()` that throws becomes `[REDACTED:ERROR]` for that value; the
 walk itself never throws.
+
+## The all-or-nothing walk
+
+**Unreleased.** `walkStrict` is the walker for hosts where a partially
+scanned value is not a safe value, such as a model context
+(`@redact-secret/adapter-ai-context`). It scans nothing itself: every string
+and every own enumerable object key goes to the caller's visitor, which
+returns `{ ok: true, text }` (or `{ ok: true }` for a key, which is never
+rewritten) or `{ ok: false, failure }` to end the walk. The result is a fresh
+copy, or the first failure; no marker is ever substituted.
+
+| Failure | When |
+| --- | --- |
+| `limit_exceeded` | More than `maxDepth` nested containers (the root counts as 1), or more than `maxNodes` visited values (keys are not counted) |
+| `unsupported_value` | Anything but a string, finite number, boolean, `null`, array, or plain object — including `undefined`, an array hole, a `Date`, a class instance, an `Error` — a cycle, or a value whose read throws |
+| the visitor's own | A visitor returned `{ ok: false, failure }` |
+
+A shared, acyclic reference is copied as many times as it is reached. A
+visitor that throws is a bug in the caller, and its exception propagates.
 
 ## Fail-closed markers
 
