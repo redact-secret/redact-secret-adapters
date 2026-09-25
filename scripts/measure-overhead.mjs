@@ -8,6 +8,9 @@
  *   node scripts/measure-overhead.mjs --out overhead-js.json
  *   node scripts/measure-overhead.mjs --quick --out -        # CI smoke: shape only, numbers meaningless
  *
+ * Package size and initialization time are measured separately, by
+ * `scripts/measure-footprint.mjs`: both are one-off costs, not per event.
+ *
  * For every (host, profile) pair it times four modes over the same events,
  * interleaved and rotated per repetition so drift spreads evenly:
  *
@@ -28,7 +31,7 @@ import os from "node:os";
 
 import { buildEvents, loadProfiles, workloadDigest } from "./overhead-workloads.mjs";
 
-const HOSTS = ["pino", "pino-streamwrite", "otel-js", "mask-js"];
+const HOSTS = ["pino", "pino-streamwrite", "otel-js", "mask-js", "ai-context-js"];
 const MODES = ["host", "adapter-identity", "adapter-core", "core-direct"];
 
 function parseArgs(argv) {
@@ -139,6 +142,26 @@ async function hostRunners(host) {
     // There is no host around a masking callback: the baseline is the empty call.
     return (scanner) => (scanner === undefined ? () => undefined : (event) => maskSecretsWith(scanner, event));
   }
+  if (host === "ai-context-js") {
+    const { createAiContextBoundaryWith } = await import("@redact-secret/adapter-ai-context");
+    const { AI_CONTEXT_LIMITS, contextParts } = await import("./overhead-workloads.mjs");
+    // The streaming path is not exercised: this profile is whole-input
+    // context construction, the boundary every agent turn crosses.
+    const unusedSession = () => {
+      throw new Error("overhead harness: no incremental session is measured");
+    };
+    return (scanner) => {
+      if (scanner === undefined) return () => undefined;
+      const boundary = createAiContextBoundaryWith(
+        { scanAndRedact: scanner, createIncrementalSanitizer: unusedSession },
+        AI_CONTEXT_LIMITS,
+      );
+      return (event) => {
+        const outcome = boundary.buildContext(contextParts(event));
+        if (outcome.outcome !== "ok") throw new Error(`overhead harness: ai-context-js ${outcome.outcome}`);
+      };
+    };
+  }
   throw new Error(`unknown host: ${host}`);
 }
 
@@ -248,6 +271,7 @@ async function main() {
           "@redact-secret/adapter",
           "@redact-secret/adapter-pino",
           "@redact-secret/adapter-otel",
+          "@redact-secret/adapter-ai-context",
           "pino",
           "@opentelemetry/sdk-trace-base",
         ].map((name) => [name, versionOf(name)]),
@@ -270,6 +294,7 @@ async function main() {
       "Per-event times are batch means over eventsPerRepetition events; the distribution is across repetitions, not across single events.",
       "derived values are differences of medians, not medians of differences, and can be negative within noise.",
       "The OpenTelemetry exporter is a no-op, so export cost is excluded; pino writes to a no-op destination, so I/O cost is excluded.",
+      "ai-context-js has no host around it: its host mode is the empty call, and it measures buildContext over whole-input scans only, not a stream.",
       "This output carries no threshold and no verdict.",
     ],
   };

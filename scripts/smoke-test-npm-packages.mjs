@@ -3,16 +3,17 @@
  * Packs every workspace, installs the tarballs into a throwaway project
  * OUTSIDE the checkout, then imports each package through its public entry
  * point, exercises it against a real host (`pino`,
- * `@opentelemetry/sdk-trace-base`), and typechecks a consumer file against
- * the installed `.d.ts` files.
+ * `@opentelemetry/sdk-trace-base`), runs `adapter-ai-context`'s documented
+ * README example verbatim on the real core, and typechecks a consumer file
+ * against the installed `.d.ts` files.
  *
  * Workspace resolution inside this monorepo papers over a wrong `exports`
  * entry, a missing `types` path, or a `dist` file that was never emitted —
  * none of that is visible to `npm test`. This script checks the package
  * shape the way an outside consumer would install it.
  *
- * Install order matters: `adapter` first, then `adapter-pino` and
- * `adapter-otel`, which depend on it. If `adapter` isn't already installed
+ * Install order matters: `adapter` first, then `adapter-pino`,
+ * `adapter-otel` and `adapter-ai-context`, which depend on it. If `adapter` isn't already installed
  * from its tarball when the other two are, npm resolves
  * `@redact-secret/adapter` from the registry instead: a different build
  * than the one under test, or a failed install when the checkout declares
@@ -28,7 +29,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const PACKAGE_ORDER = ["adapter", "adapter-pino", "adapter-otel"];
+const PACKAGE_ORDER = ["adapter", "adapter-pino", "adapter-otel", "adapter-ai-context"];
 
 function manifestFor(pkgDir) {
   return JSON.parse(readFileSync(join(repoRoot, "packages", pkgDir, "package.json"), "utf-8"));
@@ -42,6 +43,14 @@ function npm(args, cwd) {
 function npmPackJson(args, cwd) {
   console.log(`+ npm ${args.join(" ")}  (in ${cwd})`);
   return JSON.parse(execFileSync("npm", args, { cwd, encoding: "utf-8" }));
+}
+
+/** The fenced `js` block right after `<!-- smoke-test:example -->` in a package README. */
+function readmeExample(pkgDir) {
+  const readme = readFileSync(join(repoRoot, "packages", pkgDir, "README.md"), "utf-8");
+  const match = /<!-- smoke-test:example -->\s*```js\n([\s\S]*?)```/.exec(readme);
+  if (match === null) throw new Error(`${pkgDir}/README.md has no smoke-test:example block`);
+  return match[1];
 }
 
 function main() {
@@ -73,7 +82,7 @@ function main() {
 
     // 3. Install in dependency order: adapter, then its dependents.
     npm(["install", tarballs.adapter], projectDir);
-    npm(["install", tarballs["adapter-pino"], tarballs["adapter-otel"]], projectDir);
+    npm(["install", tarballs["adapter-pino"], tarballs["adapter-otel"], tarballs["adapter-ai-context"]], projectDir);
 
     // 4. The peer hosts and the type-only peer, at the ranges this repo declares.
     const adapterManifest = manifestFor("adapter");
@@ -97,6 +106,20 @@ function main() {
     console.log("+ node smoke-test.mjs");
     execFileSync(process.execPath, ["smoke-test.mjs"], { cwd: projectDir, stdio: "inherit" });
 
+    // 5b. adapter-ai-context's README example, verbatim, on the real core.
+    writeFileSync(join(projectDir, "ai-context-example.mjs"), readmeExample("adapter-ai-context"));
+    console.log("+ node ai-context-example.mjs");
+    const printed = execFileSync(process.execPath, ["ai-context-example.mjs"], {
+      cwd: projectDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    const context = JSON.parse(printed.trim().split("\n").at(-1));
+    if (context[0]?.content !== "deploy with API_KEY=<SECRET_1>" || printed.includes("ghp_SYNTHETIC")) {
+      throw new Error("adapter-ai-context: the README example did not print the redacted context");
+    }
+    console.log("@redact-secret/adapter-ai-context: README example ok");
+
     // 6. Types resolve for a consumer, typechecked against the installed `.d.ts`.
     writeFileSync(join(projectDir, "smoke-test.ts"), SMOKE_TEST_TS);
     writeFileSync(join(projectDir, "tsconfig.json"), TSCONFIG_JSON);
@@ -104,7 +127,7 @@ function main() {
     console.log("+ tsc -p tsconfig.json");
     execFileSync(tsc, ["-p", "tsconfig.json"], { cwd: projectDir, stdio: "inherit" });
 
-    console.log("\nsmoke test passed: all three packages import, run, and typecheck from outside the workspace.");
+    console.log("\nsmoke test passed: every package imports, runs, and typechecks from outside the workspace.");
     ok = true;
   } finally {
     if (ok) {
@@ -144,6 +167,7 @@ import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "
 import { BLOCK_MARKER, ERROR_MARKER, maskSecretsWith } from "@redact-secret/adapter";
 import { createRedactingLogMethodWith } from "@redact-secret/adapter-pino";
 import { RedactingSpanProcessorWith } from "@redact-secret/adapter-otel";
+import { createAiContextBoundaryWith } from "@redact-secret/adapter-ai-context";
 ${FAKE_SCANNER}
 // @redact-secret/adapter: mask a value through maskSecretsWith with an injected scanner.
 assert.equal(typeof BLOCK_MARKER, "string");
@@ -175,6 +199,20 @@ const [exported] = exporter.getFinishedSpans();
 assert.equal(exported?.attributes["llm.input"], "call <SECRET_1> now");
 await provider.shutdown();
 console.log("@redact-secret/adapter-otel: ok");
+
+// @redact-secret/adapter-ai-context: the injected API over the fake scanner.
+const boundary = createAiContextBoundaryWith(
+  { scanAndRedact: fakeScanAndRedact, createIncrementalSanitizer: () => { throw new Error("unused"); } },
+  {
+    wholeInputLimits: { maxInputBytes: 1024, maxFindings: 8 },
+    incrementalLimits: { maxInputCodeUnits: 1024, maxBufferedCodeUnits: 512, maxTokenCodeUnits: 128, maxMultilineCodeUnits: 256 },
+    traversalLimits: { maxDepth: 4, maxNodes: 32 },
+  },
+);
+assert.deepEqual(boundary.sanitizeValue({ note: "token SECRET_TOKEN_1 here" }).value, { note: "token <SECRET_1> here" });
+assert.deepEqual(boundary.sanitizeText("BLOCK_ME"), { outcome: "blocked", reason: "policy" });
+assert.deepEqual(boundary.sanitizeText("BOOM"), { outcome: "blocked", reason: "core_error" });
+console.log("@redact-secret/adapter-ai-context: ok");
 `;
 
 const SMOKE_TEST_TS = `import pino from "pino";
@@ -204,6 +242,17 @@ import {
   redactAttributesWith,
   type RedactAttributesOptions,
 } from "@redact-secret/adapter-otel";
+import {
+  BLOCK_REASONS,
+  SAFE_FINDING_FIELDS,
+  createAiContextBoundary,
+  createAiContextBoundaryWith,
+  type AiContextBoundary,
+  type AiContextBoundaryOptions,
+  type AiContextOutcome,
+  type SafeFinding,
+} from "@redact-secret/adapter-ai-context";
+import { initialize, scanAndRedact, createIncrementalSanitizer } from "@redact-secret/core";
 
 const scanner: ScanAndRedact = (text) => ({ text, findings: [] });
 const options: MaskOptions = { limits: { ...DEFAULT_LIMITS } };
@@ -227,6 +276,20 @@ void redactAttributesWith;
 void createRedactingSpanProcessor;
 const processor = new RedactingSpanProcessorWith(new SimpleSpanProcessor(new InMemorySpanExporter()), scanner, otelOptions);
 void new BasicTracerProvider({ spanProcessors: [processor] });
+
+const aiOptions: AiContextBoundaryOptions = {
+  wholeInputLimits: { maxInputBytes: 1024, maxFindings: 8 },
+  incrementalLimits: { maxInputCodeUnits: 1024, maxBufferedCodeUnits: 512, maxTokenCodeUnits: 128, maxMultilineCodeUnits: 256 },
+  traversalLimits: { maxDepth: 4, maxNodes: 32 },
+  onFinding: (finding: SafeFinding, { boundary }) => void [finding.action, boundary],
+};
+void initialize;
+const aiBoundary: AiContextBoundary = createAiContextBoundaryWith({ scanAndRedact, createIncrementalSanitizer }, aiOptions);
+const aiOutcome: AiContextOutcome<string> = aiBoundary.sanitizeText("x", { boundary: "user-input" });
+if (aiOutcome.outcome === "blocked") void aiOutcome.reason;
+void createAiContextBoundary;
+void BLOCK_REASONS;
+void SAFE_FINDING_FIELDS;
 `;
 
 const TSCONFIG_JSON = JSON.stringify(

@@ -2,7 +2,7 @@
   "name": "redact-secret-adapters",
   "version": "0.0.0",
   "private": true,
-  "description": "Host integrations for Redact Secret: logging and tracing adapters over the deterministic core.",
+  "description": "Host integrations for Redact Secret: logging, tracing, and AI-context adapters over the deterministic core.",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -15,7 +15,8 @@
   "workspaces": [
     "packages/adapter",
     "packages/adapter-pino",
-    "packages/adapter-otel"
+    "packages/adapter-otel",
+    "packages/adapter-ai-context"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
@@ -27,7 +28,8 @@
     "verify-pack-contents": "node scripts/verify-pack-contents.mjs",
     "smoke-test": "node scripts/smoke-test-npm-packages.mjs",
     "compat:check": "node scripts/check-compatibility-record.mjs",
-    "overhead": "node scripts/measure-overhead.mjs"
+    "overhead": "node scripts/measure-overhead.mjs",
+    "footprint": "node scripts/measure-footprint.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

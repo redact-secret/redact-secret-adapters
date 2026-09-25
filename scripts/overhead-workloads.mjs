@@ -112,3 +112,27 @@ export function workloadDigest(document) {
   const all = Object.fromEntries(document.profiles.map((profile) => [profile.id, buildEvents(document, profile)]));
   return createHash("sha256").update(canonical(all)).digest("hex");
 }
+
+/**
+ * The limits the `ai-context-js` harness host builds its boundary with:
+ * wide enough that no profile event is refused, so every repetition
+ * measures the same full scan and traversal.
+ */
+export const AI_CONTEXT_LIMITS = Object.freeze({
+  wholeInputLimits: { maxInputBytes: 1_048_576, maxFindings: 4096 },
+  incrementalLimits: {
+    maxInputCodeUnits: 1_048_576,
+    maxBufferedCodeUnits: 65_536,
+    maxTokenCodeUnits: 8192,
+    maxMultilineCodeUnits: 32_768,
+  },
+  traversalLimits: { maxDepth: 16, maxNodes: 100_000 },
+});
+
+/** A `payload` event as AI-context parts: each chat message as text, each tool call as a structured value. */
+export function contextParts(event) {
+  return [
+    ...event.messages.map((message) => ({ role: message.role, boundary: "user-input", text: message.content })),
+    ...event.toolCalls.map((call) => ({ role: "tool", boundary: "tool-result", value: call })),
+  ];
+}

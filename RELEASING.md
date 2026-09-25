@@ -145,6 +145,11 @@ publish job in `release.yml`), then bootstrap it once by hand:
    publish failed with `E404`, do steps 1–2 from `release` instead and
    re-run **Release**.
 
+A new package lands on `develop` unreleased: `"private": true` in its
+manifest and absent from `PACKAGES`, so no train plans it and `npm publish`
+refuses it even by hand. `@redact-secret/adapter-ai-context` is in that state;
+its CHANGELOG lists what its first release has to change.
+
 PRs that cut and reconcile open use `GITHUB_TOKEN`, which fires no
 `pull_request` event; those workflows dispatch CI, Branch guard and
 Rehearsal onto the PR's head ref instead, which is what the required checks

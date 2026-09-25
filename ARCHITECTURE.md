@@ -12,6 +12,7 @@ bottom; the top two are host-specific, the bottom two are shared.
 
 ```text
   L3  host seam          pino hooks.logMethod + hooks.streamWrite · SpanProcessor.onEnd · logging.Filter.filter
+       |                 · the AI-context boundary's operations (no host: the caller is the seam)
        |                 structural (duck-typed) match against the host's extension point
        |                 no runtime import of the host package
   L2  value-tree walker  recursive descent over everything JSON would emit:
@@ -59,6 +60,20 @@ export type ScanAndRedact = (text: string, options?: ScanAndRedactOptions) => Sc
 If the core renames an action or reshapes a result, these packages fail to
 compile instead of running on while letting a `block`-worthy secret through as
 an inline placeholder.
+
+**The one exception: `@redact-secret/adapter-ai-context`.** The core's
+[AI-context boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/ai-context-boundary.md)
+(redact-secret/redact-secret#610) deliberately widens the surface for that
+package alone, and only by documented core APIs: the whole-input `policy` /
+`limits` options, `createIncrementalSanitizer` with `append` / `finalize` /
+`abort`, `SecretScanError.code` (read, and forwarded only when it is in the
+core's fixed registry), and the eight safe finding fields. The contract, not
+a version range alone, protects that surface: the package replays the core's
+conformance fixture, vendored byte-for-byte at a pinned 40-hex core commit
+(`fixtures/core/pins.json`), through its public API on the real core at both
+range endpoints. `test/dependency-surface.test.ts` fails if the built package
+reads any other core member. The logging and tracing adapters keep the
+four-item surface above.
 
 Because a typecheck only covers the core version that is installed, CI
 typechecks at **both ends of every declared range**, host packages included.
@@ -165,6 +180,38 @@ missing field or a write that does not show through drops the span with a
 one-time `RuntimeWarning` rather than exporting it unredacted. The real-host
 test checks all of this at both ends of the Python SDK's declared range.
 
+### AI context
+
+`adapter-ai-context` has no host SDK: its L3 is its own five operations
+(`sanitizeText`, `sanitizeValue`, `sanitizeToolResult`, `buildContext`,
+`openStream`), which the application calls where its framework builds a
+context or receives a tool result. Its rules differ from the marker-based
+adapters on purpose, because a model context, unlike a log line, is not safe
+when partly masked:
+
+- **All or nothing.** A `block` finding, a limit, an unsupported value, or a
+  core failure fails the *whole* operation to a fixed `blocked` outcome with
+  no value, never a marker in place. Nested values use L2's `walkStrict`,
+  not `walkValue`, which returns the first failure instead of a masked copy.
+  Object keys are scanned too, and a key finding that would be redacted blocks
+  the value.
+- **Staged streams.** An incremental session's output is held until a
+  successful `finalize`, which releases it once; a later `block` could not
+  recall text already released.
+- **Fixed outcomes.** `ok` / `blocked` / `aborted`, with the contract's five
+  reasons. Findings cross as allowlisted copies; error messages are never
+  read.
+
+The live factory never rejects for an initialization failure: the boundary
+it returns fails every operation closed with the core's mapped error, so an
+application that skips its own error handling still cannot fall back to
+sending raw input.
+
+It is JavaScript only. No Python AI-context adapter exists yet; one would
+replay the same vendored fixture (the core already runs its Python twin of
+the runner against every wheel), and `walkStrict` would get a Python twin
+with it.
+
 ### Python `logging`
 
 The filter formats `msg` with `args` (`record.getMessage()`) and masks the
@@ -228,10 +275,15 @@ holding the two languages together, so they are shared — one copy, read by bot
   means an external host integration; the core repository additionally uses
   "host adapter" for the CLI and the language bindings. Three distinct meanings,
   one word — do not consolidate them by moving code.
-- **MCP and model-context wiring** need the core's incremental sanitizer: a
-  stateful, much wider surface than the four-item contract above, and not
-  protected by a version range. It remains an example in the core repository
-  until that surface is itself a published contract.
+- **MCP transport wiring** stays out until the core's supported MCP boundary
+  (redact-secret/redact-secret#612) is defined; the MCP adapter
+  (redact-secret-adapters#13) is then a thin specialization of
+  `adapter-ai-context`. Model-context wiring itself is no longer excluded:
+  the incremental surface it needs is now a published core contract (#610),
+  implemented by `adapter-ai-context`.
+- **Model-vendor wrappers** (OpenAI, Anthropic clients) and **model output
+  scanning**: the AI-context boundary covers what goes into a context, and
+  never patches a client.
 - **LangChain**, and any other framework integration whose host contract has not
   been read and tested here.
 - **A Langfuse package.** Masking-callback hosts need the shared walker and one
@@ -244,7 +296,9 @@ packages/
   adapter/              @redact-secret/adapter          shared L1 + L2, TypeScript
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
   adapter-otel/         @redact-secret/adapter-otel     L3 + live wrapper
+  adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper (unreleased)
 python/
   redact_secret_adapters/                               shared + logging + otel extra
 fixtures/                                               cross-language contract, shared
+  core/                                                 core-owned contract files, vendored at a pinned core commit
 ```

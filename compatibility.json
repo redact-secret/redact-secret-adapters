@@ -86,6 +86,34 @@
       ]
     },
     {
+      "name": "@redact-secret/adapter-ai-context",
+      "registry": "npm",
+      "manifest": "packages/adapter-ai-context/package.json",
+      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "ciExercised": ["20", "22", "24"] },
+      "requires": [
+        {
+          "name": "@redact-secret/core",
+          "range": "^0.1.0-beta.6",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.8" }
+        }
+      ],
+      "lifecycle": [
+        "the core's ai-context-boundary conformance fixture, vendored at a pinned core commit, replayed on the real core before and after initialize()",
+        "whole-input and incremental equivalence at every chunk partition of every text case",
+        "a staged stream: block, limit and callback failure mid-stream, abort, a real AbortSignal, double finalize, append after finalize",
+        "every configured limit (whole-input, incremental, traversal) failing closed on the real core",
+        "a core that fails to initialize or to load"
+      ],
+      "qualifiedBy": [
+        "packages/adapter-ai-context/test/conformance.test.ts",
+        "packages/adapter-ai-context/test/conformance-uninitialized.test.ts",
+        "packages/adapter-ai-context/test/e2e.test.ts",
+        "packages/adapter-ai-context/test/boundary.test.ts",
+        "packages/adapter-ai-context/test/live-init-failure.test.ts"
+      ]
+    },
+    {
       "name": "redact-secret-adapters",
       "registry": "pypi",
       "manifest": "python/pyproject.toml",
