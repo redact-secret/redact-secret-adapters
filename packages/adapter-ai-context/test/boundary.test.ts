@@ -203,6 +203,23 @@ describe("telemetry", () => {
     for (const event of events) expect(Object.isFrozen(event.context)).toBe(true);
   });
 
+  test("tool-arguments is a telemetry label like any other and never changes an outcome", () => {
+    const { boundary, events } = setup();
+    const args = { query: `deploy ${SECRET}` };
+    const labelled = boundary.sanitizeValue(args, { boundary: "tool-arguments" });
+    const unlabelled = boundary.sanitizeValue(args);
+    expect(labelled).toEqual(unlabelled);
+    expect(boundary.sanitizeValue({ query: "BLOCK_ME" }, { boundary: "tool-arguments" })).toEqual({
+      outcome: "blocked",
+      reason: "policy",
+    });
+    expect(events.map((e) => e.context)).toEqual([
+      { boundary: "tool-arguments" },
+      { boundary: "context" },
+      { boundary: "tool-arguments" },
+    ]);
+  });
+
   test("a blocked scan still reports its findings to telemetry, never in the outcome", () => {
     const { boundary, events } = setup();
     const outcome = boundary.sanitizeText("BLOCK_ME");
@@ -618,6 +635,40 @@ describe("openStream", () => {
     stream.append(SECRET);
     expect(stream.finalize()).toEqual({ outcome: "blocked", reason: "core_error", code: "INVALID_LIMITS" });
     expect(stream.finalize()).toEqual({ outcome: "blocked", reason: "lifecycle" });
+  });
+
+  test("accepting is true until the stream fails, is aborted, or is finalized, and never says why", () => {
+    const fake = createFakeCore({ emitOnAppend: true, appendFailures: { OVER: "INPUT_LIMIT_EXCEEDED" } });
+    const { boundary } = setup({}, fake);
+    const cases: [string, (stream: ReturnType<typeof boundary.openStream>) => void][] = [
+      ["block", (stream) => stream.append("BLOCK_ME")],
+      ["limit", (stream) => stream.append(`OVER ${SECRET}`)],
+      ["non-string chunk", (stream) => stream.append(7 as unknown as string)],
+      ["abort", (stream) => stream.abort()],
+      ["finalize", (stream) => void stream.finalize()],
+    ];
+    for (const [name, end] of cases) {
+      const stream = boundary.openStream();
+      expect(stream.accepting, name).toBe(true);
+      stream.append("clean ");
+      expect(stream.accepting, name).toBe(true);
+      end(stream);
+      expect(stream.accepting, name).toBe(false);
+      expect(Object.getOwnPropertyDescriptor(stream, "accepting")?.get, name).toBeTypeOf("function");
+      expect(JSON.stringify(stream), name).not.toContain(SECRET);
+    }
+  });
+
+  test("accepting turns false the moment a real AbortSignal fires, and is false for a pre-aborted or unopenable stream", () => {
+    const { boundary } = setup();
+    const controller = new AbortController();
+    const stream = boundary.openStream({ signal: controller.signal });
+    expect(stream.accepting).toBe(true);
+    controller.abort();
+    expect(stream.accepting).toBe(false);
+    expect(boundary.openStream({ signal: { aborted: true } }).accepting).toBe(false);
+    const unopenable = setup({}, createFakeCore({ openFailure: new FakeScanError("INVALID_LIMITS") })).boundary;
+    expect(unopenable.openStream().accepting).toBe(false);
   });
 
   test("a non-string chunk fails the stream as unsupported_value", () => {

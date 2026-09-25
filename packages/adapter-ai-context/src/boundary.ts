@@ -354,6 +354,9 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     }
 
     return Object.freeze({
+      get accepting(): boolean {
+        return !finalized && terminal === undefined;
+      },
       append(chunk: string): void {
         if (finalized || terminal !== undefined) return;
         if (isAborted(signal)) {

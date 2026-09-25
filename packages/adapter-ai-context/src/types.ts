@@ -30,8 +30,12 @@ export interface AiContextCore {
   readonly createIncrementalSanitizer: (options: IncrementalSanitizerOptions) => IncrementalSanitizer;
 }
 
-/** Where a value is crossing into the AI workflow. Goes to telemetry only; never changes an outcome. */
-export type BoundaryLabel = "user-input" | "tool-result" | "context";
+/**
+ * Where a value is crossing into the AI workflow. Goes to telemetry only;
+ * never changes an outcome. `tool-arguments` labels the arguments of a tool
+ * call (the MCP boundary's opt-in argument sanitation).
+ */
+export type BoundaryLabel = "user-input" | "tool-result" | "tool-arguments" | "context";
 
 /** Why an operation was blocked. Fixed set; a new reason is a contract change. */
 export type BlockReason = "policy" | "limit_exceeded" | "unsupported_value" | "lifecycle" | "core_error";
@@ -126,6 +130,15 @@ export interface ContextMessage {
  * before a successful `finalize`, and `finalize` releases at most once.
  */
 export interface AiContextStream {
+  /**
+   * `true` while the stream still scans chunks; `false` once it has failed
+   * (a `block` finding, a limit, a lifecycle or core failure), been aborted,
+   * or been finalized. Input-free: it says only that later appends will be
+   * discarded, never why; the reason arrives at `finalize`. Read it after
+   * every `append` to stop pulling from, and cancel, a producer whose output
+   * would be discarded unscanned anyway.
+   */
+  readonly accepting: boolean;
   /** Stages one chunk. Ignored once the stream has failed, been aborted, or been finalized. */
   append(chunk: string): void;
   /** The first call returns the outcome; every later call returns `blocked` / `lifecycle`. */
