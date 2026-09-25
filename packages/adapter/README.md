@@ -4,8 +4,10 @@ The shared base for [Redact Secret](https://github.com/redact-secret/redact-secr
 host adapters: mask one string, or walk a value tree and mask every string in
 it, failing closed on every error path.
 
-It contains no detection. The scanner is **injected** — this package has no
-runtime dependencies, and imports the core only as types.
+It contains no detection. The scanner is **injected**: this package has no
+dependencies of its own, and `@redact-secret/core` is a peer dependency — the
+one copy your application installs and initializes. Its type declarations
+import the core's types, so the peer is required, not optional.
 
 Install it directly only when building your own integration;
 `@redact-secret/adapter-pino` pulls it in automatically.
@@ -23,9 +25,9 @@ const maskSecrets = await createMaskSecrets();
 const langfuse = new Langfuse({ mask: ({ data }) => maskSecrets(data) });
 ```
 
-`createMaskSecrets` is the one export that needs `@redact-secret/core`
-installed (an optional peer dependency). It loads the core on call, awaits
-`initialize()`, and returns `(data) => masked`.
+`createMaskSecrets` is the one export that loads `@redact-secret/core` at
+runtime. It imports the core on call, awaits `initialize()`, and returns
+`(data) => masked`.
 
 ## Injected API
 
@@ -42,10 +44,44 @@ maskLogValueWith(scanAndRedact, { err: new Error("also walks Errors") });
 | Export | Purpose |
 | --- | --- |
 | `maskLeafWith(scan, text, { policy, maxStringLength })` | Mask one string |
-| `maskSecretsWith(scan, data, { policy, limits })` | Walk plain objects, arrays, strings |
-| `maskLogValueWith(scan, data, { policy, limits })` | Same walk, plus `Error` → redacted `{ type, message, stack }` |
+| `maskSecretsWith(scan, data, { policy, limits })` | Walk a value tree and mask every string in it (see below) |
+| `maskLogValueWith(scan, data, { policy, limits })` | The same walk, under its logging-side name |
 | `createMaskSecrets({ policy, limits })` | Live wrapper over the real core |
+| `walkStrict(value, { maxDepth, maxNodes }, { string, key })` | The all-or-nothing walk (see below; since `0.1.1`) |
 | `ScanAndRedact` | The injected scanner's type |
+
+The walk returns a masked copy of everything JSON serialization would emit:
+
+- plain objects and arrays, recursively;
+- an `Error` as `{ type, message, stack, ...ownProps, cause }`, every string
+  in it masked (an axios error's `config.headers` included);
+- an object with a `toJSON()` method (`Date`, `URL`, `Buffer`, …) as its
+  masked `toJSON()` result;
+- any other object (class instances, `IncomingMessage`, …) as a plain object
+  of its masked own enumerable properties.
+
+Numbers, booleans, `null`, `undefined`, bigints and functions pass through. A
+getter or `toJSON()` that throws becomes `[REDACTED:ERROR]` for that value; the
+walk itself never throws.
+
+## The all-or-nothing walk
+
+Since `0.1.1`, `walkStrict` is the walker for hosts where a partially
+scanned value is not a safe value, such as a model context
+(`@redact-secret/adapter-ai-context`). It scans nothing itself: every string
+and every own enumerable object key goes to the caller's visitor, which
+returns `{ ok: true, text }` (or `{ ok: true }` for a key, which is never
+rewritten) or `{ ok: false, failure }` to end the walk. The result is a fresh
+copy, or the first failure; no marker is ever substituted.
+
+| Failure | When |
+| --- | --- |
+| `limit_exceeded` | More than `maxDepth` nested containers (the root counts as 1), or more than `maxNodes` visited values (keys are not counted) |
+| `unsupported_value` | Anything but a string, finite number, boolean, `null`, array, or plain object — including `undefined`, an array hole, a `Date`, a class instance, an `Error` — a cycle, or a value whose read throws |
+| the visitor's own | A visitor returned `{ ok: false, failure }` |
+
+A shared, acyclic reference is copied as many times as it is reached. A
+visitor that throws is a bug in the caller, and its exception propagates.
 
 ## Fail-closed markers
 
@@ -54,7 +90,7 @@ Public API; they change only in a major version.
 | Marker | When |
 | --- | --- |
 | `BLOCK_MARKER` `[REDACTED:BLOCKED]` | A `block` finding — the **entire** leaf is replaced |
-| `ERROR_MARKER` `[REDACTED:ERROR]` | Any throw from the core. Never the input, never the error's message |
+| `ERROR_MARKER` `[REDACTED:ERROR]` | Any throw or malformed result from the core, or a value that cannot be read. Never the input, never the error's message |
 | `LIMIT_MARKER` `[REDACTED:LIMIT_EXCEEDED]` | A value past a walk budget; never scanned, never passed through |
 | `CYCLE_MARKER` `[REDACTED:CYCLE]` | A self-referencing object |
 

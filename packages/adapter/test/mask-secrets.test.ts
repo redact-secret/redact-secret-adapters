@@ -4,8 +4,11 @@ import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
 import {
   BLOCK_MARKER,
   CYCLE_MARKER,
+  DEFAULT_LIMITS,
   ERROR_MARKER,
   LIMIT_MARKER,
+  maskLeafWith,
+  maskLogValueWith,
   maskSecretsWith,
   type ScanAndRedact,
 } from "../src/index.js";
@@ -47,14 +50,85 @@ test("a scanAndRedact that throws NOT_INITIALIZED-shaped errors fails closed", (
   expect(result.key).toBe(ERROR_MARKER);
 });
 
-test("numbers, booleans, null, and non-plain objects are left unchanged", () => {
-  const when = new Date("2026-01-01T00:00:00.000Z");
-  const input = { count: 1, active: false, missing: null, when };
+test("numbers, booleans, null, bigints, and functions are left unchanged", () => {
+  const fn = () => "SECRET_TOKEN_1";
+  const input = { count: 1, active: false, missing: null, big: 10n, fn };
   const result = maskSecretsWith(fakeScanAndRedact, input) as Masked;
-  expect(result.count).toBe(1);
-  expect(result.active).toBe(false);
-  expect(result.missing).toBe(null);
-  expect(result.when).toBe(when);
+  expect(result).toEqual({ count: 1, active: false, missing: null, big: 10n, fn });
+});
+
+class Credentials {
+  constructor(
+    readonly user: string,
+    readonly token: string,
+  ) {}
+  describe() {
+    return this.token;
+  }
+}
+
+test("a class instance is masked as its own enumerable properties, the way JSON would emit it", () => {
+  const result = maskSecretsWith(fakeScanAndRedact, { creds: new Credentials("alice", "SECRET_TOKEN_1") }) as Masked;
+  expect(result).toEqual({ creds: { user: "alice", token: "<SECRET_1>" } });
+  expect(Object.getPrototypeOf(result.creds)).toBe(Object.prototype);
+});
+
+test("a toJSON value is masked as its toJSON() result (URL, Date)", () => {
+  const url = new URL("https://example.test/callback?token=SECRET_TOKEN_1");
+  const when = new Date("2026-01-01T00:00:00.000Z");
+  const result = maskSecretsWith(fakeScanAndRedact, { url, when }) as Masked;
+  expect(result).toEqual({ url: "https://example.test/callback?token=<SECRET_1>", when: "2026-01-01T00:00:00.000Z" });
+});
+
+test("a throwing toJSON or getter fails closed for that value only", () => {
+  const input = {
+    bad: {
+      toJSON() {
+        throw new Error("SECRET_TOKEN_1 in a toJSON error");
+      },
+    },
+    getter: Object.defineProperty(new Credentials("bob", "SECRET_TOKEN_2"), "boom", {
+      enumerable: true,
+      get() {
+        throw new Error("SECRET_TOKEN_3 in a getter error");
+      },
+    }),
+  };
+  const result = maskSecretsWith(fakeScanAndRedact, input) as Masked;
+  expect(result).toEqual({ bad: ERROR_MARKER, getter: { user: "bob", token: "<SECRET_1>", boom: ERROR_MARKER } });
+  expect(JSON.stringify(result)).not.toMatch(/SECRET_TOKEN_\d/);
+});
+
+test("an IncomingMessage-like object is walked, not passed through", () => {
+  class FakeIncomingMessage {
+    method = "GET";
+    url = "/login?session=SECRET_TOKEN_1";
+    rawHeaders = ["authorization", "Bearer SECRET_TOKEN_2"];
+  }
+  const result = maskSecretsWith(fakeScanAndRedact, { req: new FakeIncomingMessage() });
+  expect(result).toEqual({
+    req: { method: "GET", url: "/login?session=<SECRET_1>", rawHeaders: ["authorization", "Bearer <SECRET_1>"] },
+  });
+});
+
+test("an axios-style Error's own properties are masked, including nested headers", () => {
+  const error = Object.assign(new Error("Request failed with status code 401"), {
+    config: { headers: { Authorization: "Bearer SECRET_TOKEN_1" } },
+  });
+  const result = maskSecretsWith(fakeScanAndRedact, { error }) as { error: Masked };
+  expect(result.error.type).toBe("Error");
+  expect(result.error.message).toBe("Request failed with status code 401");
+  expect(result.error.config).toEqual({ headers: { Authorization: "Bearer <SECRET_1>" } });
+  expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN_1");
+});
+
+test("maskSecretsWith and maskLogValueWith are the same walk", () => {
+  const input = {
+    err: new TypeError("failed SECRET_TOKEN_1", { cause: new Error("inner SECRET_TOKEN_2") }),
+    creds: new Credentials("carol", "SECRET_TOKEN_3"),
+    list: ["SECRET_TOKEN_4", 5, null],
+  };
+  expect(maskSecretsWith(fakeScanAndRedact, input)).toEqual(maskLogValueWith(fakeScanAndRedact, input));
 });
 
 test("depth beyond the limit is marked rather than walked", () => {
@@ -91,10 +165,39 @@ test("a cycle is marked rather than recursed into forever", () => {
   expect(result.self).toBe(CYCLE_MARKER);
 });
 
+test("an explicit undefined, NaN, or negative limit falls back to the default instead of disabling it", () => {
+  const deep = { a: { b: { c: { d: { e: { f: { g: { h: { i: "SECRET_TOKEN_1" } } } } } } } } };
+  for (const maxDepth of [undefined, Number.NaN, -1]) {
+    const result = JSON.stringify(maskSecretsWith(fakeScanAndRedact, deep, { limits: { maxDepth } }));
+    expect(result, String(maxDepth)).toContain(LIMIT_MARKER);
+    expect(result, String(maxDepth)).not.toContain("SECRET_TOKEN_1");
+  }
+  const long = { blob: `SECRET_TOKEN_1 ${"a".repeat(DEFAULT_LIMITS.maxStringLength)}` };
+  for (const maxStringLength of [undefined, Number.NaN, -5]) {
+    expect(maskSecretsWith(fakeScanAndRedact, long, { limits: { maxStringLength } })).toEqual({ blob: LIMIT_MARKER });
+  }
+  expect(maskLeafWith(fakeScanAndRedact, "a".repeat(11), { maxStringLength: Number.NaN })).toBe("a".repeat(11));
+  expect(maskLeafWith(fakeScanAndRedact, long.blob, { maxStringLength: Number.NaN })).toBe(LIMIT_MARKER);
+});
+
 test("a string too long for the size limit is marked, not scanned", () => {
   const input = { blob: "a".repeat(50) };
   const result = maskSecretsWith(fakeScanAndRedact, input, { limits: { maxStringLength: 10 } }) as Masked;
   expect(result.blob).toBe(LIMIT_MARKER);
+});
+
+test("the policy option reaches scanAndRedact for every leaf", () => {
+  const policy = { evaluate: () => "redact" as const };
+  const seen: unknown[] = [];
+  const spy: ScanAndRedact = (text, options) => {
+    seen.push(options?.policy);
+    return { text, findings: [] };
+  };
+  maskSecretsWith(spy, { a: "x", b: ["y", new Error("z")] }, { policy });
+  expect(seen.length).toBeGreaterThan(3);
+  expect(seen.every((received) => received === policy)).toBe(true);
+  expect(maskLeafWith(spy, "leaf", { policy })).toBe("leaf");
+  expect(seen.at(-1)).toBe(policy);
 });
 
 test("rejects a non-function scanAndRedact", () => {

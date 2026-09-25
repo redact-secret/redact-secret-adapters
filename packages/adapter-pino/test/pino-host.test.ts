@@ -17,7 +17,7 @@ import pino from "pino";
 import { expect, test } from "vitest";
 
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
-import { createRedactingLogMethodWith } from "../src/index.js";
+import { createRedactingLogMethodWith, createRedactingStreamWriteWith } from "../src/index.js";
 
 function capturingLogger(options: MaskOptions = {}) {
   const chunks: string[] = [];
@@ -48,14 +48,14 @@ test("ordinary formatting with no secret reaches the destination unchanged", () 
   expect(lines()).toEqual([{ level: 30, msg: "user alice logged in from 10.0.0.1" }]);
 });
 
-test("issue #361: a contextual assignment split across msg and an interpolation value is redacted before pino ever formats it", () => {
+test("a contextual assignment split across msg and an interpolation value is redacted before pino ever formats it", () => {
   const { logger, lines, raw } = capturingLogger();
   logger.info("api_key=%s", "SECRET_TOKEN_1");
   expect(lines()).toEqual([{ level: 30, msg: "api_key=<SECRET_1>" }]);
   expect(raw()).not.toContain("SECRET_TOKEN_1");
 });
 
-test("issue #361: a provider token split across two interpolation values is redacted", () => {
+test("a provider token split across two interpolation values is redacted", () => {
   const { logger, lines, raw } = capturingLogger();
   logger.info("token is %s%s", "SECRET_TOKEN_", "1");
   expect(lines()).toEqual([{ level: 30, msg: "token is <SECRET_1>" }]);
@@ -88,18 +88,129 @@ test("a bare Error's message and stack are redacted before pino's default err se
   expect(raw()).not.toContain("SECRET_TOKEN_1");
 });
 
-test("issue #361: a block finding on the joined message replaces the whole message pino writes", () => {
+test("logger.error(err, msg) keeps the caller's message; pino's own err.message fallback never replaces it", () => {
+  const { logger, lines, raw } = capturingLogger();
+  logger.error(new TypeError("failed at 50%s with SECRET_TOKEN_1"), "custom message");
+  const [line] = lines();
+  expect(line.msg).toBe("custom message");
+  expect(line.err.type).toBe("TypeError");
+  expect(line.err.message).toBe("failed at 50%s with <SECRET_1>");
+  expect(raw()).not.toContain("SECRET_TOKEN_1");
+});
+
+test("logger.error(err, fmt, ...values) formats the caller's message, not err.message", () => {
+  const { logger, lines } = capturingLogger();
+  logger.error(new Error("at 50%s"), "retry %s of %s", "1", "3");
+  const [line] = lines();
+  expect(line.msg).toBe("retry 1 of 3");
+  expect(line.err.message).toBe("at 50%s");
+});
+
+test("a block finding on the joined message replaces the whole message pino writes", () => {
   const { logger, lines, raw } = capturingLogger();
   logger.info("prefix %s suffix", "BLOCK_ME");
   expect(lines()).toEqual([{ level: 30, msg: "[REDACTED:BLOCKED]" }]);
   expect(raw()).not.toContain("BLOCK_ME");
 });
 
-test("issue #361: a scanner failure on the joined message fails closed in the destination bytes", () => {
+test("a scanner failure on the joined message fails closed in the destination bytes", () => {
   const { logger, lines, raw } = capturingLogger();
   logger.info("trigger %s here", "BOOM");
   expect(lines()).toEqual([{ level: 30, msg: "[REDACTED:ERROR]" }]);
   expect(raw()).not.toContain("BOOM");
+});
+
+test("logger.info(undefined, fmt, ...values) joins before scanning, as pino formats it", () => {
+  const { logger, lines, raw } = capturingLogger();
+  (logger.info as (...args: unknown[]) => void)(undefined, "token is SECRET_TOKEN_%s", "1");
+  expect(lines()).toEqual([{ level: 30, msg: "token is <SECRET_1>" }]);
+  expect(raw()).not.toContain("SECRET_TOKEN_1");
+});
+
+test("a child's msgPrefix is scanned with the message and still printed once", () => {
+  const { logger, lines } = capturingLogger();
+  logger.child({}, { msgPrefix: "[auth] " }).info("token %s", "SECRET_TOKEN_1");
+  expect(lines()).toEqual([{ level: 30, msg: "[auth] token <SECRET_1>" }]);
+});
+
+test("an Error under any errorKey keeps its class in err.type and is masked", () => {
+  const { destination, lines, raw } = capture();
+  const logMethod = createRedactingLogMethodWith(fakeScanAndRedact);
+  const logger = pino({ base: null, timestamp: false, errorKey: "error", hooks: { logMethod } }, destination);
+
+  logger.error(new TypeError("leading SECRET_TOKEN_1"));
+  logger.error({ error: new RangeError("merged SECRET_TOKEN_2") }, "failed");
+
+  const [leading, merged] = lines();
+  expect(leading.msg).toBe("leading <SECRET_1>");
+  expect(leading.error).toMatchObject({ type: "TypeError", message: "leading <SECRET_1>" });
+  expect(merged.msg).toBe("failed");
+  expect(merged.error).toMatchObject({ type: "RangeError", message: "merged <SECRET_1>" });
+  expect(raw()).not.toMatch(/SECRET_TOKEN_\d/);
+});
+
+test("an Error under the default err key keeps its class in err.type", () => {
+  const { logger, lines } = capturingLogger();
+  logger.error({ err: new SyntaxError("bad SECRET_TOKEN_1") }, "parse failed");
+  expect(lines()[0].err).toMatchObject({ type: "SyntaxError", message: "bad <SECRET_1>" });
+});
+
+function capture() {
+  const chunks: string[] = [];
+  const destination = {
+    write(chunk: string) {
+      chunks.push(chunk);
+      return true;
+    },
+  };
+  return { destination, raw: () => chunks.join(""), lines: () => chunks.map((chunk) => JSON.parse(chunk)) };
+}
+
+test("logMethod alone never sees child bindings or mixin() output — the gap streamWrite closes", () => {
+  const { destination, raw } = capture();
+  const logMethod = createRedactingLogMethodWith(fakeScanAndRedact);
+  const logger = pino(
+    { base: null, timestamp: false, hooks: { logMethod }, mixin: () => ({ mixed: "SECRET_TOKEN_2" }) },
+    destination,
+  );
+  logger.child({ session: "SECRET_TOKEN_1" }).info("hello");
+  // If pino ever routes these through hooks.logMethod, this canary fails and
+  // the streamWrite requirement in the README can be revisited.
+  expect(raw()).toContain("SECRET_TOKEN_1");
+  expect(raw()).toContain("SECRET_TOKEN_2");
+});
+
+test("streamWrite masks child bindings, setBindings, and mixin() output in the bytes pino writes", () => {
+  const { destination, raw, lines } = capture();
+  const logger = pino(
+    {
+      base: null,
+      timestamp: false,
+      hooks: {
+        logMethod: createRedactingLogMethodWith(fakeScanAndRedact),
+        streamWrite: createRedactingStreamWriteWith(fakeScanAndRedact),
+      },
+      mixin: () => ({ mixed: "mixin SECRET_TOKEN_2" }),
+    },
+    destination,
+  );
+  const child = logger.child({ session: "session SECRET_TOKEN_1" });
+  child.info("hello %s", "SECRET_TOKEN_3");
+  child.setBindings({ later: "later SECRET_TOKEN_4" });
+  child.child({ grand: "BLOCK_ME" }).warn("again");
+
+  expect(lines()).toEqual([
+    { level: 30, session: "session <SECRET_1>", mixed: "mixin <SECRET_1>", msg: "hello <SECRET_1>" },
+    {
+      level: 40,
+      session: "session <SECRET_1>",
+      later: "later <SECRET_1>",
+      grand: "[REDACTED:BLOCKED]",
+      mixed: "mixin <SECRET_1>",
+      msg: "again",
+    },
+  ]);
+  expect(raw()).not.toMatch(/SECRET_TOKEN_\d|BLOCK_ME/);
 });
 
 test("pino's own path-based redact still applies on top, to a field the value-based hook left untouched", () => {

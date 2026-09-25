@@ -3,7 +3,7 @@
 This repository holds host integrations for
 [Redact Secret](https://github.com/redact-secret/redact-secret). It contains no
 detection logic, no policy, and no redaction algorithm. Everything here is
-wiring, and the value of the wiring is that it is subtle enough to get wrong.
+wiring between a host's extension point and the core.
 
 ## The layering
 
@@ -11,10 +11,13 @@ Every adapter, in both languages, is the same four layers. Read them top to
 bottom; the top two are host-specific, the bottom two are shared.
 
 ```text
-  L3  host seam          pino hooks.logMethod · SpanProcessor.onEnd · logging.Filter.filter
+  L3  host seam          pino hooks.logMethod + hooks.streamWrite · SpanProcessor.onEnd · logging.Filter.filter
+       |                 · the AI-context boundary's operations (no host: the caller is the seam)
+       |                 · the MCP boundary's operations and structural tool-handler wrappers
        |                 structural (duck-typed) match against the host's extension point
        |                 no runtime import of the host package
-  L2  value-tree walker  recursive descent over dicts / lists / strings
+  L2  value-tree walker  recursive descent over everything JSON would emit:
+       |                 objects, arrays, Errors, toJSON() results, strings
        |                 owns the depth, width and total-leaf budgets
   L1  mask-leaf          mask ONE string; fail closed on every error path
        |                 owns the four markers and DEFAULT_LIMITS
@@ -55,9 +58,28 @@ import type {
 export type ScanAndRedact = (text: string, options?: ScanAndRedactOptions) => ScanResult;
 ```
 
-This is the strongest guard in the repository. If the core renames an action or
-reshapes a result, these packages fail to compile — they do not keep running
-while quietly letting a `block`-worthy secret through as an inline placeholder.
+If the core renames an action or reshapes a result, these packages fail to
+compile instead of running on while letting a `block`-worthy secret through as
+an inline placeholder.
+
+**The one exception: `@redact-secret/adapter-ai-context`.** The core's
+[AI-context boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/ai-context-boundary.md)
+(redact-secret/redact-secret#610) deliberately widens the surface for that
+package alone, and only by documented core APIs: the whole-input `policy` /
+`limits` options, `createIncrementalSanitizer` with `append` / `finalize` /
+`abort`, `SecretScanError.code` (read, and forwarded only when it is in the
+core's fixed registry), and the eight safe finding fields. The contract, not
+a version range alone, protects that surface: the package replays the core's
+conformance fixture, vendored byte-for-byte at a pinned 40-hex core commit
+(`fixtures/core/pins.json`), through its public API on the real core at both
+range endpoints. `test/dependency-surface.test.ts` fails if the built package
+reads any other core member. The logging and tracing adapters keep the
+four-item surface above.
+
+`@redact-secret/adapter-mcp` reads no core member at all. It reaches the core
+only through `adapter-ai-context`'s boundary (`sanitizeValue`,
+`sanitizeText`, `openStream`), and its `test/dependency-surface.test.ts`
+fails if its built output imports anything else.
 
 Because a typecheck only covers the core version that is installed, CI
 typechecks at **both ends of every declared range**, host packages included.
@@ -73,21 +95,19 @@ runtime code stays structural: an object is a `SpanProcessor` because it has
 ## Fail-closed rules
 
 L1 is small on purpose. It performs no detection; it decides how the core's
-answer reaches the host.
+answer reaches the host. The four markers, when each fires, and
+`DEFAULT_LIMITS` are listed once, in
+[README.md § Fail-closed behavior](./README.md#fail-closed-behavior); they are
+public API and move only in a major version. The reasons behind them:
 
-- A `block` finding replaces the **whole leaf** with `[REDACTED:BLOCKED]`. The
-  core already substitutes `block` findings in place like `redact` ones, but an
-  inline placeholder still leaves the rest of the string visible, which is not
-  what a host asked for when it declared a value block-worthy.
-- Any throw becomes `[REDACTED:ERROR]`. Not the original text, and not the
-  error's own message — an error message can carry the input.
-- A value past a budget becomes `[REDACTED:LIMIT_EXCEEDED]` and is never sent to
-  the core. Elements and keys past `maxArrayLength` / `maxObjectKeys` are
-  dropped, never passed through unmasked.
-- A cycle becomes `[REDACTED:CYCLE]`.
-
-The markers and `DEFAULT_LIMITS` are public API. They move only in a major
-version.
+- `block` replaces the **whole leaf**. The core already substitutes `block`
+  findings in place like `redact` ones, but an inline placeholder still leaves
+  the rest of the string visible, which is not what a host asked for when it
+  declared a value block-worthy.
+- An error produces a fixed marker, never the error's own message: an error
+  message can carry the input.
+- A value past a budget is never sent to the core, and elements or keys past a
+  width limit are dropped rather than passed through unmasked.
 
 ## Adapter-specific notes
 
@@ -99,50 +119,155 @@ key separately from the merged object — and it runs before `serializers[key]`,
 so it can reach a plain string field but never the message and never a
 serialized `err.message`.
 
-Two transformations run before anything is scanned:
+Two things keep pino's own call-shape handling intact:
 
-1. **A leading `Error` is normalized** to `[{ err }, err.message, ...rest]`.
-   pino infers `msg` from `err.message` only when the first argument is
-   `instanceof Error`; replacing that argument with a masked plain object would
-   silently drop the `msg` field from the output.
+1. **A leading `Error` stays a leading `Error`.** pino wraps a first argument
+   that is `instanceof Error` under `errorKey`, and takes `msg` from its
+   `message` only when the caller passed no message. The hook therefore hands
+   pino a masked copy that keeps the original error's prototype, rather than a
+   plain object or a rewritten argument list: `logger.error(err, "custom")`
+   keeps `"custom"`, `logger.error(err)` gets the masked `err.message`, and
+   `err.type` still names the error's class.
 2. **A string message and its interpolation values are joined** into the exact
    string pino would format, *before* redaction. pino formats `msg` after the
    hook returns, so scanning the format string and its arguments separately
-   misses a secret split across them — neither half matches on its own.
+   misses a secret split across them — neither half matches on its own. The
+   message is found where pino looks for it (after a first argument that is an
+   object, `null` or `undefined`). A logger's `msgPrefix` is prepended by pino
+   after the hook too, so it is scanned together with the message and stripped
+   again; if a redaction reaches into the prefix, the whole masked text is kept
+   and pino prints the static prefix before it.
 
 Redaction then runs over one value tree and the redacted arguments are passed on
 with `method.apply`, so every later pino stage — serializers, formatters, the
 host's own path-based `redact` — runs unchanged over text pino can no longer see
 in the clear.
 
+`hooks.logMethod` cannot see two inputs that end up in the line: child-logger
+bindings, which pino serializes once when `child()` or `setBindings()` runs, and
+`mixin()` output, merged after the hook returns. `formatters.bindings` is no
+fix — pino replaces it with an identity function for every child created
+without its own `formatters` option. The sound hook is `hooks.streamWrite`,
+which receives the finished JSON line. `createRedactingStreamWrite` masks every
+string value in it in place (keys and every other byte are kept), and fails
+closed to a fixed `{"msg":"[REDACTED:ERROR]"}` line if the line cannot be
+lexed. It is a second scan of each line, so it is a separate hook the host
+installs next to `logMethod` rather than a replacement: `logMethod` still keeps
+raw values away from the host's own serializers, formatters and `mixin()`.
+
 ### OpenTelemetry
 
-The processor wraps any object shaped like a `SpanProcessor` and redacts every
-string and string-array attribute on the span and its events in `onEnd` before
-delegating.
+The processor wraps any object shaped like a `SpanProcessor` and, in `onEnd`
+before delegating, redacts every free-text field an exporter sends: the span
+name, string and string-array attributes (keeping `null` holes in place), each
+event's name and attributes, the status message, and each link's attributes.
 
-One runtime assumption is load-bearing: `ReadableSpan.attributes` is typed
-`readonly` but is a plain mutable object at runtime. If an SDK version freezes
-it, this adapter becomes a silent no-op — which is exactly the failure mode the
-fail-closed rules exist to prevent. The test suite asserts mutation actually
-took effect on a real span, at both ends of the declared SDK range. That
-assertion is not optional.
+One runtime assumption is load-bearing: `ReadableSpan`'s fields are typed
+`readonly` but are plain writable objects at runtime, so the masked values are
+written back in place. Every write is read back. If one does not take — a
+frozen bag, a setter that ignores the write — the span is dropped with a
+one-time process warning naming the field, never its value, rather than
+exported unredacted or thrown out of `span.end()`. A status is replaced, not
+mutated, since the object may be the caller's own. The real-host test asserts
+the writes take effect on a real span at both ends of the declared SDK range,
+and that a span frozen by an earlier processor is dropped without a throw.
 
-The Python SDK makes the same assumption false by construction rather than by
-version drift: `opentelemetry-sdk`'s `BoundedAttributes` marks every event's
-attributes immutable unconditionally, and a span's attributes immutable once
-`Span.end()` runs, in every declared version — always before any processor
-hook fires. `redact_secret_adapters.otel` writes through `BoundedAttributes`'
-backing `_dict` instead of `__setitem__`, which is the same bypass
-`BoundedAttributes.__deepcopy__` uses internally, not a version-specific
-workaround. The real-host test is otherwise the same shape as the JS one, at
-both ends of the Python SDK's declared range.
+The Python SDK offers no mutable view at all: `ReadableSpan.name`, `.status`,
+`.attributes`, `.events` and `.links` are read-only, so
+`redact_secret_adapters.otel` writes the private fields behind them (`_name`,
+`_status`, `_attributes`, each event's `_name`/`_attributes`, each link's
+`_attributes`). Event and link attributes are always an immutable
+`BoundedAttributes`; span attributes are marked immutable in `Span.end()`
+from 1.43 on, but still mutable in `on_end` on 1.16.0. Writes therefore go
+through `BoundedAttributes`' backing `_dict`, the same bypass
+`BoundedAttributes.__deepcopy__` uses, which works either way. Because the
+fields are private, every write is read back through the public accessor; a
+missing field or a write that does not show through drops the span with a
+one-time `RuntimeWarning` rather than exporting it unredacted. The real-host
+test checks all of this at both ends of the Python SDK's declared range.
+
+### AI context
+
+`adapter-ai-context` has no host SDK: its L3 is its own five operations
+(`sanitizeText`, `sanitizeValue`, `sanitizeToolResult`, `buildContext`,
+`openStream`), which the application calls where its framework builds a
+context or receives a tool result. Its rules differ from the marker-based
+adapters on purpose, because a model context, unlike a log line, is not safe
+when partly masked:
+
+- **All or nothing.** A `block` finding, a limit, an unsupported value, or a
+  core failure fails the *whole* operation to a fixed `blocked` outcome with
+  no value, never a marker in place. Nested values use L2's `walkStrict`,
+  not `walkValue`, which returns the first failure instead of a masked copy.
+  Object keys are scanned too, and a key finding that would be redacted blocks
+  the value.
+- **Staged streams.** An incremental session's output is held until a
+  successful `finalize`, which releases it once; a later `block` could not
+  recall text already released.
+- **Fixed outcomes.** `ok` / `blocked` / `aborted`, with the contract's five
+  reasons. Findings cross as allowlisted copies; error messages are never
+  read.
+
+The live factory never rejects for an initialization failure: the boundary
+it returns fails every operation closed with the core's mapped error, so an
+application that skips its own error handling still cannot fall back to
+sending raw input.
+
+It is JavaScript only. No Python AI-context adapter exists yet; one would
+replay the same vendored fixture (the core already runs its Python twin of
+the runner against every wheel), and `walkStrict` would get a Python twin
+with it.
+
+### MCP
+
+`adapter-mcp` implements the core's MCP boundary contract
+(redact-secret/redact-secret#612) as a thin specialization of
+`adapter-ai-context`. It contains no scan, walk, policy, or core-error
+mapping: a whole `CallToolResult` is one `sanitizeValue`, a streamed result
+is one `openStream`, and the key-context check is one `sanitizeText` per
+serialized part. What it adds is MCP shape only:
+
+- **Block types.** The five types of protocol revisions 2025-06-18 and
+  2025-11-25. Any other type, and any malformed shape, blocks as
+  `unsupported_value`, so a later revision fails closed.
+- **Binary payloads** are removed from the scan view and either block (the
+  default) or are put back unscanned at their original key position.
+- **Stopping a stream.** After every chunk it reads the stream's
+  `accepting` flag. On `false` it pulls no more and closes the producer
+  without waiting: `return()`, and `destroy()` when the source has one,
+  because a Node.js `Readable`'s async iterator queues `return()` behind a
+  pending `next()`.
+- **Fixed results.** Every non-`ok` outcome becomes a fixed `isError` result
+  and never a JSON-RPC error. The server wrappers catch a handler's throw
+  before the SDK can turn `error.message` into result text.
+
+The host seam is structural for both SDK lines, which differ in shape: a
+handler's signal is `extra.signal` on 1.x and `ctx.mcpReq.signal` on 2.x,
+and `client.callTool` takes `(params, schema, options)` on 1.x and
+`(params, options)` on 2.x. The wrappers read either signal, and the host
+passes its own `callTool` invocation to `sanitizeToolCall`, so no SDK is
+imported. The tests import the SDKs for real: both lines, at both endpoints
+of each declared range, over stdio and Streamable HTTP.
+
+The core's MCP fixture is replayed by the core's own runner
+(`fixtures/core/mcp-boundary.mjs`), vendored with the fixture, and not by a
+port of it.
 
 ### Python `logging`
 
-The filter walks the record's `msg`, `args` and any exception info through the
-same L2/L1 layers, so a secret in a format string, in an interpolation argument,
-or in an exception message is redacted before any handler formats the record.
+The filter formats `msg` with `args` (`record.getMessage()`) and masks the
+result as one L1 leaf, so a secret split across the format string and an
+argument is still seen whole; the arguments are then cleared. An exception is
+masked as its formatted traceback, also one L1 leaf, and cached `exc_text` and
+`stack_info` likewise. Only the `extra_fields` a caller names go through the L2
+walker.
+
+A `logging.Filter` runs only where it is attached. On a handler, it redacts the
+record before that handler formats it, and since the record is mutated in
+place, before any handler that runs afterwards; a handler without the filter
+that runs earlier sees plaintext. On a logger, it runs for records logged on
+that logger before any handler, but not for records propagated from child
+loggers. Attach it to every emitting handler.
 
 ## Cross-language contract
 
@@ -161,7 +286,11 @@ holding the two languages together, so they are shared — one copy, read by bot
 - Each package carries its own SemVer. Nothing here is released in lockstep with
   the core, or with the other packages in this repository.
 - Each package declares a range against the core and, where it has one, a
-  `peerDependency` range against its host.
+  `peerDependency` range against its host. The core is a required
+  `peerDependency` of every JavaScript package: a regular dependency could
+  install a second copy of the native core next to the application's (with
+  its own, separate `initialize()`), and an optional peer leaves the published
+  type declarations, which import the core's types, unresolvable.
 - A host range is only as wide as the tests that run against it. An untested
   version is not a supported version, however likely it is to work.
 - Pre-1.0 while the core is pre-1.0: a 1.0 adapter that can only work against a
@@ -187,10 +316,14 @@ holding the two languages together, so they are shared — one copy, read by bot
   means an external host integration; the core repository additionally uses
   "host adapter" for the CLI and the language bindings. Three distinct meanings,
   one word — do not consolidate them by moving code.
-- **MCP and model-context wiring** need the core's incremental sanitizer: a
-  stateful, much wider surface than the four-item contract above, and not
-  protected by a version range. It remains an example in the core repository
-  until that surface is itself a published contract.
+- **MCP beyond `tools/call`.** `adapter-mcp` covers tool arguments and
+  results, which is the core's MCP boundary (#612). Resources, prompts,
+  sampling, elicitation, notifications, other-language SDKs, HTTP+SSE, and
+  `experimental.tasks` stay out until a contract covers them. Transport
+  wiring stays with the host: the adapter acts on the parsed result.
+- **Model-vendor wrappers** (OpenAI, Anthropic clients) and **model output
+  scanning**: the AI-context boundary covers what goes into a context, and
+  never patches a client.
 - **LangChain**, and any other framework integration whose host contract has not
   been read and tested here.
 - **A Langfuse package.** Masking-callback hosts need the shared walker and one
@@ -203,7 +336,10 @@ packages/
   adapter/              @redact-secret/adapter          shared L1 + L2, TypeScript
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
   adapter-otel/         @redact-secret/adapter-otel     L3 + live wrapper
+  adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper (unreleased)
+  adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context (unreleased)
 python/
   redact_secret_adapters/                               shared + logging + otel extra
 fixtures/                                               cross-language contract, shared
+  core/                                                 core-owned contract files, vendored at a pinned core commit
 ```

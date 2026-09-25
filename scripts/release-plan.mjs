@@ -12,22 +12,35 @@
  *
  *   --check-changelog    every planned package's CHANGELOG.md has a
  *                        `## [x.y.z]` heading for its declared version
- *   --require-publish    fail if nothing is planned (cut / rehearsal)
+ *   --require-publish    fail if nothing is planned (cut, and the rc PR's
+ *                        rehearsal; not inside the Release workflow, whose
+ *                        re-runs may have nothing left to publish)
  *   --require-published  fail if anything is still unpublished (reconcile)
  *   --check-tags         every package's `<tag>@<version>` exists locally
  *                        (fetch tags first)
  *
+ * Every npm package also gets a dist-tag (`distTagFor`): `latest` for a
+ * release version, and the first prerelease identifier for a prerelease
+ * (`0.1.0-alpha` and `0.1.0-alpha.2` publish under `alpha`). npm 11 refuses
+ * to publish a prerelease without `--tag`, and a prerelease must never move
+ * `latest`, so every publish (and its dry run) passes `--tag` from here.
+ *
  * Under GitHub Actions it also writes `publish_<id>`, `<id>_version`,
- * `any_publish` and `plan` (JSON) to $GITHUB_OUTPUT, and the plan table to
- * $GITHUB_STEP_SUMMARY.
+ * `<id>_dist_tag` (npm packages), `any_publish` and `plan` (JSON) to
+ * $GITHUB_OUTPUT, and the plan table to $GITHUB_STEP_SUMMARY.
+ *
+ * Importing this module runs nothing; the plan is computed only when it is
+ * executed directly. The pure helpers are exported for
+ * scripts/test/release-plan.test.mjs.
  */
 
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 // `id` is the output-key stem the workflows read (`publish_adapter_pino`,
 // `adapter_pino_version`); `tag` is the prefix of the per-package git tag.
-const PACKAGES = [
+export const PACKAGES = [
   {
     id: "adapter",
     name: "@redact-secret/adapter",
@@ -53,6 +66,22 @@ const PACKAGES = [
     tag: "adapter-otel",
   },
   {
+    id: "adapter_ai_context",
+    name: "@redact-secret/adapter-ai-context",
+    registry: "npm",
+    manifest: "packages/adapter-ai-context/package.json",
+    changelog: "packages/adapter-ai-context/CHANGELOG.md",
+    tag: "adapter-ai-context",
+  },
+  {
+    id: "adapter_mcp",
+    name: "@redact-secret/adapter-mcp",
+    registry: "npm",
+    manifest: "packages/adapter-mcp/package.json",
+    changelog: "packages/adapter-mcp/CHANGELOG.md",
+    tag: "adapter-mcp",
+  },
+  {
     id: "python",
     name: "redact-secret-adapters",
     registry: "pypi",
@@ -63,14 +92,99 @@ const PACKAGES = [
 ];
 
 const root = new URL("../", import.meta.url);
-const args = new Set(process.argv.slice(2));
+
+const SEMVER =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+/**
+ * The npm dist-tag a version publishes under: `latest` for a release, the
+ * first prerelease identifier otherwise. Throws rather than guess when that
+ * identifier can't be a tag: npm rejects a tag that parses as a SemVer range
+ * (`1.0.0-0` would be tag `0`), and a prerelease tagged `latest` would be
+ * installed by a bare `npm install`.
+ */
+export function distTagFor(version) {
+  const match = SEMVER.exec(version);
+  if (match === null) throw new Error(`${version} is not a SemVer version`);
+  const prerelease = match[1];
+  if (prerelease === undefined) return "latest";
+  const tag = prerelease.split(".")[0];
+  if (!/^[A-Za-z][0-9A-Za-z-]*$/.test(tag) || tag === "latest") {
+    throw new Error(
+      `${version}: prerelease identifier "${tag}" can't be an npm dist-tag; start the prerelease with a name such as alpha, beta or rc`,
+    );
+  }
+  return tag;
+}
+
+/** One plan row. `distTag` is set for npm packages only. */
+export function planEntry(pkg, version, published) {
+  const entry = { ...pkg, version, publish: !published, gitTag: `${pkg.tag}@${version}` };
+  if (pkg.registry === "npm") entry.distTag = distTagFor(version);
+  return entry;
+}
+
+/** The `key=value` lines written to $GITHUB_OUTPUT. */
+export function outputLines(plan) {
+  const lines = plan.flatMap((p) => [
+    `publish_${p.id}=${p.publish}`,
+    `${p.id}_version=${p.version}`,
+    ...(p.distTag === undefined ? [] : [`${p.id}_dist_tag=${p.distTag}`]),
+  ]);
+  lines.push(`any_publish=${plan.some((p) => p.publish)}`);
+  lines.push(
+    `plan=${JSON.stringify(
+      plan.map(({ name, registry, version, publish, gitTag, distTag }) => ({
+        name,
+        registry,
+        version,
+        publish,
+        gitTag,
+        ...(distTag === undefined ? {} : { distTag }),
+      })),
+    )}`,
+  );
+  return lines;
+}
+
+export function planTable(plan) {
+  return [
+    "| Package | Registry | Declared version | Dist-tag | Plan |",
+    "|---|---|---|---|---|",
+    ...plan.map(
+      (p) =>
+        `| ${p.name} | ${p.registry} | ${p.version} | ${p.distTag ?? "—"} | ${p.publish ? "**publish**" : "already published, skip"} |`,
+    ),
+  ].join("\n");
+}
+
+// `version` in pyproject.toml's `[project]` table, read line by line: a
+// table header is any line that starts with `[` in column 0 (array
+// continuation lines are indented), so key order, blank lines, comments,
+// multi-line arrays and either TOML string quote don't matter. A dynamic
+// version or a version outside `[project]` is an error, not a guess.
+function pyprojectVersion(text) {
+  let table = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (line.startsWith("[")) {
+      const header = line.match(/^\[\[?([^\]]*)\]\]?\s*(?:#.*)?$/);
+      table = header ? header[1].replace(/["'\s]/g, "") : null;
+      if (line.startsWith("[[")) table = null;
+      continue;
+    }
+    if (table !== "project") continue;
+    const match = line.match(/^\s*version\s*=\s*(?:"([^"\\]*)"|'([^']*)')\s*(?:#.*)?$/);
+    if (match) return match[1] ?? match[2];
+  }
+  return null;
+}
 
 function declaredVersion(pkg) {
   const text = readFileSync(new URL(pkg.manifest, root), "utf-8");
   if (pkg.registry === "npm") return JSON.parse(text).version;
-  const match = text.match(/^\[project\][^[]*?^version = "([^"]+)"/ms);
-  if (!match) throw new Error(`${pkg.manifest}: no [project] version`);
-  return match[1];
+  const version = pyprojectVersion(text);
+  if (!version) throw new Error(`${pkg.manifest}: no static \`version = "..."\` in its [project] table`);
+  return version;
 }
 
 // 200 means published, 404 means not; anything else is an error rather than
@@ -97,54 +211,49 @@ function tagExists(tag) {
   return execFileSync("git", ["tag", "--list", tag], { encoding: "utf-8" }).trim() === tag;
 }
 
-const plan = [];
-for (const pkg of PACKAGES) {
-  const version = declaredVersion(pkg);
-  const published = await isPublished(pkg, version);
-  plan.push({ ...pkg, version, publish: !published, gitTag: `${pkg.tag}@${version}` });
-}
-
-const problems = [];
-for (const p of plan) {
-  if (args.has("--check-changelog") && p.publish && !hasChangelogEntry(p, p.version)) {
-    problems.push(`${p.changelog} has no "## [${p.version}]" heading for the version ${p.manifest} declares`);
+async function main() {
+  const args = new Set(process.argv.slice(2));
+  const plan = [];
+  for (const pkg of PACKAGES) {
+    const version = declaredVersion(pkg);
+    const published = await isPublished(pkg, version);
+    plan.push(planEntry(pkg, version, published));
   }
-  if (args.has("--require-published") && p.publish) {
-    problems.push(`${p.name}@${p.version} is declared but not on ${p.registry}`);
+
+  const problems = [];
+  for (const p of plan) {
+    if (args.has("--check-changelog") && p.publish && !hasChangelogEntry(p, p.version)) {
+      problems.push(`${p.changelog} has no "## [${p.version}]" heading for the version ${p.manifest} declares`);
+    }
+    if (args.has("--require-published") && p.publish) {
+      problems.push(`${p.name}@${p.version} is declared but not on ${p.registry}`);
+    }
+    if (args.has("--check-tags") && !tagExists(p.gitTag)) {
+      problems.push(`tag ${p.gitTag} is missing`);
+    }
   }
-  if (args.has("--check-tags") && !tagExists(p.gitTag)) {
-    problems.push(`tag ${p.gitTag} is missing`);
+  if (args.has("--require-publish") && !plan.some((p) => p.publish)) {
+    problems.push(
+      "every declared version is already published: bump a package version on develop before cutting a train",
+    );
+  }
+
+  const table = planTable(plan);
+  console.log(table);
+
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `${outputLines(plan).join("\n")}\n`);
+  }
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Release plan\n\n${table}\n\n`);
+  }
+
+  if (problems.length > 0) {
+    for (const problem of problems) console.error(`::error::${problem}`);
+    process.exit(1);
   }
 }
-const anyPublish = plan.some((p) => p.publish);
-if (args.has("--require-publish") && !anyPublish) {
-  problems.push(
-    "every declared version is already published: bump a package version on develop before cutting a train",
-  );
-}
 
-const table = [
-  "| Package | Registry | Declared version | Plan |",
-  "|---|---|---|---|",
-  ...plan.map(
-    (p) => `| ${p.name} | ${p.registry} | ${p.version} | ${p.publish ? "**publish**" : "already published, skip"} |`,
-  ),
-].join("\n");
-console.log(table);
-
-if (process.env.GITHUB_OUTPUT) {
-  const lines = plan.flatMap((p) => [`publish_${p.id}=${p.publish}`, `${p.id}_version=${p.version}`]);
-  lines.push(`any_publish=${anyPublish}`);
-  lines.push(
-    `plan=${JSON.stringify(plan.map(({ name, registry, version, publish, gitTag }) => ({ name, registry, version, publish, gitTag })))}`,
-  );
-  appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join("\n")}\n`);
-}
-if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Release plan\n\n${table}\n\n`);
-}
-
-if (problems.length > 0) {
-  for (const problem of problems) console.error(`::error::${problem}`);
-  process.exit(1);
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
 }

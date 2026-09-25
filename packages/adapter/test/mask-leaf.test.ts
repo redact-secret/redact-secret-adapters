@@ -40,6 +40,16 @@ test("a throwing core yields the error marker, never the message or the input", 
   expect(maskLeafWith(leaky, "SECRET_TOKEN_1")).toBe(ERROR_MARKER);
 });
 
+test("a malformed scanner result fails closed instead of throwing or passing text through", () => {
+  const results = [undefined, null, {}, { text: "SECRET_TOKEN_1" }, { text: 42, findings: [] }, { findings: [] }];
+  for (const result of results) {
+    const malformed = (() => result) as unknown as ScanAndRedact;
+    expect(maskLeafWith(malformed, "SECRET_TOKEN_1"), JSON.stringify(result)).toBe(ERROR_MARKER);
+  }
+  const nullFinding = (() => ({ text: "ok", findings: [null] })) as unknown as ScanAndRedact;
+  expect(maskLeafWith(nullFinding, "ok")).toBe("ok");
+});
+
 test("a leaf past maxStringLength is never sent to the core", () => {
   let called = false;
   const spy: ScanAndRedact = (text) => {

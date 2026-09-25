@@ -32,8 +32,18 @@ export const DEFAULT_LIMITS: Limits = Object.freeze({
 });
 
 /**
+ * `value` if it is a usable bound, else `fallback`. `undefined`, `NaN`, a
+ * negative number, or a non-number would otherwise disable a limit
+ * (`length > NaN` is never true) or override the default by accident.
+ */
+export function resolveLimit(value: unknown, fallback: number): number {
+  return typeof value === "number" && value >= 0 ? value : fallback;
+}
+
+/**
  * Masks one leaf string. Any thrown error — including `NOT_INITIALIZED` if
- * a host skipped `await initialize()` — fails closed: the leaf becomes
+ * a host skipped `await initialize()` — or a result not shaped like
+ * `{ text: string, findings: [] }` fails closed: the leaf becomes
  * {@link ERROR_MARKER}, never the original text and never the error's own
  * message. A `block` finding replaces the entire leaf with
  * {@link BLOCK_MARKER}: `scanAndRedact` already substitutes `block`
@@ -51,17 +61,14 @@ export function maskLeafWith(
   if (typeof text !== "string") {
     throw new TypeError("maskLeafWith: text must be a string");
   }
-  const limit = maxStringLength ?? DEFAULT_LIMITS.maxStringLength;
-  if (text.length > limit) return LIMIT_MARKER;
+  if (text.length > resolveLimit(maxStringLength, DEFAULT_LIMITS.maxStringLength)) return LIMIT_MARKER;
 
-  let result: ReturnType<ScanAndRedact>;
   try {
-    result = scanAndRedact(text, { policy });
+    const result = scanAndRedact(text, { policy });
+    if (typeof result?.text !== "string" || !Array.isArray(result.findings)) return ERROR_MARKER;
+    if (result.findings.some((finding) => finding?.action === BLOCK)) return BLOCK_MARKER;
+    return result.text;
   } catch {
     return ERROR_MARKER;
   }
-  if (result.findings.some((finding) => finding.action === BLOCK)) {
-    return BLOCK_MARKER;
-  }
-  return result.text;
 }

@@ -7,12 +7,11 @@
  * from a real `BasicTracerProvider`, read back from a real exporter, can.
  *
  * CI runs this at both ends of the declared
- * `@opentelemetry/sdk-trace-base` peer range. `adapter-otel` stays
- * `"private": true` until it does.
+ * `@opentelemetry/sdk-trace-base` peer range.
  */
 
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
 import { RedactingSpanProcessorWith } from "../src/index.js";
@@ -54,6 +53,79 @@ test("a real span's attributes are actually mutated before the exporter sees the
   }
 
   await provider.shutdown();
+});
+
+test("a real span's name, event name, status message, and link attributes are redacted before export", async () => {
+  const { exporter, provider, tracer } = realPipeline();
+
+  const linked = tracer.startSpan("linked").spanContext();
+  const span = tracer.startSpan("GET /reset?token=SECRET_TOKEN_1", {
+    links: [{ context: linked, attributes: { "peer.auth": "Bearer SECRET_TOKEN_2" } }],
+  });
+  span.setAttribute("tags", ["SECRET_TOKEN_3", null, "plain"] as unknown as string[]);
+  span.addEvent("retry with SECRET_TOKEN_4");
+  span.setStatus({ code: 2 /* SpanStatusCode.ERROR */, message: "denied for SECRET_TOKEN_5" });
+  span.end();
+  await provider.forceFlush();
+
+  const [exported] = exporter.getFinishedSpans();
+  expect(exported?.name).toBe("GET /reset?token=<SECRET_1>");
+  expect(exported?.attributes.tags).toEqual(["<SECRET_1>", null, "plain"]);
+  expect(exported?.events.map((event) => event.name)).toEqual(["retry with <SECRET_1>"]);
+  expect(exported?.status.message).toBe("denied for <SECRET_1>");
+  expect(exported?.links[0]?.attributes).toEqual({ "peer.auth": "Bearer <SECRET_1>" });
+  const { name, attributes, events, status, links } = exported ?? {};
+  expect(JSON.stringify({ name, attributes, events, status, links })).not.toMatch(/SECRET_TOKEN_\d/);
+
+  await provider.shutdown();
+});
+
+test("the SDK's onEnding reaches the wrapped processor exactly when the SDK calls it at all", async () => {
+  const recorder = (into: string[]) => ({
+    onStart() {},
+    onEnding(span: { name: string }) {
+      into.push(span.name);
+    },
+    onEnd() {},
+    shutdown: () => Promise.resolve(),
+    forceFlush: () => Promise.resolve(),
+  });
+  const direct: string[] = [];
+  const wrapped: string[] = [];
+  const provider = new BasicTracerProvider({
+    spanProcessors: [recorder(direct), new RedactingSpanProcessorWith(recorder(wrapped), fakeScanAndRedact)],
+  });
+  provider.getTracer("adapter-otel-host-test").startSpan("ending-probe").end();
+  // sdk-trace-base 2.0.0 has no onEnding; later 2.x versions call it.
+  expect(wrapped).toEqual(direct);
+  await provider.shutdown();
+});
+
+test("span.end() never throws when an earlier processor froze the span's attributes; the span is dropped", async () => {
+  const emit = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+  try {
+    const exporter = new InMemorySpanExporter();
+    const freezer = {
+      onStart() {},
+      onEnd(span: { attributes: object }) {
+        Object.freeze(span.attributes);
+      },
+      shutdown: () => Promise.resolve(),
+      forceFlush: () => Promise.resolve(),
+    };
+    const provider = new BasicTracerProvider({
+      spanProcessors: [freezer, new RedactingSpanProcessorWith(new SimpleSpanProcessor(exporter), fakeScanAndRedact)],
+    });
+    const span = provider.getTracer("adapter-otel-host-test").startSpan("frozen");
+    span.setAttribute("key", "SECRET_TOKEN_1");
+    expect(() => span.end()).not.toThrow();
+    await provider.forceFlush();
+    expect(exporter.getFinishedSpans()).toEqual([]);
+    expect(emit).toHaveBeenCalledTimes(1);
+    await provider.shutdown();
+  } finally {
+    emit.mockRestore();
+  }
 });
 
 test("the SDK hands onEnd mutable attribute bags — the assumption this adapter rests on", async () => {

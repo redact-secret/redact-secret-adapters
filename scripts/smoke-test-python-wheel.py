@@ -7,8 +7,8 @@ virtualenv OUTSIDE the checkout and runs a smoke test from there.
 `pip install -e "./python[otel,test]"` (what the `python` CI job runs)
 never builds a wheel, so a module missing from the built distribution, a
 `py.typed` that doesn't get packaged, or a `packages` misconfiguration in
-`pyproject.toml` passes through every one of those tests. This script is
-what actually proves the built artifact works for a real installer.
+`pyproject.toml` passes through every one of those tests. This script
+installs the built artifact the way a real installer would.
 
     python scripts/smoke-test-python-wheel.py
 """

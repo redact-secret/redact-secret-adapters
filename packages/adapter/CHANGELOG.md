@@ -19,10 +19,48 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
-## [0.1.0]
+## [0.1.1] - 2026-09-25
 
-Initial release. Not yet published — this heading gains a release date once
-the Release workflow first publishes this package.
+### Added
+
+- `walkStrict(value, limits, visitors)`, the all-or-nothing variant of the
+  shared walker, for hosts where a partially scanned value is not a safe value
+  (the AI-context boundary, `@redact-secret/adapter-ai-context`). It accepts
+  only JSON-shaped values (strings, finite numbers, booleans, `null`, arrays,
+  plain objects), hands every string and every object key to the caller's
+  visitor, and returns the first failure instead of a value:
+  `limit_exceeded` past `maxDepth` (containers, root included) or `maxNodes`
+  (every visited value), `unsupported_value` for anything else, a cycle, or a
+  value that cannot be read. `isStrictWalkLimits` and the `StrictWalk*` types
+  are exported with it. The marker-based walker is unchanged.
+
+### Changed
+
+- `@redact-secret/core` is now a required peer dependency (was optional). The
+  published `.d.ts` files import the core's types, so without it a TypeScript
+  consumer failed to typecheck. npm 7+ and pnpm install a required peer
+  automatically.
+
+### Fixed
+
+- `maskLeafWith` fails closed to `[REDACTED:ERROR]` on a scanner result that
+  is not `{ text: string, findings: [] }`, instead of throwing.
+- `maskSecretsWith` and `maskLogValueWith` are now one walker, and it no
+  longer passes non-plain objects through unmasked. A class instance,
+  `IncomingMessage`, `URL` or any `toJSON()` object is masked as what JSON
+  serialization would emit (its `toJSON()` result, else its own enumerable
+  properties). `maskSecretsWith` now walks an `Error` the way
+  `maskLogValueWith` did, so an axios-style `error.config.headers` is masked.
+  An `Error`'s `name` is masked too. A throwing getter or `toJSON()` becomes
+  `[REDACTED:ERROR]` instead of throwing out of the walk.
+- A limit passed as `undefined`, `NaN`, or a negative number now falls back to
+  its `DEFAULT_LIMITS` value. Before, `{ maxDepth: undefined }` overrode the
+  default and disabled the bound, and a `NaN` `maxStringLength` disabled the
+  size check.
+
+## [0.1.0] - 2026-09-22
+
+Initial release.
 
 ### Added
 

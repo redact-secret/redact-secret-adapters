@@ -1,0 +1,46 @@
+{
+  "name": "@redact-secret/adapter-ai-context",
+  "version": "0.1.0-alpha",
+  "description": "A framework-neutral AI-context boundary over the Redact Secret core: sanitize user input, tool results, constructed context, and streamed text before it reaches a model.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-adapters.git",
+    "directory": "packages/adapter-ai-context"
+  },
+  "homepage": "https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-ai-context#readme",
+  "bugs": {
+    "url": "https://github.com/redact-secret/redact-secret-adapters/issues"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@redact-secret/adapter": "^0.1.1"
+  },
+  "peerDependencies": {
+    "@redact-secret/core": "^0.1.0-beta.6"
+  },
+  "devDependencies": {
+    "@redact-secret/core": "^0.1.0-beta.6"
+  }
+}

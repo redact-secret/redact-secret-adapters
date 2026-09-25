@@ -1,0 +1,63 @@
+{
+  "name": "@redact-secret/adapter-mcp",
+  "version": "0.1.0-alpha",
+  "description": "The supported MCP redaction boundary over the Redact Secret core: sanitize tool results, opt-in tool arguments, and streamed tool output before logging, persistence, or model context. A thin specialization of @redact-secret/adapter-ai-context.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-adapters.git",
+    "directory": "packages/adapter-mcp"
+  },
+  "homepage": "https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/redact-secret/redact-secret-adapters/issues"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@redact-secret/adapter-ai-context": "^0.1.0-alpha"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/client": ">=2.0.0 <=2.1.0",
+    "@modelcontextprotocol/sdk": ">=1.13.0 <=1.30.1",
+    "@modelcontextprotocol/server": ">=2.0.0 <=2.1.0",
+    "@redact-secret/core": "^0.1.0-beta.6"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/client": {
+      "optional": true
+    },
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
+    "@modelcontextprotocol/server": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": ">=2.0.0 <=2.1.0",
+    "@modelcontextprotocol/sdk": ">=1.13.0 <=1.30.1",
+    "@modelcontextprotocol/server": ">=2.0.0 <=2.1.0",
+    "@redact-secret/core": "^0.1.0-beta.6"
+  }
+}

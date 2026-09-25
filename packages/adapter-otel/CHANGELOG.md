@@ -20,10 +20,49 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
-## [0.1.0]
+## [0.1.1] - 2026-09-25
 
-Initial release. Not yet published — this heading gains a release date once
-the Release workflow first publishes this package.
+### Changed
+
+- `@redact-secret/adapter` range raised from `^0.1.0` to `^0.1.1`, the
+  version with the fail-closed walker fixes this release relies on (a
+  malformed scanner result, non-plain objects, throwing getters). Backed
+  by this package's tests, which run against the workspace's
+  `@redact-secret/adapter` 0.1.1, and by the npm install smoke test.
+- `createRedactingSpanProcessor` loads `@redact-secret/core` on call, like
+  `@redact-secret/adapter`'s `createMaskSecrets`, so importing the injected
+  API never loads the native core. No API change.
+- `MaskLeafOptions` is re-exported for typing `options`.
+- `@redact-secret/core ^0.1.0-beta.6` moves from `dependencies` to
+  `peerDependencies`, same range. As a regular dependency, a core version in
+  the application outside that range installed a second, separately
+  initialized copy of the native core. Now there is exactly one. npm 7+ and
+  pnpm install a required peer automatically. Backed by the same range-endpoint
+  CI jobs, which already resolved the core range from either field.
+
+### Deprecated
+
+- `RedactAttributesOptions`, an alias of `MaskLeafOptions` that adds nothing.
+  It still works and will be removed in a future major version.
+
+### Fixed
+
+- `onEnd` never throws into the SDK. A span whose fields do not take the
+  masked write (for example, attributes frozen by an earlier processor) is
+  dropped with a one-time `REDACT_SECRET_SPAN_DROPPED` process warning naming
+  the field, never its value. Before, a frozen bag threw a `TypeError` out of
+  `span.end()`. The status is now replaced rather than mutated.
+- The SDK's optional `onEnding` hook is now forwarded to the wrapped
+  processor. Before, a wrapped processor that relied on it never saw it.
+- The span name, every event's name, the status message, and every link's
+  attributes are now redacted; before, only span and event attributes were.
+- A string-array attribute with a `null` or `undefined` element is now
+  redacted element by element, keeping the holes in place. Before, any
+  non-string element made the whole array pass through unmasked.
+
+## [0.1.0] - 2026-09-22
+
+Initial release.
 
 ### Added
 
