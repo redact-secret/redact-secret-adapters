@@ -39,6 +39,11 @@ const LIVE_FACTORIES = {
     incrementalLimits: { maxInputCodeUnits: 1048576, maxBufferedCodeUnits: 65536, maxTokenCodeUnits: 8192, maxMultilineCodeUnits: 32768 },
     traversalLimits: { maxDepth: 16, maxNodes: 4096 },
   });`,
+  "@redact-secret/adapter-mcp": `await m.createMcpBoundary({
+    wholeInputLimits: { maxInputBytes: 65536, maxFindings: 256 },
+    incrementalLimits: { maxInputCodeUnits: 1048576, maxBufferedCodeUnits: 65536, maxTokenCodeUnits: 8192, maxMultilineCodeUnits: 32768 },
+    traversalLimits: { maxDepth: 16, maxNodes: 4096 },
+  });`,
 };
 
 function parseArgs(argv) {

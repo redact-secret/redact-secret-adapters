@@ -147,8 +147,10 @@ publish job in `release.yml`), then bootstrap it once by hand:
 
 A new package lands on `develop` unreleased: `"private": true` in its
 manifest and absent from `PACKAGES`, so no train plans it and `npm publish`
-refuses it even by hand. `@redact-secret/adapter-ai-context` is in that state;
-its CHANGELOG lists what its first release has to change.
+refuses it even by hand. `@redact-secret/adapter-ai-context` and
+`@redact-secret/adapter-mcp` are in that state; each CHANGELOG lists what its
+first release has to change (`adapter-mcp` depends on `adapter-ai-context`,
+so that one ships first).
 
 PRs that cut and reconcile open use `GITHUB_TOKEN`, which fires no
 `pull_request` event; those workflows dispatch CI, Branch guard and

@@ -16,7 +16,8 @@
     "packages/adapter",
     "packages/adapter-pino",
     "packages/adapter-otel",
-    "packages/adapter-ai-context"
+    "packages/adapter-ai-context",
+    "packages/adapter-mcp"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
