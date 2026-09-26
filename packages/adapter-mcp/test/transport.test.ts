@@ -192,12 +192,24 @@ describe.each(LINES.flatMap((line) => TRANSPORTS.map((transport) => [line, trans
       const afterRedacted = await stats(connection);
       expect(afterRedacted.wrappedArgsCalls).toBe((before.wrappedArgsCalls ?? 0) + 1);
       expect(afterRedacted.lastWrappedArgs).toEqual({ query: "API_KEY=<SECRET_1>" });
-      const blocked = await connection.callTool({
+      // A value only its key identifies is redacted at its leaf and dispatched
+      // (redact-secret/redact-secret#842), not blocked.
+      const keyed = await connection.callTool({
         name: "wrapped-args",
         arguments: { username: "deploy-bot", password: "synthetic-not-a-secret" },
       });
+      expect(keyed).toEqual({ content: [{ type: "text", text: "arguments accepted" }] });
+      const afterKeyed = await stats(connection);
+      expect(afterKeyed.wrappedArgsCalls).toBe((afterRedacted.wrappedArgsCalls ?? 0) + 1);
+      expect(afterKeyed.lastWrappedArgs).toEqual({ username: "deploy-bot", password: "<SECRET_1>" });
+      const blocked = await connection.callTool({
+        name: "wrapped-args",
+        arguments: {
+          key: "-----BEGIN PRIVATE KEY-----\nU1lOVEhFVElDX1JFVk9LRURfQ09ORk9STUFOQ0U=\n-----END PRIVATE KEY-----",
+        },
+      });
       expect(blocked).toEqual(fixture.fixedResults.blocked);
-      expect((await stats(connection)).wrappedArgsCalls).toBe(afterRedacted.wrappedArgsCalls);
+      expect((await stats(connection)).wrappedArgsCalls).toBe(afterKeyed.wrappedArgsCalls);
     });
 
     test("McpServer.registerTool: the wrapper sanitizes, and catches a throw before the SDK reads its message", async () => {

@@ -120,12 +120,12 @@ export interface McpBoundary {
   /**
    * One `CallToolResult`, before it is logged, persisted, or placed into
    * model context: the whole result as ONE AI-context `sanitizeValue`
-   * (label `tool-result`), then the key-context check.
+   * (label `tool-result`), then the key-context backstop.
    */
   sanitizeToolResult(result: unknown, options?: McpOperationOptions): McpOutcome<JsonObject>;
   /**
    * Opt-in: a tool call's `arguments` (label `tool-arguments`), then the
-   * key-context check. Absent arguments are `ok` with no value; anything but
+   * key-context backstop. Absent arguments are `ok` with no value; anything but
    * a plain object is `unsupported_value`.
    */
   sanitizeToolArguments(args: unknown, options?: McpOperationOptions): McpOutcome<JsonObject | undefined>;

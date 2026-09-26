@@ -67,9 +67,10 @@ function materialize(input: Input | undefined): string {
 
 function materializeValue(value: unknown): unknown {
   if (value !== null && typeof value === "object" && typeof (value as { construct?: unknown }).construct === "string") {
-    const spec = value as { construct: string; count?: number; item?: unknown };
+    const spec = value as { construct: string; count?: number; item?: unknown; key?: string; repeat?: string };
     if (spec.construct === "array-of-strings") return Array.from({ length: spec.count ?? 0 }, () => spec.item);
     if (spec.construct === "non-plain-object") return { when: new Date(0) };
+    if (spec.construct === "string-under-key") return { [spec.key ?? ""]: (spec.repeat ?? "").repeat(spec.count ?? 0) };
     if (spec.construct === "cycle") {
       const node: Record<string, unknown> = { label: "ordinary text" };
       node.self = node;

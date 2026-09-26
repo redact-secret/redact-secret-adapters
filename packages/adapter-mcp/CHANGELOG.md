@@ -14,6 +14,22 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+### Changed
+
+- **Contract change: the key-context check is narrowed to a backstop**
+  (redact-secret/redact-secret#842, redact-secret-adapters#32). The
+  AI-context `sanitizeValue` is now key-aware and redacts a leaf its own key
+  identifies in place, so the serialized rescan no longer blocks such a
+  result; it still blocks, as `policy`, on context only the serialization
+  shows (a sibling or parent key). **Migration:** a result or argument set
+  that was `blocked` / `policy` only through the key-context check is now
+  `ok`, with that leaf replaced by a placeholder and its finding reported
+  through `onFinding`; hosts that relied on the block should watch
+  `onFinding`. Nothing previously redacted or blocked passes. Qualified by the
+  core fixture vendored at the #842 commit
+  (`packages/adapter-mcp/test/conformance.test.ts`,
+  `packages/adapter-mcp/test/transport.test.ts`) at both SDK line endpoints.
+
 ## [0.1.0-alpha] - 2026-09-25
 
 First release, as a prerelease.
