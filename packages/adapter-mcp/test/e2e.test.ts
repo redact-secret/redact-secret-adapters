@@ -9,6 +9,11 @@
  * to stdout in pieces), so the split, the early stop, and the producer
  * close are exercised against an OS pipe, not a test double.
  *
+ * `resources/read` (redact-secret/redact-secret#843) at the same placement:
+ * the host reads a resource through `sanitizeResourceRead`, and the log,
+ * the store, and the model context receive `toReadResourceResponse(outcome)`
+ * (the sanitized result, or the fixed JSON-RPC error) and nothing else.
+ *
  * Tokens are synthetic (the core fixture's own `ghp_SYNTHETICREVOKED…`).
  */
 
@@ -22,9 +27,14 @@ import {
   type McpAuditRecord,
   type McpBoundary,
   type McpOutcome,
+  type McpResourceOutcome,
   mcpBlockedResult,
+  mcpResourceBlockedError,
+  mcpResourceReadError,
   toCallToolResult,
+  toReadResourceResponse,
 } from "../src/index.js";
+import { loadResourceFixture } from "./conformance.js";
 import { type Connection, connect, LINES, TRANSPORTS } from "./sdk/harness.js";
 import { LIMITS } from "./sdk/servers.mjs";
 
@@ -47,8 +57,22 @@ function createHost(ai: AiContextBoundary) {
     modelContexts.push(context.value);
     return delivered;
   }
+  /** A resource read: the sanitized result goes to every sink; a fixed error goes to the log and the store only. */
+  async function deliverResource(outcome: McpResourceOutcome<unknown>): Promise<unknown> {
+    const response = toReadResourceResponse(outcome);
+    if (response === null) return null;
+    turn += 1;
+    log.push(JSON.stringify({ turn, resource: response }));
+    store.set(`turn-${turn}`, response);
+    if ("result" in response) {
+      const context = ai.buildContext([{ role: "user", boundary: "resource", value: response.result }]);
+      if (context.outcome !== "ok") throw new Error("context refused");
+      modelContexts.push(context.value);
+    }
+    return response;
+  }
   const sinks = () => JSON.stringify({ log, store: [...store.values()], modelContexts });
-  return { deliver, sinks, log, store, modelContexts };
+  return { deliver, deliverResource, sinks, log, store, modelContexts };
 }
 
 /** A real subprocess that writes `pieces` to stdout, one write per piece, then waits to be killed. */
@@ -63,6 +87,13 @@ function subprocess(pieces: string[], { linger = false } = {}) {
   const child = spawn(process.execPath, ["-e", script], { stdio: ["ignore", "pipe", "ignore"] });
   child.stdout.setEncoding("utf-8");
   return child;
+}
+
+const resourceFixture = loadResourceFixture();
+function resourceIndex(id: string): number {
+  const index = resourceFixture.cases.findIndex((c) => c.id === id);
+  if (index === -1) throw new Error(`no resource fixture case ${id}`);
+  return index;
 }
 
 const audits: McpAuditRecord[] = [];
@@ -137,6 +168,65 @@ describe.each(LINES.flatMap((line) => TRANSPORTS.map((transport) => [line, trans
       expect(host.sinks().includes(TOKEN)).toBe(false);
     });
 
+    test("a resource read is sanitized before the log, the store, and model context", async () => {
+      const host = createHost(ai);
+      const index = resourceIndex("text-redacts-provider-token");
+      const outcome = await mcp.sanitizeResourceRead(({ signal }) =>
+        connection.readResource(`test://replay/${index}`, signal as AbortSignal | undefined),
+      );
+      expect(outcome.outcome).toBe("ok");
+      expect(await host.deliverResource(outcome)).toEqual({
+        result: {
+          contents: [
+            { uri: "file:///synthetic/.env", mimeType: "text/plain", text: "REGION=eu-west-1\nAPI_KEY=<SECRET_1>\n" },
+          ],
+        },
+      });
+      expect(host.modelContexts).toHaveLength(1);
+      expect(host.sinks().includes(TOKEN)).toBe(false);
+    });
+
+    test.each([
+      ["a block finding", "text-block-finding-blocks"],
+      ["the input limit", "text-over-input-limit-blocked"],
+      ["a blob under the default", "blob-blocked-by-default"],
+    ])("a resource refused for %s reaches the log and store only as the fixed error", async (_name, id) => {
+      const host = createHost(ai);
+      const outcome = await mcp.sanitizeResourceRead(({ signal }) =>
+        connection.readResource(`test://replay/${resourceIndex(id)}`, signal as AbortSignal | undefined),
+      );
+      expect(outcome.outcome).toBe("blocked");
+      expect(await host.deliverResource(outcome)).toEqual({ error: mcpResourceBlockedError() });
+      expect(host.modelContexts).toEqual([]);
+      expect(host.sinks()).not.toContain("ordinary text");
+      expect(host.sinks()).not.toContain("PRIVATE KEY");
+    });
+
+    test("a failed resource read reaches the log and store only as the fixed read error", async () => {
+      const host = createHost(ai);
+      const outcome = await mcp.sanitizeResourceRead(({ signal }) =>
+        connection.readResource("test://rpc-error", signal as AbortSignal | undefined),
+      );
+      expect(outcome).toEqual({ outcome: "read_error" });
+      expect(await host.deliverResource(outcome)).toEqual({ error: mcpResourceReadError() });
+      expect(host.sinks().includes(TOKEN)).toBe(false);
+    });
+
+    test("a cancelled resource read delivers nothing to any sink", async () => {
+      const host = createHost(ai);
+      const controller = new AbortController();
+      const pending = mcp.sanitizeResourceRead(
+        ({ signal }) => connection.readResource("test://slow", signal as AbortSignal),
+        { signal: controller.signal },
+      );
+      setTimeout(() => controller.abort(), 50);
+      const outcome = await pending;
+      expect(outcome).toEqual({ outcome: "aborted" });
+      expect(await host.deliverResource(outcome)).toBeNull();
+      expect(host.log).toEqual([]);
+      expect(host.store.size).toBe(0);
+    });
+
     test("a cancelled call delivers nothing to any sink", async () => {
       const host = createHost(ai);
       const controller = new AbortController();
@@ -209,5 +299,6 @@ test("failing audit and telemetry sinks never changed an outcome, and audit held
   for (const record of audits) {
     for (const key of Object.keys(record)) expect(["stage", "outcome", "reason", "code"]).toContain(key);
   }
+  expect(new Set(audits.map((record) => record.stage))).toEqual(new Set(["result", "resource"]));
   expect(JSON.stringify(audits).includes(TOKEN)).toBe(false);
 });

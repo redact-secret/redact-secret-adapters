@@ -19,6 +19,16 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-25
+
+### Added
+
+- `walkStrict` hands each string leaf's visitor a second argument, `key`:
+  the object key the leaf sits directly under, or `undefined` for an array
+  element and the root (redact-secret/redact-secret#842). Visitors that take
+  one argument are unaffected. `@redact-secret/adapter-ai-context` uses it for
+  its key-aware `sanitizeValue`.
+
 ## [0.1.1] - 2026-09-25
 
 ### Added

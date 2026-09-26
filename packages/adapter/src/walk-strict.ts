@@ -33,8 +33,13 @@ export type StrictWalkFailure = "limit_exceeded" | "unsupported_value";
 export type StrictVisit<F> = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly failure: F };
 
 export interface StrictWalkVisitors<F> {
-  /** Called once per string leaf, in document order. */
-  readonly string: (text: string) => StrictVisit<F>;
+  /**
+   * Called once per string leaf, in document order. `key` is the object key
+   * the leaf sits directly under, or `undefined` for an array element and
+   * for the root: the leaf's immediate key context, which the AI-context
+   * boundary carries into its key-aware scan (redact-secret/redact-secret#842).
+   */
+  readonly string: (text: string, key: string | undefined) => StrictVisit<F>;
   /**
    * Called once per own enumerable object key, before that key's value is
    * walked. A key is kept unchanged when it passes: rewriting a key would
@@ -74,16 +79,18 @@ export function walkStrict<F>(
   const unsupported: Step = { ok: false, failure: "unsupported_value" };
   const overLimit: Step = { ok: false, failure: "limit_exceeded" };
 
-  const visit: StrictWalkVisitors<F> = {
-    string: (text) => callVisitor(visitors.string, text),
-    key: (key) => callVisitor(visitors.key, key),
+  const visit = {
+    string: (text: string, key: string | undefined) => callVisitor(() => visitors.string(text, key)),
+    key: (key: string) => callVisitor(() => visitors.key(key)),
   };
 
-  const walk = (node: unknown, depth: number): Step => {
+  // `key` is the object key `node` sits directly under; an array element
+  // and the root have none.
+  const walk = (node: unknown, depth: number, key?: string): Step => {
     nodes += 1;
     if (nodes > limits.maxNodes) return overLimit;
     if (typeof node === "string") {
-      const visited = visit.string(node);
+      const visited = visit.string(node, key);
       return visited.ok ? { ok: true, value: visited.text } : visited;
     }
     if (node === null || typeof node === "boolean" || (typeof node === "number" && Number.isFinite(node))) {
@@ -120,7 +127,7 @@ export function walkStrict<F>(
       for (const key of Object.keys(source)) {
         const checked = visit.key(key);
         if (!checked.ok) return checked;
-        const child = walk(source[key], depth + 1);
+        const child = walk(source[key], depth + 1, key);
         if (!child.ok) return child;
         defineDataKey(out, key, child.value);
       }
@@ -150,9 +157,9 @@ class VisitorError {
   constructor(readonly cause: unknown) {}
 }
 
-function callVisitor<A, R>(visitor: (arg: A) => R, arg: A): R {
+function callVisitor<R>(visitor: () => R): R {
   try {
-    return visitor(arg);
+    return visitor();
   } catch (error) {
     throw new VisitorError(error);
   }

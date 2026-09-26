@@ -1,33 +1,47 @@
 {
-  "description": "Core-owned contract files vendored byte-for-byte from redact-secret/redact-secret at an immutable 40-hex commit. The adapters qualify by replaying them through their own public API (packages/adapter-ai-context/test/conformance*.test.ts, packages/adapter-mcp/test/conformance*.test.ts). The MCP fixture is replayed by the core's own runner (mcp-boundary.mjs, which imports ai-context-boundary.mjs), vendored with it, so the adapter is checked by exactly the code that defines the contract. Never edit a vendored file here: to move the pin, copy the file from the new core commit, then update commit and sha256 below. packages/adapter-ai-context/test/core-pins.test.ts fails when a file and its recorded digest disagree. Biome ignores this directory so the bytes stay exactly the core's.",
+  "description": "Core-owned contract files vendored byte-for-byte from redact-secret/redact-secret at an immutable 40-hex commit. The adapters qualify by replaying them through their own public API (packages/adapter-ai-context/test/conformance*.test.ts, packages/adapter-mcp/test/conformance*.test.ts). The MCP fixtures are replayed by the core's own runners (mcp-boundary.mjs, which imports ai-context-boundary.mjs, and mcp-resources-read.mjs, which imports both), vendored with them, so the adapter is checked by exactly the code that defines the contract. Never edit a vendored file here: to move the pin, copy the file from the new core commit, then update commit and sha256 below. packages/adapter-ai-context/test/core-pins.test.ts fails when a file and its recorded digest disagree. Biome ignores this directory so the bytes stay exactly the core's.",
   "files": [
     {
       "path": "fixtures/core/ai-context-boundary.json",
       "repository": "redact-secret/redact-secret",
-      "commit": "0e3ba9592b6fa80fafdea47639921987c36ba323",
+      "commit": "0af4cb83b571baa86d27a678a351ece2ebc1f3cb",
       "sourcePath": "conformance/fixtures/ai-context-boundary.json",
-      "sha256": "cddb5b9e4f0137cab46213b291f7ab4a6e29188257cb996beae10135664bbe46"
+      "sha256": "700fb52f399d0a67c726086894ddcd0d6f3bcfcf15eb8029a1c317ee34cdb1c9"
     },
     {
       "path": "fixtures/core/mcp-boundary.json",
       "repository": "redact-secret/redact-secret",
-      "commit": "0e3ba9592b6fa80fafdea47639921987c36ba323",
+      "commit": "0af4cb83b571baa86d27a678a351ece2ebc1f3cb",
       "sourcePath": "conformance/fixtures/mcp-boundary.json",
-      "sha256": "4b09c0d2ec32eedfe45042f9074ce4e7207585b4d5b2f2d4c5fe59954c9a848b"
+      "sha256": "035e28b1872b89c8f12004122ea653d8014ee879c3a366ac93fe2638c7f2ecae"
     },
     {
       "path": "fixtures/core/mcp-boundary.mjs",
       "repository": "redact-secret/redact-secret",
-      "commit": "0e3ba9592b6fa80fafdea47639921987c36ba323",
+      "commit": "0af4cb83b571baa86d27a678a351ece2ebc1f3cb",
       "sourcePath": "conformance/mcp-boundary.mjs",
-      "sha256": "1c59333e8e35ec22af66d20299868359ea8c68859fa5fd62dc9da20d19e98ba1"
+      "sha256": "01150c714ee1657a5ea8ca04110fb4126bff3d51bdba242788c7c6e63faadcba"
     },
     {
       "path": "fixtures/core/ai-context-boundary.mjs",
       "repository": "redact-secret/redact-secret",
-      "commit": "0e3ba9592b6fa80fafdea47639921987c36ba323",
+      "commit": "0af4cb83b571baa86d27a678a351ece2ebc1f3cb",
       "sourcePath": "conformance/ai-context-boundary.mjs",
-      "sha256": "bcfe21b2df599bf9e4613db34abb3ea71f874746c26c5d8f59f185e6ee864222"
+      "sha256": "bb1e14f83eff4d50cbb393e939ced6baef7f636cda550b4b73a1b6b5e50f7b12"
+    },
+    {
+      "path": "fixtures/core/mcp-resources-read.json",
+      "repository": "redact-secret/redact-secret",
+      "commit": "0af4cb83b571baa86d27a678a351ece2ebc1f3cb",
+      "sourcePath": "conformance/fixtures/mcp-resources-read.json",
+      "sha256": "1053f2cb28e8f748454d137374c5bb39c15bb950977000e29203cc029a792e77"
+    },
+    {
+      "path": "fixtures/core/mcp-resources-read.mjs",
+      "repository": "redact-secret/redact-secret",
+      "commit": "0af4cb83b571baa86d27a678a351ece2ebc1f3cb",
+      "sourcePath": "conformance/mcp-resources-read.mjs",
+      "sha256": "e8e132fdbe7b1c96be8399b0698f2941a03ac13de3ac215917fe303d3f60fcbe"
     }
   ]
 }

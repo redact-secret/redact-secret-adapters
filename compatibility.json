@@ -147,6 +147,7 @@
       "lifecycle": [
         "the core's mcp-boundary conformance fixture and runner, vendored at a pinned core commit, replayed through the public API on the real core before and after initialize()",
         "the same fixture carried by real SDK 1.x and 2.x clients and servers over stdio (child process) and Streamable HTTP (127.0.0.1), protocol 2025-06-18 (1.13.0) and 2025-11-25 (1.30.1, 2.0.0, 2.1.0)",
+        "resources/read (redact-secret/redact-secret#843): the core's mcp-resources-read fixture and runner, vendored at the same pinned core commit, replayed through the public API before and after initialize(), and carried by real SDK 1.x and 2.x clients and servers over stdio and Streamable HTTP at both endpoints of each line: host placement around client.readResource, and wrapResourceReadHandler on the low-level Server and McpServer.registerResource (fixed URI and URI template) sending exactly the fixed JSON-RPC error",
         "opt-in argument sanitation before dispatch: a blocked argument set never reaches the server",
         "server wrappers on the low-level Server and McpServer.registerTool: a throwing handler caught before the SDK converts its message",
         "cancellation over the wire: the host delivers nothing, the server closes its producer and sends no response",
@@ -268,10 +269,10 @@
       "how": "the span processors apply maxStringLength per element but no element-count bound of their own to a string-array attribute; the SDK's attribute limits are the only bound, so a very wide array costs one scan per element"
     },
     {
-      "host": "MCP SDKs for other languages (the Python mcp SDK included), the HTTP+SSE transport, experimental.tasks and partial results, MCP messages other than tools/call",
+      "host": "MCP SDKs for other languages (the Python mcp SDK included), the HTTP+SSE transport, experimental.tasks and partial results, MCP messages other than tools/call and resources/read",
       "versions": "all",
       "enforcement": "documented",
-      "how": "packages/adapter-mcp/README.md names them as unsupported; no Python MCP adapter exists, and the boundary acts only on tools/call arguments and results"
+      "how": "packages/adapter-mcp/README.md names them as unsupported; no Python MCP adapter exists, and the boundary acts only on tools/call arguments and results and on resources/read results"
     }
   ]
 }

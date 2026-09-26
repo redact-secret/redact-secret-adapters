@@ -7,11 +7,15 @@
  *
  * - which parts of a `CallToolResult` are scanned (all of it, as one value),
  *   which content block types exist, and what happens to base64 payloads;
- * - the key-context check over the sanitized structured parts;
+ * - the key-context backstop over the sanitized structured parts (narrowed
+ *   by the key-aware `sanitizeValue`, redact-secret/redact-secret#842);
  * - the `tool-arguments` label for opt-in argument sanitation;
  * - a streamed result that stops pulling once the stream stops accepting;
  * - the fixed, input-free `isError` results and audit record;
- * - structural wrappers for a server tool handler of either SDK line.
+ * - structural wrappers for a server tool handler of either SDK line;
+ * - `resources/read` (redact-secret/redact-secret#843): the same one-value
+ *   mapping over a `ReadResourceResult`, under the `resource` label, its
+ *   fixed JSON-RPC errors, and a wrapper for a server read callback.
  *
  * No MCP SDK is imported, at runtime or for types.
  */
@@ -35,21 +39,47 @@ import type {
   McpInvokeContext,
   McpOperationOptions,
   McpOutcome,
+  McpResourceErrorObject,
+  McpResourceOutcome,
+  McpResourceReadResponse,
   McpStage,
   McpTextResult,
   McpToolCallOptions,
+  ReadErrorOutcome,
   ToolErrorOutcome,
   WrappedHandler,
+  WrappedResourceHandler,
 } from "./types.js";
 
 /** The AI-context labels this specialization uses. */
-export const MCP_BOUNDARY_LABELS = Object.freeze({ arguments: "tool-arguments", result: "tool-result" } as const);
+export const MCP_BOUNDARY_LABELS = Object.freeze({
+  arguments: "tool-arguments",
+  result: "tool-result",
+  resource: "resource",
+} as const);
 
 /** The content block types of protocol revisions 2025-06-18 and 2025-11-25. Any other type blocks. */
 export const MCP_CONTENT_TYPES = Object.freeze(["text", "image", "audio", "resource_link", "resource"] as const);
 
 /** The MCP boundary's outcomes: the AI-context three, plus the host's own `tool_error`. */
 export const MCP_OUTCOMES = Object.freeze(["ok", "blocked", "aborted", "tool_error"] as const);
+
+/** The `resources/read` outcomes: the AI-context three, plus the host's own `read_error`. */
+export const MCP_RESOURCE_OUTCOMES = Object.freeze(["ok", "blocked", "aborted", "read_error"] as const);
+
+/**
+ * JSON-RPC "Internal error", the code of both fixed `resources/read` errors.
+ * Never -32002 ("Resource not found"): a blocked resource exists.
+ */
+export const MCP_RESOURCE_ERROR_CODE = -32603;
+
+/** Fixed `message` of the JSON-RPC error every blocked `resources/read` maps to. */
+export const MCP_RESOURCE_BLOCKED_MESSAGE =
+  "This MCP resource read was blocked by secret-redaction policy. No content, URI, or error detail is included.";
+
+/** Fixed `message` of the JSON-RPC error a `read_error` maps to. */
+export const MCP_RESOURCE_READ_ERROR_MESSAGE =
+  "This MCP resource read failed. No content, URI, or error detail is included.";
 
 /** The only keys an audit record may carry. */
 export const MCP_AUDIT_FIELDS = Object.freeze(["stage", "outcome", "reason", "code"] as const);
@@ -65,6 +95,7 @@ const ABORTED: AbortedOutcome = Object.freeze({ outcome: "aborted" });
 const UNSUPPORTED: BlockedOutcome = Object.freeze({ outcome: "blocked", reason: "unsupported_value" });
 const POLICY: BlockedOutcome = Object.freeze({ outcome: "blocked", reason: "policy" });
 const TOOL_ERROR: ToolErrorOutcome = Object.freeze({ outcome: "tool_error" });
+const READ_ERROR: ReadErrorOutcome = Object.freeze({ outcome: "read_error" });
 const NO_FINDINGS = Object.freeze([]);
 
 /** Fixed, input-free `CallToolResult` for a `blocked` outcome. A new object on every call. */
@@ -99,9 +130,63 @@ export function toCallToolResult<T>(outcome: McpOutcome<T>): T | McpTextResult |
   }
 }
 
+/** Fixed, input-free JSON-RPC error object for a blocked `resources/read`. A new object on every call, never a `data` member. */
+export function mcpResourceBlockedError(): McpResourceErrorObject {
+  return { code: MCP_RESOURCE_ERROR_CODE, message: MCP_RESOURCE_BLOCKED_MESSAGE };
+}
+
+/** Fixed, input-free JSON-RPC error object for a `read_error`. A new object on every call, never a `data` member. */
+export function mcpResourceReadError(): McpResourceErrorObject {
+  return { code: MCP_RESOURCE_ERROR_CODE, message: MCP_RESOURCE_READ_ERROR_MESSAGE };
+}
+
+/**
+ * What a `resources/read` outcome may put on the wire, into a log, a store,
+ * or model context. A `ReadResourceResult` has no `isError`, so a failure is
+ * a fixed JSON-RPC error: `ok` delivers `{ result }` and nothing else; every
+ * `blocked` reason delivers `{ error: mcpResourceBlockedError() }`;
+ * `read_error` delivers `{ error: mcpResourceReadError() }`; `aborted`
+ * delivers nothing (`null`).
+ */
+export function toReadResourceResponse<T>(outcome: McpResourceOutcome<T>): McpResourceReadResponse<T> | null {
+  switch (outcome?.outcome) {
+    case "ok":
+      return { result: outcome.value };
+    case "blocked":
+      return { error: mcpResourceBlockedError() };
+    case "read_error":
+      return { error: mcpResourceReadError() };
+    case "aborted":
+      return null;
+    default:
+      throw new TypeError("toReadResourceResponse: not an MCP resources/read outcome");
+  }
+}
+
+/**
+ * The error a server read callback throws for a non-`ok` outcome. Both SDK
+ * lines send a thrown error's integer `code` and its `message` exactly, and
+ * add `data` only when the error carries one: this carries none, so the wire
+ * error is exactly the fixed one. Not an SDK `McpError`, whose `message` is
+ * prefixed with the code.
+ */
+export class McpResourceError extends Error {
+  readonly code: number;
+  constructor(error: McpResourceErrorObject) {
+    super(error.message);
+    this.name = "McpResourceError";
+    this.code = error.code;
+  }
+}
+
 /** The input-free audit record of one crossing. */
-export function mcpAuditRecord(outcome: McpOutcome<unknown>, stage: McpStage): McpAuditRecord {
-  if (stage !== "arguments" && stage !== "result") throw new TypeError("mcpAuditRecord: unknown stage");
+export function mcpAuditRecord(
+  outcome: McpOutcome<unknown> | McpResourceOutcome<unknown>,
+  stage: McpStage,
+): McpAuditRecord {
+  if (stage !== "arguments" && stage !== "result" && stage !== "resource") {
+    throw new TypeError("mcpAuditRecord: unknown stage");
+  }
   const record: { -readonly [K in keyof McpAuditRecord]: McpAuditRecord[K] } = { stage, outcome: outcome.outcome };
   if (outcome.outcome === "blocked") {
     record.reason = outcome.reason;
@@ -189,7 +274,7 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
     throw new TypeError("createMcpBoundaryWith: onAudit must be a function");
   }
 
-  function audit<T extends McpOutcome<unknown>>(outcome: T, stage: McpStage): T {
+  function audit<T extends McpOutcome<unknown> | McpResourceOutcome<unknown>>(outcome: T, stage: McpStage): T {
     if (typeof onAudit === "function") {
       try {
         onAudit(mcpAuditRecord(outcome, stage));
@@ -246,12 +331,18 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
   }
 
   /**
-   * The key-context check: each value-shaped part of the SANITIZED value is
-   * serialized and scanned once more as text, so a secret identified only by
-   * the key it sits under blocks instead of reaching context. A `redact` or
-   * `block` finding there cannot be mapped back onto one leaf: `policy`.
+   * The key-context backstop: each value-shaped part of the SANITIZED value
+   * is serialized and scanned once more as text. The key-aware leaf pass
+   * already redacted every leaf its own key identifies (placeholders are not
+   * detected again), so what is left for this check is context from a
+   * sibling or parent key. A `redact` or `block` finding here cannot be
+   * mapped back onto one leaf: `policy`.
    */
-  function checkKeyContext(parts: unknown[], label: "tool-result" | "tool-arguments", signal?: CancellationSignal) {
+  function checkKeyContext(
+    parts: unknown[],
+    label: "tool-result" | "tool-arguments" | "resource",
+    signal?: CancellationSignal,
+  ) {
     for (const part of parts) {
       const outcome = boundary.sanitizeText(JSON.stringify(part), { boundary: label, signal });
       if (outcome.outcome !== "ok") return outcome;
@@ -356,6 +447,93 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
       return isAborted(signal) ? ABORTED : TOOL_ERROR;
     }
     return resultOutcome(raw, signal);
+  }
+
+  /**
+   * One `contents[]` entry: exactly one of a string `text` or a `blob`. Both,
+   * neither, a non-string `text`, or a non-object entry is `unsupported_value`;
+   * a `blob` follows the same `binaryContent` rule as tool-result binary.
+   */
+  function prepareResourceContents(entry: unknown): Prepared {
+    if (!isPlainObject(entry)) return { failure: UNSUPPORTED };
+    const hasText = "text" in entry;
+    if (hasText === "blob" in entry) return { failure: UNSUPPORTED };
+    if (hasText) return typeof entry.text === "string" ? { view: entry, reassemble: null } : { failure: UNSUPPORTED };
+    const detached = detachBinary(entry, "blob");
+    if ("failure" in detached) return detached;
+    return { view: detached.view, reassemble: (clean) => restore(entry, clean, "blob") };
+  }
+
+  /**
+   * One `ReadResourceResult` as ONE AI-context `sanitizeValue` (label
+   * `resource`), then the key-context backstop over the result without
+   * `contents` and every entry without its already-scanned `text`.
+   */
+  function resourceOutcome(result: unknown, signal?: CancellationSignal): McpResourceOutcome<JsonObject> {
+    if (isAborted(signal)) return ABORTED;
+    if (!isPlainObject(result)) return UNSUPPORTED;
+    let contents: unknown;
+    try {
+      contents = result.contents;
+    } catch {
+      return UNSUPPORTED;
+    }
+    if (!Array.isArray(contents)) return UNSUPPORTED;
+    const entries: unknown[] = [];
+    const reassembly: Reassemble[] = [];
+    const shaped: Record<string, unknown> = {};
+    try {
+      for (const entry of contents) {
+        const prepared = prepareResourceContents(entry);
+        if ("failure" in prepared) return prepared.failure;
+        entries.push(prepared.view);
+        reassembly.push(prepared.reassemble);
+      }
+      for (const key of Object.keys(result)) define(shaped, key, key === "contents" ? entries : result[key]);
+    } catch {
+      return UNSUPPORTED;
+    }
+
+    const label = MCP_BOUNDARY_LABELS.resource;
+    const outcome = boundary.sanitizeValue(shaped, { boundary: label, signal }) as AiContextOutcome<
+      Record<string, JsonValue>
+    >;
+    if (outcome.outcome !== "ok") return outcome;
+    const sanitized = outcome.value.contents as Record<string, unknown>[];
+    const parts: unknown[] = [without(outcome.value, "contents"), ...sanitized.map((entry) => without(entry, "text"))];
+    const context = checkKeyContext(parts, label, signal);
+    if (context !== undefined) return context;
+    if (!reassembly.some(Boolean)) return outcome;
+    const value: Record<string, unknown> = {};
+    for (const key of Object.keys(outcome.value)) {
+      define(
+        value,
+        key,
+        key === "contents"
+          ? sanitized.map((entry, index) => {
+              const reassemble = reassembly[index];
+              return reassemble ? reassemble(entry) : entry;
+            })
+          : outcome.value[key],
+      );
+    }
+    return ok(value as JsonObject, outcome.findings);
+  }
+
+  async function readOutcome(
+    invoke: (context: McpInvokeContext) => unknown,
+    signal: CancellationSignal | undefined,
+  ): Promise<McpResourceOutcome<JsonObject>> {
+    if (isAborted(signal)) return ABORTED;
+    if (typeof invoke !== "function") return READ_ERROR;
+    let raw: unknown;
+    try {
+      raw = await invoke(Object.freeze({ signal }));
+    } catch {
+      // The read's error is never read: an SDK error carries the peer's free text.
+      return isAborted(signal) ? ABORTED : READ_ERROR;
+    }
+    return resourceOutcome(raw, signal);
   }
 
   type Step = { done?: unknown; value?: unknown };
@@ -518,6 +696,29 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
     },
     wrapToolHandler<H extends (...params: never[]) => unknown>(handler: H, options: McpHandlerOptions = {}) {
       return wrap(handler, options, (call, signal) => callOutcome(call, { signal })) as WrappedHandler<H>;
+    },
+    sanitizeResourceResult(result: unknown, { signal }: McpOperationOptions = {}) {
+      return audit(resourceOutcome(result, signal), "resource");
+    },
+    async sanitizeResourceRead(invoke: (context: McpInvokeContext) => unknown, { signal }: McpOperationOptions = {}) {
+      return audit(await readOutcome(invoke, signal), "resource");
+    },
+    wrapResourceReadHandler<H extends (...params: never[]) => unknown>(handler: H) {
+      if (typeof handler !== "function") throw new TypeError("wrapResourceReadHandler: handler must be a function");
+      const invoke = handler as unknown as (...p: unknown[]) => unknown;
+      return (async (...params: unknown[]) => {
+        // The request context is the last parameter for every read callback
+        // shape: `(uri, extra)`, `(uri, variables, extra)`, and a low-level
+        // `(request, extra)`, on either SDK line.
+        const signal = signalOf(params[params.length - 1]);
+        const outcome = audit(await readOutcome(() => invoke(...params), signal), "resource");
+        if (outcome.outcome === "ok") return outcome.value;
+        // `aborted` also throws the blocked error: the SDK sends no response
+        // for a cancelled request, so nothing reaches the wire.
+        throw new McpResourceError(
+          outcome.outcome === "read_error" ? mcpResourceReadError() : mcpResourceBlockedError(),
+        );
+      }) as WrappedResourceHandler;
     },
     wrapStreamedToolHandler<H extends (...params: never[]) => unknown>(handler: H, options: McpHandlerOptions = {}) {
       return wrap(handler, options, async (call, signal) => {

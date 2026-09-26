@@ -437,6 +437,99 @@ describe("sanitizeValue", () => {
   });
 });
 
+describe("key-aware sanitizeValue (redact-secret/redact-secret#842)", () => {
+  const KEYED = "synthetic-keyed-0000";
+
+  /**
+   * A core that flags KEYED only inside the view `{"password":"KEYED"}`, as
+   * the real core's contextual detection does, with exact offsets; a view
+   * under the key `trap` gets a redact finding on the key itself, outside
+   * the leaf's span. Everything else goes to the shared fake.
+   */
+  function keyedCore(overrides: { brokenText?: boolean } = {}) {
+    const fake = createFakeCore();
+    const scan = fake.core.scanAndRedact;
+    const finding = (action: string, start: number, end: number) => ({
+      id: "finding-1",
+      type: "synthetic",
+      detector: "fake",
+      confidence: "high",
+      action,
+      obfuscation: "none",
+      start,
+      end,
+    });
+    const core = {
+      ...fake.core,
+      scanAndRedact: (text: string, options?: Parameters<typeof scan>[1]) => {
+        if (text.startsWith('{"trap":"')) fake.calls.scans.push(text);
+        else if (text.startsWith(`{"password":"${KEYED}`)) fake.calls.scans.push(text);
+        if (text.startsWith('{"trap":"')) return { text, findings: [finding("redact", 2, 6)] };
+        const prefix = '{"password":"';
+        if (text.startsWith(prefix + KEYED)) {
+          const replaced = overrides.brokenText ? "<SECRET_1>" : text.replace(KEYED, "<SECRET_1>");
+          return { text: replaced, findings: [finding("redact", prefix.length, prefix.length + KEYED.length)] };
+        }
+        return scan(text, options);
+      },
+    } as typeof fake.core;
+    return { core, calls: fake.calls };
+  }
+
+  test("a leaf only its immediate key identifies is redacted in place, with leaf offsets", () => {
+    const { boundary, events, calls } = setup({}, keyedCore());
+    const outcome = boundary.sanitizeValue({ user: "deploy-bot", password: KEYED });
+    expect(outcome).toMatchObject({ outcome: "ok", value: { user: "deploy-bot", password: "<SECRET_1>" } });
+    const findings = outcome.outcome === "ok" ? outcome.findings : [];
+    expect(findings.map(({ start, end }) => [start, end])).toEqual([[0, KEYED.length]]);
+    expect(Object.keys(findings[0] ?? {})).toEqual([...SAFE_FINDING_FIELDS]);
+    expect(events.map((event) => event.finding)).toEqual(findings);
+    expect(calls.scans).toContain(`{"password":"${KEYED}"}`);
+  });
+
+  test("key context is the immediate key only: array elements, parents and the root get none", () => {
+    const { boundary, calls } = setup({}, keyedCore());
+    const value = { password: [KEYED], auth: { value: KEYED } };
+    expect(boundary.sanitizeValue(value)).toEqual({ outcome: "ok", value, findings: [] });
+    expect(calls.scans).not.toContain(`{"password":"${KEYED}"}`);
+    calls.scans.length = 0;
+    boundary.sanitizeValue(KEYED);
+    expect(calls.scans).toEqual([KEYED]);
+  });
+
+  test("a leaf that redacts on its own is never rescanned; a warning leaf keeps its result when the view adds nothing", () => {
+    const { boundary, calls } = setup({}, keyedCore());
+    expect(boundary.sanitizeValue({ password: SECRET })).toMatchObject({
+      value: { password: expect.not.stringContaining(SECRET) },
+    });
+    expect(calls.scans).toEqual(["password", SECRET]);
+    calls.scans.length = 0;
+    const warned = boundary.sanitizeValue({ note: "WARN_ME" });
+    expect(warned).toMatchObject({ outcome: "ok", value: { note: "WARN_ME" } });
+    expect(warned.outcome === "ok" && warned.findings.map((finding) => finding.action)).toEqual(["warn"]);
+    expect(calls.scans).toEqual(["note", "WARN_ME", '{"note":"WARN_ME"}']);
+  });
+
+  test("a redacting finding outside the leaf's span blocks instead of rewriting the key", () => {
+    const { boundary } = setup({}, keyedCore());
+    expect(boundary.sanitizeValue({ trap: "ordinary text" })).toEqual({ outcome: "blocked", reason: "policy" });
+  });
+
+  test("a view whose sanitized text lost its frame is a core failure, never passed on", () => {
+    const { boundary } = setup({}, keyedCore({ brokenText: true }));
+    expect(boundary.sanitizeValue({ password: KEYED })).toEqual({ outcome: "blocked", reason: "core_error" });
+  });
+
+  test("the view is bounded by the whole-input limits", () => {
+    const { boundary } = setup({ wholeInputLimits: { maxInputBytes: 16, maxFindings: 16 } }, keyedCore());
+    expect(boundary.sanitizeValue(["0123456789"]).outcome).toBe("ok");
+    expect(boundary.sanitizeValue({ password: "0123456789" })).toMatchObject({
+      outcome: "blocked",
+      reason: "limit_exceeded",
+    });
+  });
+});
+
 describe("sanitizeToolResult", () => {
   test("a string goes through sanitizeText and a structured result through sanitizeValue, labelled tool-result", () => {
     const { boundary, events } = setup();

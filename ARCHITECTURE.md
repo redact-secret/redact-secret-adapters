@@ -224,8 +224,10 @@ with it.
 (redact-secret/redact-secret#612) as a thin specialization of
 `adapter-ai-context`. It contains no scan, walk, policy, or core-error
 mapping: a whole `CallToolResult` is one `sanitizeValue`, a streamed result
-is one `openStream`, and the key-context check is one `sanitizeText` per
-serialized part. What it adds is MCP shape only:
+is one `openStream`, and the key-context backstop is one `sanitizeText` per
+serialized part. Key-identified leaves are redacted in place by the key-aware
+`sanitizeValue` (redact-secret/redact-secret#842), so the backstop blocks only
+on context a leaf pass cannot see (a sibling or parent key). What it adds is MCP shape only:
 
 - **Block types.** The five types of protocol revisions 2025-06-18 and
   2025-11-25. Any other type, and any malformed shape, blocks as
@@ -316,10 +318,12 @@ holding the two languages together, so they are shared — one copy, read by bot
   means an external host integration; the core repository additionally uses
   "host adapter" for the CLI and the language bindings. Three distinct meanings,
   one word — do not consolidate them by moving code.
-- **MCP beyond `tools/call`.** `adapter-mcp` covers tool arguments and
-  results, which is the core's MCP boundary (#612). Resources, prompts,
-  sampling, elicitation, notifications, other-language SDKs, HTTP+SSE, and
-  `experimental.tasks` stay out until a contract covers them. Transport
+- **MCP beyond `tools/call` and `resources/read`.** `adapter-mcp` covers
+  tool arguments and results, which is the core's MCP boundary (#612), and
+  `resources/read` results (redact-secret/redact-secret#843). Resource
+  listings and templates, subscriptions and their notifications, prompts,
+  sampling, elicitation, other notifications, other-language SDKs, HTTP+SSE,
+  and `experimental.tasks` stay out until a contract covers them. Transport
   wiring stays with the host: the adapter acts on the parsed result.
 - **Model-vendor wrappers** (OpenAI, Anthropic clients) and **model output
   scanning**: the AI-context boundary covers what goes into a context, and

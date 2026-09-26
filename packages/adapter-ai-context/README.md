@@ -62,13 +62,14 @@ from a throwaway project outside the repository.
 | Operation | Input | Core path |
 | --- | --- | --- |
 | `sanitizeText(text, { boundary, signal })` | one string | one whole-input `scanAndRedact` |
-| `sanitizeValue(value, { boundary, signal })` | a bounded JSON-shaped value | one whole-input scan per string leaf **and per object key** |
+| `sanitizeValue(value, { boundary, signal })` | a bounded JSON-shaped value | one whole-input scan per string leaf **and per object key**, plus one key-context scan for a leaf under an object key that its own scan does not redact |
 | `sanitizeToolResult(result, { signal })` | a tool's result, before it joins context | `sanitizeText` for a string, `sanitizeValue` otherwise, labelled `tool-result` |
 | `buildContext(parts, { signal })` | ordered `{ role, text }` / `{ role, value }` parts, each with an optional `boundary` | the above per part; returns `[{ role, content }]` |
 | `openStream({ boundary, signal })` | chunks of one logical text: `append`, then `finalize`, or `abort` | one incremental session, staged |
 
 `boundary` is `"user-input"`, `"tool-result"`, `"tool-arguments"` (the
-arguments of a tool call), or `"context"` (the default). It goes to
+arguments of a tool call), `"resource"` (the contents of an MCP
+`resources/read` result), or `"context"` (the default). It goes to
 telemetry only and never changes an outcome. `signal`
 is an `AbortSignal` (or anything with an `aborted` flag).
 
@@ -76,6 +77,29 @@ is an `AbortSignal` (or anything with an `aborted` flag).
 returns the boundary. `createAiContextBoundaryWith(core, options)` takes the
 core injected (`{ scanAndRedact, createIncrementalSanitizer }`, i.e.
 `@redact-secret/core` itself after `initialize()`, or a fake in tests).
+
+### Key-aware `sanitizeValue`
+
+A string leaf is scanned with the object key it sits directly under
+(redact-secret/redact-secret#842), so `{ "api_key": "<value>" }` is
+redacted at that leaf even when the value does not identify itself, the same
+way the pair is redacted in text. The leaf is scanned alone first. If that
+redacts nothing, it is scanned again, through the same `scanAndRedact`, in
+its key-context view `{"<key>":"<leaf>"}`, and a finding there is reported
+with offsets into the leaf. The core's contextual detection decides whether
+the pair is a secret: this package holds no key pattern or list of
+credential names. Only the immediate key counts. Array elements, parent keys,
+and sibling keys give no context, and numbers, booleans, and `null` are
+unchanged. A view over `maxInputBytes` blocks the value as
+`limit_exceeded`. The false positives are the core's own: a non-secret
+under a credential name (`{ "password": "Welcome to the password reset
+flow" }`) is redacted too, while names like `token_count` or `secret_name`
+and placeholders stay clean.
+
+**Migration.** A leaf that used to pass in plaintext, because only its key
+identified it, is now replaced by a placeholder and reported in
+`ok.findings` and telemetry. Nothing that used to be redacted or blocked
+passes now.
 
 ## Outcomes
 

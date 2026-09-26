@@ -87,8 +87,13 @@ jobs:
             echo "main already contains release"
             exit 0
           fi
-          if ! git merge-base --is-ancestor origin/main origin/release; then
-            echo "::error::main has commits release doesn't. main only ever moves by merging release; find how those commits got there."
+          # main moves only by merge commits from release (the ruleset allows
+          # nothing else), so after the first train main always holds a merge
+          # commit release lacks. What must not exist is content: main's tree
+          # has to equal the release commit it last merged.
+          base="$(git merge-base origin/main origin/release)"
+          if ! git diff --quiet "$base" origin/main; then
+            echo "::error::main has changes release doesn't. main only ever moves by merging release; find how those changes got there."
             exit 1
           fi
           if [ -z "$(gh pr list --base main --head release --state open --json number --jq '.[].number')" ]; then
