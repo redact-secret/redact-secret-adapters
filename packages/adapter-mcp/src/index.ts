@@ -9,6 +9,9 @@
  * const mcp = await createMcpBoundary({ wholeInputLimits, incrementalLimits, traversalLimits });
  * const outcome = await mcp.sanitizeToolCall(({ signal }) => client.callTool(params, undefined, { signal }));
  * const safe = toCallToolResult(outcome); // null when aborted
+ *
+ * const read = await mcp.sanitizeResourceRead(({ signal }) => client.readResource({ uri }, { signal }));
+ * const response = toReadResourceResponse(read); // { result } | { error } | null
  * ```
  *
  * The core is loaded on call, by `@redact-secret/adapter-ai-context`'s live
@@ -27,11 +30,19 @@ export {
   MCP_BOUNDARY_LABELS,
   MCP_CONTENT_TYPES,
   MCP_OUTCOMES,
+  MCP_RESOURCE_BLOCKED_MESSAGE,
+  MCP_RESOURCE_ERROR_CODE,
+  MCP_RESOURCE_OUTCOMES,
+  MCP_RESOURCE_READ_ERROR_MESSAGE,
   MCP_TOOL_ERROR_TEXT,
+  McpResourceError,
   mcpAuditRecord,
   mcpBlockedResult,
+  mcpResourceBlockedError,
+  mcpResourceReadError,
   mcpToolErrorResult,
   toCallToolResult,
+  toReadResourceResponse,
 } from "./boundary.js";
 export type {
   CreateMcpBoundaryOptions,
@@ -45,12 +56,18 @@ export type {
   McpInvokeContext,
   McpOperationOptions,
   McpOutcome,
+  McpResourceErrorLike,
+  McpResourceErrorObject,
+  McpResourceOutcome,
+  McpResourceReadResponse,
   McpStage,
   McpTextContent,
   McpTextResult,
   McpToolCallOptions,
+  ReadErrorOutcome,
   ToolErrorOutcome,
   WrappedHandler,
+  WrappedResourceHandler,
 } from "./types.js";
 
 /**

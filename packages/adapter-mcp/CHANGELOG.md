@@ -14,6 +14,27 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+### Added
+
+- **`resources/read`** (redact-secret/redact-secret#843,
+  redact-secret-adapters#33): `sanitizeResourceResult`,
+  `sanitizeResourceRead` (host placement, around a client `readResource`),
+  and `wrapResourceReadHandler` (a server read callback of either SDK line,
+  `McpServer.registerResource` fixed URIs and URI templates, or a low-level
+  `resources/read` handler). A `ReadResourceResult` is one AI-context
+  `sanitizeValue` under the new `resource` label, then the same key-context
+  backstop; entry `text` is scanned as text whatever its `mimeType`; an entry
+  must be exactly one of `text` or `blob`, and a `blob` follows
+  `binaryContent`. Failures map to fixed JSON-RPC errors (code `-32603`, a
+  fixed message, no `data`) through `toReadResourceResponse`, and the wrapper
+  throws them as `McpResourceError`; a read failure is the new `read_error`
+  outcome, its error never read. The audit `stage` gains `resource`.
+  Qualified by the core `mcp-resources-read` fixture and runner vendored at
+  the #843 commit (`test/conformance*.test.ts`), replayed over real SDK
+  clients and servers at both endpoints of both lines on stdio and
+  Streamable HTTP (`test/resources-transport.test.ts`), and exercised at the
+  host placement in `test/e2e.test.ts`. No declared range changes.
+
 ### Changed
 
 - **Contract change: the key-context check is narrowed to a backstop**

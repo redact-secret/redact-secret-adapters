@@ -18,9 +18,20 @@
  *   - `slow-stream`: a wrapped streamed handler that yields one chunk and
  *     then waits until the request is cancelled.
  *   - `stats`: what the server saw (dispatch counts, producer closes).
+ *   Resources (`resources/read`, redact-secret/redact-secret#843):
+ *   - `test://replay/<index>`: returns resource fixture case <index>'s
+ *     `result`, raw; the host applies the boundary.
+ *   - `test://wrapped/<index>`: the same result through
+ *     `wrapResourceReadHandler` (the preventive, server-side placement).
+ *   - `test://rpc-error`: throws an error whose message carries a
+ *     synthetic secret; the SDK sends it as the JSON-RPC error message.
+ *   - `test://wrapped-throw`: the same throw, wrapped.
+ *   - `test://slow`: a wrapped read that waits until it is cancelled.
  * - `buildMcpServer(line)`: the high-level `McpServer` with `registerTool`,
  *   to prove the wrapper works with the SDK's own handler signature and that
- *   it catches a handler error before the SDK turns it into result text.
+ *   it catches a handler error before the SDK turns it into result text,
+ *   and `registerResource` (a fixed URI and a URI template) with wrapped and
+ *   unwrapped read callbacks.
  *
  * Every value is synthetic.
  */
@@ -32,6 +43,22 @@ import { createMcpBoundary } from "../../dist/index.js";
 const fixture = JSON.parse(
   readFileSync(new URL("../../../../fixtures/core/mcp-boundary.json", import.meta.url), "utf-8"),
 );
+const resourceFixture = JSON.parse(
+  readFileSync(new URL("../../../../fixtures/core/mcp-resources-read.json", import.meta.url), "utf-8"),
+);
+
+/** A fixture value of the form `{ repeat, count }` materialized, as the core runner does. */
+export function materializeValue(value) {
+  if (Array.isArray(value)) return value.map(materializeValue);
+  if (value !== null && typeof value === "object") {
+    const keys = Object.keys(value);
+    if (keys.length === 2 && typeof value.repeat === "string" && Number.isInteger(value.count)) {
+      return value.repeat.repeat(value.count);
+    }
+    return Object.fromEntries(keys.map((key) => [key, materializeValue(value[key])]));
+  }
+  return value;
+}
 
 export const LIMITS = Object.freeze({
   wholeInputLimits: fixture.limits.wholeInput,
@@ -58,20 +85,25 @@ export async function loadLine(line) {
       import("@modelcontextprotocol/sdk/server/mcp.js"),
       import("@modelcontextprotocol/sdk/types.js"),
     ]);
+    const { ResourceTemplate } = await import("@modelcontextprotocol/sdk/server/mcp.js");
     return {
       Server,
       McpServer,
+      ResourceTemplate,
       onListTools: (server, handler) => server.setRequestHandler(types.ListToolsRequestSchema, handler),
       onCallTool: (server, handler) => server.setRequestHandler(types.CallToolRequestSchema, handler),
+      onReadResource: (server, handler) => server.setRequestHandler(types.ReadResourceRequestSchema, handler),
     };
   }
   if (line === "v2") {
-    const { Server, McpServer } = await import("@modelcontextprotocol/server");
+    const { Server, McpServer, ResourceTemplate } = await import("@modelcontextprotocol/server");
     return {
       Server,
       McpServer,
+      ResourceTemplate,
       onListTools: (server, handler) => server.setRequestHandler("tools/list", handler),
       onCallTool: (server, handler) => server.setRequestHandler("tools/call", handler),
+      onReadResource: (server, handler) => server.setRequestHandler("resources/read", handler),
     };
   }
   throw new Error("unknown SDK line");
@@ -82,7 +114,15 @@ const INFO = { name: "redact-secret-adapter-mcp-test", version: "0.0.0" };
 export async function buildLowLevelServer(line) {
   const sdk = await loadLine(line);
   const mcp = await createMcpBoundary(LIMITS);
-  const stats = { echoCalls: 0, wrappedArgsCalls: 0, slowStreamClosed: 0, slowStreamPulled: 0, lastWrappedArgs: null };
+  const stats = {
+    echoCalls: 0,
+    wrappedArgsCalls: 0,
+    slowStreamClosed: 0,
+    slowStreamPulled: 0,
+    lastWrappedArgs: null,
+    slowReads: 0,
+    slowReadsCancelled: 0,
+  };
 
   const handlers = new Map();
   fixture.cases.forEach((testCase, index) => {
@@ -167,7 +207,50 @@ export async function buildLowLevelServer(line) {
   });
   handlers.set("stats", () => ({ content: [{ type: "text", text: JSON.stringify(stats) }] }));
 
-  const server = new sdk.Server(INFO, { capabilities: { tools: {} } });
+  const resources = new Map();
+  resourceFixture.cases.forEach((testCase, index) => {
+    if (testCase.result === undefined || testCase.operation !== "resourceResult") return;
+    const result = () => materializeValue(testCase.result);
+    resources.set(`test://replay/${index}`, result);
+    resources.set(
+      `test://wrapped/${index}`,
+      createMcpBoundary({ ...LIMITS, binaryContent: testCase.binaryContent ?? "block" }).then((boundary) =>
+        boundary.wrapResourceReadHandler(result),
+      ),
+    );
+  });
+  const resourceToken = resourceFixture.cases[0].secrets[0];
+  resources.set("test://rpc-error", () => {
+    throw new Error(`${CONTROL_MARKER} ${resourceToken}`);
+  });
+  resources.set(
+    "test://wrapped-throw",
+    mcp.wrapResourceReadHandler(() => {
+      throw new Error(`${CONTROL_MARKER} ${resourceToken}`);
+    }),
+  );
+  resources.set(
+    "test://slow",
+    mcp.wrapResourceReadHandler(
+      (_request, extra) =>
+        new Promise((_resolve, reject) => {
+          stats.slowReads += 1;
+          const signal = extra?.signal ?? extra?.mcpReq?.signal;
+          signal?.addEventListener("abort", () => {
+            stats.slowReadsCancelled += 1;
+            reject(new Error(`cancelled ${resourceToken}`));
+          });
+        }),
+    ),
+  );
+
+  const server = new sdk.Server(INFO, { capabilities: { tools: {}, resources: {} } });
+  sdk.onReadResource(server, async (request, extra) => {
+    const entry = resources.get(request.params.uri);
+    if (entry === undefined) throw new Error("unknown resource");
+    const handler = await entry;
+    return handler(request, extra);
+  });
   sdk.onListTools(server, () => ({
     tools: [...handlers.keys()].map((name) => ({ name, inputSchema: { type: "object" } })),
   }));
@@ -197,6 +280,40 @@ export async function buildMcpServer(line) {
     }),
   );
   server.registerTool("unwrapped-throw", { description: "control: the SDK's own conversion" }, () => {
+    throw new Error(CONTROL_MARKER);
+  });
+  server.registerResource(
+    "wrapped-env",
+    "test://mcp/env",
+    { mimeType: "text/plain" },
+    mcp.wrapResourceReadHandler((uri) => ({
+      contents: [{ uri: uri.href, mimeType: "text/plain", text: `REGION=eu-west-1\nAPI_KEY=${token}\n` }],
+    })),
+  );
+  server.registerResource(
+    "wrapped-config",
+    new sdk.ResourceTemplate("test://mcp/config/{name}", { list: undefined }),
+    { mimeType: "application/json" },
+    mcp.wrapResourceReadHandler((uri, variables) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: JSON.stringify({ name: variables.name, password: "synthetic-not-a-secret" }),
+        },
+      ],
+      _meta: { password: "synthetic-not-a-secret" },
+    })),
+  );
+  server.registerResource(
+    "wrapped-throw",
+    "test://mcp/wrapped-throw",
+    {},
+    mcp.wrapResourceReadHandler(() => {
+      throw new Error(`${CONTROL_MARKER} ${token}`);
+    }),
+  );
+  server.registerResource("unwrapped-throw", "test://mcp/unwrapped-throw", {}, () => {
     throw new Error(CONTROL_MARKER);
   });
   return { server };

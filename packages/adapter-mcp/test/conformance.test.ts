@@ -9,7 +9,13 @@
 import * as core from "@redact-secret/core";
 import { expect, test } from "vitest";
 
-import { createAdapterBoundary, loadMcpFixture, loadRunner } from "./conformance.js";
+import {
+  createAdapterBoundary,
+  loadMcpFixture,
+  loadResourceFixture,
+  loadResourceRunner,
+  loadRunner,
+} from "./conformance.js";
 
 test("every initialized-phase case of the pinned MCP fixture reaches the contract's outcome through the adapter", async () => {
   await core.initialize();
@@ -21,5 +27,18 @@ test("every initialized-phase case of the pinned MCP fixture reaches the contrac
   });
   expect(summary.cases).toBe(fixture.cases.filter((c) => (c.phase ?? "initialized") === "initialized").length);
   expect(summary.pulledChunks).toBeGreaterThan(0);
+  expect(summary.telemetryEvents).toBeGreaterThan(0);
+});
+
+test("every initialized-phase case of the pinned resources/read fixture reaches the contract's outcome through the adapter", async () => {
+  await core.initialize();
+  const fixture = loadResourceFixture();
+  const { runMcpResourcesReadConformance } = await loadResourceRunner();
+  const summary = await runMcpResourcesReadConformance(core, fixture, {
+    phase: "initialized",
+    createBoundary: (api, options) => createAdapterBoundary(api, options),
+  });
+  expect(summary.cases).toBe(fixture.cases.filter((c) => (c.phase ?? "initialized") === "initialized").length);
+  expect(summary.reads).toBeGreaterThan(0);
   expect(summary.telemetryEvents).toBeGreaterThan(0);
 });

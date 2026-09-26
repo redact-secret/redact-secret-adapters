@@ -29,6 +29,23 @@ export interface ToolErrorOutcome {
 /** Every MCP operation ends in exactly one of these. A non-`ok` outcome carries no value and no findings. */
 export type McpOutcome<T> = OkOutcome<T> | BlockedOutcome | AbortedOutcome | ToolErrorOutcome;
 
+/** A resource read threw or rejected. Its error was never read. */
+export interface ReadErrorOutcome {
+  readonly outcome: "read_error";
+}
+
+/** Every `resources/read` operation ends in exactly one of these. */
+export type McpResourceOutcome<T> = OkOutcome<T> | BlockedOutcome | AbortedOutcome | ReadErrorOutcome;
+
+/** A fixed, input-free JSON-RPC error object: code -32603, a fixed message, never `data`. */
+export type McpResourceErrorObject = {
+  readonly code: number;
+  readonly message: string;
+};
+
+/** What a `resources/read` outcome delivers: the sanitized result, or a fixed JSON-RPC error. */
+export type McpResourceReadResponse<T> = { readonly result: T } | { readonly error: McpResourceErrorObject };
+
 /** A sanitized `CallToolResult` (or sanitized tool arguments): a plain JSON object. */
 export type JsonObject = { readonly [key: string]: JsonValue };
 
@@ -48,8 +65,8 @@ export type McpTextResult = {
   isError?: true;
 };
 
-/** Which crossing an audit record describes. */
-export type McpStage = "arguments" | "result";
+/** Which crossing an audit record describes: a tool call's arguments or result, or a `resources/read` result. */
+export type McpStage = "arguments" | "result" | "resource";
 
 /**
  * The input-free audit record of one crossing. `reason` is present only for
@@ -58,7 +75,7 @@ export type McpStage = "arguments" | "result";
  */
 export interface McpAuditRecord {
   readonly stage: McpStage;
-  readonly outcome: McpOutcome<unknown>["outcome"];
+  readonly outcome: McpOutcome<unknown>["outcome"] | McpResourceOutcome<unknown>["outcome"];
   readonly reason?: BlockReason;
   readonly code?: SecretScanErrorCode;
 }
@@ -161,7 +178,46 @@ export interface McpBoundary {
     handler: H,
     options?: McpHandlerOptions,
   ): WrappedHandler<H, McpTextResult>;
+  /**
+   * One `ReadResourceResult` (`resources/read`,
+   * redact-secret/redact-secret#843), before it is logged, persisted, or
+   * placed into model context: the whole result as ONE AI-context
+   * `sanitizeValue` (label `resource`), then the key-context backstop.
+   * Entry `text` is scanned as text whatever its `mimeType`; a `blob`
+   * follows `binaryContent`.
+   */
+  sanitizeResourceResult(result: unknown, options?: McpOperationOptions): McpResourceOutcome<JsonObject>;
+  /**
+   * Runs the host's resource read (a client `readResource`, or any function
+   * returning a `ReadResourceResult`) and sanitizes its result. A throw or
+   * rejection is `read_error`, its error never read.
+   */
+  sanitizeResourceRead(
+    invoke: (context: McpInvokeContext) => unknown,
+    options?: McpOperationOptions,
+  ): Promise<McpResourceOutcome<JsonObject>>;
+  /**
+   * Wraps an MCP server resource read callback (`(uri, extra)`,
+   * `(uri, variables, extra)`, or a low-level `(request, extra)`, either SDK
+   * line): reads the request's signal from the last parameter, catches every
+   * callback failure, and resolves to the sanitized result or throws a
+   * {@link McpResourceErrorLike} carrying exactly the fixed JSON-RPC error.
+   * Preventive: the host still applies the boundary.
+   */
+  wrapResourceReadHandler<H extends (...params: never[]) => unknown>(handler: H): WrappedResourceHandler;
 }
+
+/** What a wrapped resource read callback throws: an `Error` whose `code` and `message` are the fixed JSON-RPC error. */
+export interface McpResourceErrorLike extends Error {
+  readonly code: number;
+}
+
+/**
+ * A wrapped resource read callback accepts whatever the SDK passes, so it is
+ * assignable to either line's read callback, and resolves to the sanitized
+ * `ReadResourceResult`.
+ */
+export type WrappedResourceHandler = (...params: unknown[]) => Promise<JsonObject>;
 
 /**
  * A wrapped handler accepts whatever the SDK passes (`(args, ctx)` or

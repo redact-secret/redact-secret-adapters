@@ -15,6 +15,12 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+### Added
+
+- The `resource` boundary label (redact-secret/redact-secret#843), for the
+  contents of an MCP `resources/read` result. Telemetry-only, like every
+  label; a type-level addition to `BoundaryLabel`.
+
 ### Changed
 
 - **Contract change: key-aware `sanitizeValue`** (redact-secret/redact-secret#842,
