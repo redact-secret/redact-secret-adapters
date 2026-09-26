@@ -15,13 +15,19 @@ import {
   createMcpBoundaryWith,
   MCP_AUDIT_FIELDS,
   MCP_BLOCKED_TEXT,
+  MCP_RESOURCE_BLOCKED_MESSAGE,
+  MCP_RESOURCE_READ_ERROR_MESSAGE,
   MCP_TOOL_ERROR_TEXT,
   type McpAuditRecord,
   type McpBoundaryOptions,
+  McpResourceError,
   mcpAuditRecord,
   mcpBlockedResult,
+  mcpResourceBlockedError,
+  mcpResourceReadError,
   mcpToolErrorResult,
   toCallToolResult,
+  toReadResourceResponse,
 } from "../src/index.js";
 
 const SECRET = "SECRET_TOKEN_7";
@@ -109,48 +115,77 @@ describe("sanitizeToolResult", () => {
     expect(audits).toEqual([{ stage: "result", outcome: "blocked", reason: "unsupported_value" }]);
   });
 
-  test("the key-context check blocks a redact finding that only the serialized structure reveals", () => {
-    // A core that, like the real one, flags `"password":"..."` only with its
-    // key context. No single leaf carries it; the serialization does.
+  /**
+   * A core that, like the real one, flags a value only through the context
+   * around it: `"password":"<v>"` (its own key) and
+   * `"provider":"fake","value":"<v>"` (a sibling key), with exact offsets.
+   */
+  function contextualCore() {
     const fake = createFakeCore();
     const scan = fake.core.scanAndRedact;
-    const keyed = {
-      ...fake.core,
-      scanAndRedact: (text: string, options?: Parameters<typeof scan>[1]) =>
-        text.includes('"password":"')
-          ? {
-              text: text.replace(/"password":"[^"]*"/, '"password":"<SECRET_1>"'),
-              findings: [
-                {
-                  id: "finding-1",
-                  type: "password",
-                  detector: "fake",
-                  confidence: "high",
-                  action: "redact",
-                  obfuscation: "none",
-                  start: 0,
-                  end: 1,
-                },
-              ],
-            }
-          : scan(text, options),
-    } as typeof fake.core;
     const scans: string[] = [];
-    const recording = {
-      ...keyed,
-      scanAndRedact: (t: string, o?: Parameters<typeof scan>[1]) => {
-        scans.push(t);
-        return keyed.scanAndRedact(t, o);
+    const patterns = [/"password":"([^"<]+)"/, /"provider":"fake","value":"([^"<]+)"/];
+    const core = {
+      ...fake.core,
+      scanAndRedact: (text: string, options?: Parameters<typeof scan>[1]) => {
+        scans.push(text);
+        for (const pattern of patterns) {
+          const match = pattern.exec(text);
+          if (match?.[1] === undefined) continue;
+          const start = match.index + match[0].length - 1 - match[1].length;
+          const end = start + match[1].length;
+          return {
+            text: `${text.slice(0, start)}<SECRET_1>${text.slice(end)}`,
+            findings: [
+              {
+                id: "finding-1",
+                type: "password",
+                detector: "fake",
+                confidence: "high",
+                action: "redact",
+                obfuscation: "none",
+                start,
+                end,
+              },
+            ],
+          };
+        }
+        return scan(text, options);
       },
-    };
-    const { mcp } = setup({}, {}, { core: recording, calls: fake.calls });
-    const structured = { content: [], structuredContent: { password: "synthetic-not-a-secret" } };
-    expect(mcp.sanitizeToolResult(structured)).toEqual({ outcome: "blocked", reason: "policy" });
-    expect(scans).toContain(JSON.stringify({ structuredContent: { password: "synthetic-not-a-secret" } }));
-    expect(mcp.sanitizeToolArguments({ password: "synthetic-not-a-secret" })).toEqual({
+    } as typeof fake.core;
+    return { core, calls: fake.calls, scans };
+  }
+
+  test("a value only its own key identifies is redacted at its leaf, not blocked (redact-secret/redact-secret#842)", () => {
+    const fake = contextualCore();
+    const { mcp } = setup({}, {}, fake);
+    const structured = { content: [], structuredContent: { user: "deploy-bot", password: "synthetic-not-a-secret" } };
+    const outcome = mcp.sanitizeToolResult(structured);
+    expect(outcome).toMatchObject({
+      outcome: "ok",
+      value: { content: [], structuredContent: { user: "deploy-bot", password: "<SECRET_1>" } },
+    });
+    expect(outcome.outcome === "ok" && outcome.findings.map(({ start, end }) => [start, end])).toEqual([[0, 22]]);
+    expect(fake.scans).toContain('{"password":"synthetic-not-a-secret"}');
+    // The backstop still ran over the sanitized result and found nothing.
+    expect(fake.scans).toContain(JSON.stringify({ structuredContent: { user: "deploy-bot", password: "<SECRET_1>" } }));
+    expect(mcp.sanitizeToolArguments({ password: "synthetic-not-a-secret" })).toMatchObject({
+      outcome: "ok",
+      value: { password: "<SECRET_1>" },
+    });
+  });
+
+  test("the key-context backstop still blocks what only the serialized structure reveals", () => {
+    const fake = contextualCore();
+    const { mcp } = setup({}, {}, fake);
+    // Only a sibling key identifies the value: no leaf pass can see it.
+    const structuredContent = { provider: "fake", value: "synthetic-not-a-secret" };
+    expect(mcp.sanitizeToolResult({ content: [], structuredContent })).toEqual({
       outcome: "blocked",
       reason: "policy",
     });
+    expect(fake.scans).toContain(JSON.stringify({ structuredContent }));
+    expect(mcp.sanitizeToolArguments(structuredContent)).toEqual({ outcome: "blocked", reason: "policy" });
     // A text block's own text already carried its context and is not rescanned as structure.
     expect(mcp.sanitizeToolResult({ content: [{ type: "text", text: "ordinary" }] }).outcome).toBe("ok");
   });
@@ -472,6 +507,207 @@ describe("fixed results, audit, and telemetry", () => {
       value: { content: [{ type: "text", text: "a <SECRET_1>" }] },
     });
     expect(await mcp.sanitizeStreamedToolResult(["b ", SECRET])).toMatchObject({ outcome: "ok" });
+  });
+});
+
+describe("resources/read (redact-secret/redact-secret#843)", () => {
+  const entry = (text: string, extra: Record<string, unknown> = {}) => ({
+    uri: "file:///synthetic/readme.txt",
+    mimeType: "text/plain",
+    text,
+    ...extra,
+  });
+
+  test("the whole result is one value under the resource label: text, uri, mimeType, _meta, unknown fields", () => {
+    const { mcp, events, audits, calls } = setup();
+    const json = JSON.stringify({ note: `x ${SECRET}` });
+    const outcome = mcp.sanitizeResourceResult({
+      contents: [
+        entry(`log ${SECRET}`, { uri: `https://example.test/?t=${SECRET}`, _meta: { hint: `m ${SECRET}` } }),
+        entry(json, { mimeType: `application/json; t=${SECRET}`, future: `f ${SECRET}` }),
+      ],
+      _meta: { trace: `t ${SECRET}` },
+      futureField: `f ${SECRET}`,
+    });
+    expect(outcome.outcome).toBe("ok");
+    expectInputFree(outcome);
+    expect(calls.scans).toContain(json);
+    expect(new Set(events.map((e) => e.context.boundary))).toEqual(new Set(["resource"]));
+    expect(audits).toEqual([{ stage: "resource", outcome: "ok" }]);
+  });
+
+  test("a blob blocks by default; on opt-in a string blob passes unscanned at its original key position", () => {
+    const blob = { uri: `file:///${SECRET}.bin`, blob: "U1lOVEhFVElD", mimeType: "x/y" };
+    expect(setup().mcp.sanitizeResourceResult({ contents: [blob] })).toEqual({
+      outcome: "blocked",
+      reason: "unsupported_value",
+    });
+    const outcome = setup({ binaryContent: "pass" }).mcp.sanitizeResourceResult({ contents: [blob] });
+    expect(outcome.outcome).toBe("ok");
+    const [passed] = (outcome as unknown as { value: { contents: Record<string, unknown>[] } }).value.contents;
+    expect(Object.keys(passed ?? {})).toEqual(["uri", "blob", "mimeType"]);
+    expect(passed?.blob).toBe(blob.blob);
+    expectInputFree(passed);
+  });
+
+  test.each([
+    ["an entry with text and blob", { contents: [{ uri: "x", text: "a", blob: "YQ==" }] }],
+    ["an entry with neither", { contents: [{ uri: "x" }] }],
+    ["a non-string text", { contents: [{ uri: "x", text: { v: SECRET } }] }],
+    ["a non-string blob", { contents: [{ uri: "x", blob: 1 }] }],
+    ["a non-object entry", { contents: ["x"] }],
+    ["no contents", { _meta: {} }],
+    ["contents that is not an array", { contents: {} }],
+    ["a non-object result", "x"],
+  ])("%s is unsupported_value, even on binary opt-in", (_name, result) => {
+    expect(setup({ binaryContent: "pass" }).mcp.sanitizeResourceResult(result)).toEqual({
+      outcome: "blocked",
+      reason: "unsupported_value",
+    });
+  });
+
+  test("limits count from the result root and the input limit blocks the whole result", () => {
+    const { mcp } = setup();
+    const deep = { contents: [entry("ok", { _meta: { a: { b: { c: { d: "x" } } } } })] };
+    expect(mcp.sanitizeResourceResult(deep)).toEqual({ outcome: "blocked", reason: "limit_exceeded" });
+    const many = { contents: Array.from({ length: 16 }, () => entry("ok")) };
+    expect(mcp.sanitizeResourceResult(many)).toEqual({ outcome: "blocked", reason: "limit_exceeded" });
+    const large = mcp.sanitizeResourceResult({
+      contents: [entry("x".repeat(LIMITS.wholeInputLimits.maxInputBytes + 1))],
+    });
+    expect(large).toMatchObject({ outcome: "blocked", reason: "limit_exceeded" });
+  });
+
+  test("a core failure, a block finding, a throwing getter, and an aborted signal map to fixed, input-free outcomes", () => {
+    const { mcp } = setup();
+    const failed = mcp.sanitizeResourceResult({ contents: [entry(`BOOM ${SECRET}`)] });
+    expect(failed).toEqual({ outcome: "blocked", reason: "core_error", code: "DETECTOR_FAILURE" });
+    expect(mcp.sanitizeResourceResult({ contents: [entry("BLOCK_ME")] })).toEqual({
+      outcome: "blocked",
+      reason: "policy",
+    });
+    const getter = {
+      get contents(): never {
+        throw new Error(`getter ${SECRET}`);
+      },
+    };
+    expect(mcp.sanitizeResourceResult(getter)).toEqual({ outcome: "blocked", reason: "unsupported_value" });
+    expect(mcp.sanitizeResourceResult({ contents: [] }, { signal: { aborted: true } })).toEqual({ outcome: "aborted" });
+    expectInputFree(failed, toReadResourceResponse(failed));
+  });
+
+  test("a failing read is read_error, its error (a message getter included) never read", async () => {
+    const { mcp, audits } = setup();
+    let read = false;
+    const error = {
+      get message() {
+        read = true;
+        return SECRET;
+      },
+    };
+    const outcome = await mcp.sanitizeResourceRead(async () => {
+      throw error;
+    });
+    expect(outcome).toEqual({ outcome: "read_error" });
+    expect(read).toBe(false);
+    expect(audits).toEqual([{ stage: "resource", outcome: "read_error" }]);
+    expect(await mcp.sanitizeResourceRead("not a function" as never)).toEqual({ outcome: "read_error" });
+  });
+
+  test("cancellation before, during, and with a rejecting read delivers nothing", async () => {
+    const { mcp } = setup();
+    let reads = 0;
+    const before = await mcp.sanitizeResourceRead(
+      () => {
+        reads += 1;
+        return { contents: [] };
+      },
+      { signal: { aborted: true } },
+    );
+    expect(before).toEqual({ outcome: "aborted" });
+    expect(reads).toBe(0);
+    const controller = new AbortController();
+    const during = await mcp.sanitizeResourceRead(
+      () => {
+        controller.abort();
+        return { contents: [entry(SECRET)] };
+      },
+      { signal: controller.signal },
+    );
+    expect(during).toEqual({ outcome: "aborted" });
+    expect(toReadResourceResponse(during)).toBeNull();
+    const rejected = await mcp.sanitizeResourceRead(
+      async () => {
+        throw new Error(SECRET);
+      },
+      { signal: controller.signal },
+    );
+    expect(rejected).toEqual({ outcome: "aborted" });
+  });
+
+  test("the read callback wrapper: every callback shape, the signal from the last parameter, fixed errors thrown", async () => {
+    const { mcp } = setup();
+    const result = (uri: unknown) => ({ contents: [entry(`v ${SECRET}`, { uri: String(uri) })] });
+    const fixed = mcp.wrapResourceReadHandler((uri: unknown) => result(uri));
+    const templated = mcp.wrapResourceReadHandler((uri: unknown, variables: { name: string }) =>
+      result(`${uri}/${variables.name}`),
+    );
+    const lowLevel = mcp.wrapResourceReadHandler((request: { params: { uri: string } }) => result(request.params.uri));
+    for (const value of [
+      await fixed("test://a", { signal: { aborted: false } }),
+      await templated("test://a", { name: "b" }, { mcpReq: { signal: { aborted: false } } }),
+      await lowLevel({ params: { uri: "test://a" } }, {}),
+    ]) {
+      expect(JSON.stringify(value)).toContain("test://a");
+      expectInputFree(value);
+    }
+    const thrown = mcp.wrapResourceReadHandler(() => {
+      throw new Error(`BOOM ${SECRET}`);
+    });
+    const failure = await thrown("test://a", {}).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(McpResourceError);
+    expect(failure).toMatchObject({ code: -32603, message: MCP_RESOURCE_READ_ERROR_MESSAGE });
+    expect("data" in (failure as object)).toBe(false);
+    const blocked = await mcp
+      .wrapResourceReadHandler(() => ({ contents: [entry("BLOCK_ME")] }))("test://a", {})
+      .catch((error: unknown) => error);
+    expect(blocked).toMatchObject({ code: -32603, message: MCP_RESOURCE_BLOCKED_MESSAGE });
+    // A cancelled request throws too; the SDK never sends a response for it.
+    const cancelled = await fixed("test://a", { signal: { aborted: true } }).catch((error: unknown) => error);
+    expect(cancelled).toBeInstanceOf(McpResourceError);
+    expect(() => mcp.wrapResourceReadHandler("x" as never)).toThrow(TypeError);
+  });
+
+  test("fixed errors and responses are exact, fresh, input-free objects with no data", () => {
+    expect(mcpResourceBlockedError()).toEqual({ code: -32603, message: MCP_RESOURCE_BLOCKED_MESSAGE });
+    expect(mcpResourceReadError()).toEqual({ code: -32603, message: MCP_RESOURCE_READ_ERROR_MESSAGE });
+    expect(mcpResourceBlockedError()).not.toBe(mcpResourceBlockedError());
+    expect(toReadResourceResponse({ outcome: "blocked", reason: "lifecycle" })).toEqual({
+      error: mcpResourceBlockedError(),
+    });
+    expect(toReadResourceResponse({ outcome: "ok", value: { contents: [] }, findings: [] })).toEqual({
+      result: { contents: [] },
+    });
+    expect(() => toReadResourceResponse({ outcome: "tool_error" } as never)).toThrow(TypeError);
+    expect(mcpAuditRecord({ outcome: "read_error" }, "resource")).toEqual({ stage: "resource", outcome: "read_error" });
+  });
+
+  test("a throwing onAudit or onFinding never changes a resource outcome", async () => {
+    const { mcp } = setup(
+      {
+        onAudit: () => {
+          throw new Error(`audit ${SECRET}`);
+        },
+      },
+      {
+        onFinding: () => {
+          throw new Error(`finding ${SECRET}`);
+        },
+      },
+    );
+    const outcome = await mcp.sanitizeResourceRead(() => ({ contents: [entry(`v ${SECRET}`)] }));
+    expect(outcome.outcome).toBe("ok");
+    expectInputFree(outcome);
   });
 });
 

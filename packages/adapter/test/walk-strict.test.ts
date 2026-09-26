@@ -36,6 +36,27 @@ describe("walkStrict", () => {
     expect(result.ok && result.value).not.toBe(input);
   });
 
+  test("hands each string leaf its immediate object key; array elements and the root get none", () => {
+    const keys: [string, string | undefined][] = [];
+    const visitors: StrictWalkVisitors<never> = {
+      string(text, key) {
+        keys.push([text, key]);
+        return { ok: true, text };
+      },
+      key: () => ({ ok: true }),
+    };
+    walkStrict({ password: "a", list: ["b", { inner: "c" }], nested: { value: "d" } }, LIMITS, visitors);
+    expect(keys).toEqual([
+      ["a", "password"],
+      ["b", undefined],
+      ["c", "inner"],
+      ["d", "value"],
+    ]);
+    keys.length = 0;
+    walkStrict("root", LIMITS, visitors);
+    expect(keys).toEqual([["root", undefined]]);
+  });
+
   test("a visitor failure ends the walk with that failure; later values are not visited", () => {
     const { seen, visitors } = recorder({ string: "stop" });
     expect(walkStrict(["a", "stop", "never"], LIMITS, visitors)).toEqual({ ok: false, failure: "visitor" });

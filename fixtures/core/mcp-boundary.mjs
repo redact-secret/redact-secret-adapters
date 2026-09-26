@@ -12,14 +12,20 @@
  * - which parts of a `CallToolResult` are scanned, which binary payloads are
  *   blocked (or, on explicit opt-in, passed unscanned), and which content
  *   block types exist;
- * - a key-context check: the sanitized structured parts are serialized and
- *   scanned once more as text, so a secret identified only by its key blocks
- *   the result instead of reaching context from `structuredContent`;
+ * - a key-context backstop: the sanitized structured parts are serialized
+ *   and scanned once more as text. Since beta.10 (#842) the AI-context
+ *   `sanitizeValue` is key-aware and redacts a leaf its own key identifies in
+ *   place, so the backstop blocks only on context the leaf pass cannot see:
+ *   a sibling or parent key, or a pair split across leaves;
  * - the `tool-arguments` label for opted-in argument sanitation;
  * - a streamed tool result that stops pulling from its producer as soon as
  *   the stream stops accepting chunks;
  * - the fixed, input-free `CallToolResult` every non-`ok` outcome maps to,
- *   and an input-free audit record.
+ *   and an input-free audit record;
+ * - `resources/read` (#843, `docs/reference/mcp-resources-read.md`): the same
+ *   one-value mapping over a `ReadResourceResult`, under the `resource`
+ *   label. Its fixed JSON-RPC errors and its runner are in
+ *   `conformance/mcp-resources-read.mjs`.
  *
  * `createMcpBoundary(aiContextBoundary, options)` is that specialization
  * written as the smallest code that satisfies the contract. It is not a
@@ -45,6 +51,7 @@ import { BLOCK_REASONS, SAFE_FINDING_FIELDS, createAiContextBoundary } from "./a
 export const MCP_BOUNDARY_LABELS = Object.freeze({
   arguments: "tool-arguments",
   result: "tool-result",
+  resource: "resource",
 });
 
 /**
@@ -71,6 +78,7 @@ export const MCP_AUDIT_FIELDS = Object.freeze(["stage", "outcome", "reason", "co
 const ABORTED = Object.freeze({ outcome: "aborted" });
 const UNSUPPORTED = Object.freeze({ outcome: "blocked", reason: "unsupported_value" });
 const TOOL_ERROR = Object.freeze({ outcome: "tool_error" });
+const READ_ERROR = Object.freeze({ outcome: "read_error" });
 
 function isAborted(signal) {
   return signal != null && signal.aborted === true;
@@ -150,10 +158,15 @@ export function toCallToolResult(outcome) {
  * outcome, and for `blocked` the fixed reason and registry code. Findings
  * reach auditing only through the AI-context boundary's `onFinding`.
  *
- * @param {"arguments" | "result"} stage
+ * `stage` is `arguments` or `result` for a tool call, and `resource` for a
+ * `resources/read` result (#843).
+ *
+ * @param {"arguments" | "result" | "resource"} stage
  */
 export function mcpAuditRecord(outcome, stage) {
-  if (stage !== "arguments" && stage !== "result") throw new TypeError("mcpAuditRecord: unknown stage");
+  if (stage !== "arguments" && stage !== "result" && stage !== "resource") {
+    throw new TypeError("mcpAuditRecord: unknown stage");
+  }
   const record = { stage, outcome: outcome.outcome };
   if (outcome.outcome === "blocked") {
     record.reason = outcome.reason;
@@ -221,17 +234,19 @@ export function createMcpBoundary(boundary, { binaryContent = "block" } = {}) {
   }
 
   /**
-   * The key-context check. The per-leaf scan sees a string leaf without the
-   * key it sits under, so `{"password": "<value>"}` is missed when the value
-   * is not self-identifying, while the same pair in text is caught. MCP makes
-   * this acute: a tool that returns `structuredContent` should also return
-   * its serialization as text, so the text copy would be redacted and the
-   * structured copy delivered as is. After the per-leaf pass, each
-   * value-shaped part of the SANITIZED value is serialized with
-   * `JSON.stringify` and scanned once more as text. A `redact` or `block`
-   * finding there cannot be mapped back onto a leaf, so it blocks the whole
-   * operation as `policy`. Placeholders the first pass wrote are not
-   * detected again. Returns a non-`ok` outcome, or `undefined` to continue.
+   * The key-context backstop (narrowed in beta.10, #842). The key-aware
+   * per-leaf pass already scans each string leaf with the key it sits
+   * directly under, so `{"password": "<value>"}` is redacted at its leaf and
+   * the structured copy of a result agrees with its text copy. What the leaf
+   * pass cannot see is context from anywhere else in the value: a sibling key
+   * (`{"provider": "twilio", "value": "<hex>"}`), a parent key, or a pair
+   * split across leaves. So after the per-leaf pass, each value-shaped part
+   * of the SANITIZED value is still serialized with `JSON.stringify` and
+   * scanned once more as text. A `redact` or `block` finding there cannot be
+   * mapped back onto a leaf, so it blocks the whole operation as `policy`.
+   * Placeholders the first pass wrote are not detected again, so a leaf the
+   * key-aware pass redacted never trips it. Returns a non-`ok` outcome, or
+   * `undefined` to continue.
    */
   function checkKeyContext(parts, label, signal) {
     for (const part of parts) {
@@ -371,7 +386,99 @@ export function createMcpBoundary(boundary, { binaryContent = "block" } = {}) {
     });
   }
 
-  return Object.freeze({ sanitizeToolResult, sanitizeToolArguments, sanitizeToolCall, sanitizeStreamedToolResult });
+  /**
+   * One `contents[]` entry of a `ReadResourceResult` (#843): exactly one of a
+   * string `text` (`TextResourceContents`) or `blob`
+   * (`BlobResourceContents`). An entry with both, with neither, with a
+   * non-string `text`, or that is not a plain object is `unsupported_value`:
+   * a later protocol revision's content kind may carry content this contract
+   * cannot scan. A `blob` follows the same `binaryContent` rule as a tool
+   * result's binary payloads. Returns `{ failure }` or `{ view, reassemble }`.
+   */
+  function prepareResourceContents(entry) {
+    if (!isPlainObject(entry)) return { failure: UNSUPPORTED };
+    const hasText = "text" in entry;
+    const hasBlob = "blob" in entry;
+    if (hasText === hasBlob) return { failure: UNSUPPORTED };
+    if (hasText) return typeof entry.text === "string" ? { view: entry, reassemble: null } : { failure: UNSUPPORTED };
+    const detached = detachBinary(entry, "blob");
+    if (detached.failure) return detached;
+    return { view: detached.view, reassemble: (clean) => restore(entry, clean, "blob") };
+  }
+
+  /**
+   * Sanitizes one `ReadResourceResult` (#843, `resources/read`) before it is
+   * logged, persisted, or placed into model context. The same shape as
+   * {@link sanitizeToolResult}: the whole result, `contents[]` with every
+   * entry's `uri`, `mimeType`, `text`, and `_meta`, the result's own `_meta`,
+   * and any other field, is ONE bounded `sanitizeValue` under the `resource`
+   * label, limits counted from the result root. `text` is scanned as text,
+   * never parsed as JSON, whatever its `mimeType`. Then the same key-context
+   * backstop runs over the value-shaped parts: the result without
+   * `contents`, and each entry without its already-scanned `text`.
+   */
+  function sanitizeResourceResult(result, { signal } = {}) {
+    if (isAborted(signal)) return ABORTED;
+    if (!isPlainObject(result) || !Array.isArray(result.contents)) return UNSUPPORTED;
+
+    const contents = [];
+    const reassembly = [];
+    for (const entry of result.contents) {
+      const prepared = prepareResourceContents(entry);
+      if (prepared.failure) return prepared.failure;
+      contents.push(prepared.view);
+      reassembly.push(prepared.reassemble);
+    }
+    const view = {};
+    for (const key of Object.keys(result)) define(view, key, key === "contents" ? contents : result[key]);
+
+    const label = MCP_BOUNDARY_LABELS.resource;
+    const outcome = boundary.sanitizeValue(view, { boundary: label, signal });
+    if (outcome.outcome !== "ok") return outcome;
+    const parts = [without(outcome.value, "contents")];
+    for (const entry of outcome.value.contents) parts.push(without(entry, "text"));
+    const context = checkKeyContext(parts, label, signal);
+    if (context !== undefined) return context;
+    if (!reassembly.some(Boolean)) return outcome;
+    const value = {};
+    for (const key of Object.keys(outcome.value)) {
+      define(
+        value,
+        key,
+        key === "contents"
+          ? outcome.value.contents.map((entry, index) => (reassembly[index] ? reassembly[index](entry) : entry))
+          : outcome.value[key],
+      );
+    }
+    return Object.freeze({ outcome: "ok", value, findings: outcome.findings });
+  }
+
+  /**
+   * Runs the host's resource read (a client's `readResource`, or a server's
+   * read callback) and sanitizes what it returns. A throw or rejection is
+   * `read_error`, its error never read: a server SDK would otherwise send
+   * the thrown message as the JSON-RPC error's `message`, and a client's
+   * `McpError` message is the server's free text.
+   */
+  async function sanitizeResourceRead(invoke, { signal } = {}) {
+    if (isAborted(signal)) return ABORTED;
+    let raw;
+    try {
+      raw = await invoke({ signal });
+    } catch {
+      return isAborted(signal) ? ABORTED : READ_ERROR;
+    }
+    return sanitizeResourceResult(raw, { signal });
+  }
+
+  return Object.freeze({
+    sanitizeToolResult,
+    sanitizeToolArguments,
+    sanitizeToolCall,
+    sanitizeStreamedToolResult,
+    sanitizeResourceResult,
+    sanitizeResourceRead,
+  });
 }
 
 // ---------------------------------------------------------------------

@@ -2,8 +2,9 @@
 
 The supported Model Context Protocol (MCP) redaction boundary over the
 [Redact Secret](https://github.com/redact-secret/redact-secret) core. It
-sanitizes a tool's result, and on opt-in its arguments, **before** the
-result is logged, persisted, or placed into model context.
+sanitizes a tool's result, on opt-in its arguments, and the contents a
+client reads with `resources/read`, **before** they are logged, persisted, or
+placed into model context.
 
 It implements the core's
 [MCP boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/mcp-boundary.md)
@@ -98,12 +99,15 @@ takes an AI-context boundary you already built.
 
 | Operation | Input | AI-context path |
 | --- | --- | --- |
-| `sanitizeToolResult(result, { signal })` | one `CallToolResult` | one `sanitizeValue` of the whole result, label `tool-result`, then the key-context check |
-| `sanitizeToolArguments(args, { signal })` | `params.arguments` (opt-in) | one `sanitizeValue`, label `tool-arguments`, then the key-context check |
+| `sanitizeToolResult(result, { signal })` | one `CallToolResult` | one `sanitizeValue` of the whole result, label `tool-result`, then the key-context backstop |
+| `sanitizeToolArguments(args, { signal })` | `params.arguments` (opt-in) | one `sanitizeValue`, label `tool-arguments`, then the key-context backstop |
 | `sanitizeToolCall(invoke, { signal, arguments? })` | the host's invocation (`({ signal, arguments }) => client.callTool(...)`) | optional argument sanitation, then run it: a throw or rejection is `tool_error`; otherwise `sanitizeToolResult` |
 | `sanitizeStreamedToolResult(chunks, { signal })` | an iterable or async iterable of string chunks of one text | one staged `openStream`, label `tool-result`, released as `{ content: [{ type: "text", text }] }` |
 | `wrapToolHandler(handler, { sanitizeArguments })` | a server tool handler, either SDK line | reads `extra.signal` (1.x) or `ctx.mcpReq.signal` (2.x); returns the sanitized result or a fixed result |
 | `wrapStreamedToolHandler(handler, { sanitizeArguments })` | a server handler that returns chunks | as above, over `sanitizeStreamedToolResult` |
+| `sanitizeResourceResult(result, { signal })` | one `ReadResourceResult` (`resources/read`) | one `sanitizeValue` of the whole result, label `resource`, then the key-context backstop |
+| `sanitizeResourceRead(invoke, { signal })` | the host's read (`({ signal }) => client.readResource({ uri }, { signal })`) | run it: a throw or rejection is `read_error`; otherwise `sanitizeResourceResult` |
+| `wrapResourceReadHandler(handler)` | a server read callback, either SDK line (`(uri, extra)`, `(uri, variables, extra)`, or a low-level `(request, extra)`) | reads the signal from the last parameter; resolves to the sanitized result or throws the fixed JSON-RPC error |
 
 Pass `arguments` to `sanitizeToolCall` to opt into argument sanitation. The
 arguments are then sanitized first, and on any non-`ok` outcome `invoke` is
@@ -112,9 +116,13 @@ request's `_meta` are not scanned: the name is matched against your tool list,
 and `_meta` is protocol metadata your host generated.
 
 Helpers: `toCallToolResult(outcome)`, `mcpBlockedResult()`,
-`mcpToolErrorResult()`, `mcpAuditRecord(outcome, stage)`, and the constants
-`MCP_BLOCKED_TEXT`, `MCP_TOOL_ERROR_TEXT`, `MCP_CONTENT_TYPES`,
-`MCP_BOUNDARY_LABELS`, `MCP_OUTCOMES`, `MCP_AUDIT_FIELDS`.
+`mcpToolErrorResult()`, `toReadResourceResponse(outcome)`,
+`mcpResourceBlockedError()`, `mcpResourceReadError()`, the
+`McpResourceError` class, `mcpAuditRecord(outcome, stage)`, and the constants
+`MCP_BLOCKED_TEXT`, `MCP_TOOL_ERROR_TEXT`, `MCP_RESOURCE_ERROR_CODE`,
+`MCP_RESOURCE_BLOCKED_MESSAGE`, `MCP_RESOURCE_READ_ERROR_MESSAGE`,
+`MCP_CONTENT_TYPES`, `MCP_BOUNDARY_LABELS`, `MCP_OUTCOMES`,
+`MCP_RESOURCE_OUTCOMES`, `MCP_AUDIT_FIELDS`.
 
 ## What is scanned
 
@@ -129,17 +137,28 @@ contract does not name, so a future field fails closed.
 | `resource_link` block | every field scanned; a token in a URL query is caught |
 | `image` / `audio` `data`, `resource.blob` | base64, never decoded. **Default: the whole result is `blocked` / `unsupported_value`.** With `binaryContent: "pass"`, a string payload passes unchanged and unscanned at its original key position; every other field of the block is still scanned. A non-string payload always blocks. |
 | any other block type, a non-object block, a non-array `content`, a non-object result | `blocked` / `unsupported_value` |
-| `structuredContent`, `_meta` (result and block), `annotations`, unknown fields | scanned as values, keys included |
+| `structuredContent`, `_meta` (result and block), `annotations`, unknown fields | scanned as values, keys included; each string leaf with its immediate key (key-aware `sanitizeValue`) |
 
-**Key-context check.** A leaf is scanned without the key it sits under, so
-`{"password": "<value>"}` in `structuredContent` would pass when the value
-does not identify itself. After the leaf pass, each value-shaped part of the
-sanitized result (the result without `content`, and each block without its
-scanned `text`) is serialized with `JSON.stringify` and scanned again as
-text. A `redact` or `block` finding there blocks the whole result as
-`policy`. Sanitized arguments get the same check. The trade is availability:
-a structured result that names a secret only by its key is blocked, not
-redacted.
+**Key-context backstop.** The AI-context `sanitizeValue` is key-aware
+(redact-secret/redact-secret#842): each string leaf is scanned with the key
+it sits directly under, so `{"password": "<value>"}` in `structuredContent`
+is redacted at its leaf, like the same pair in a text block, and the result
+stays `ok`. What the leaf pass cannot see is context from a sibling or parent
+key. So after the leaf pass, each value-shaped part of the sanitized result
+(the result without `content`, and each block without its scanned `text`)
+is still serialized with `JSON.stringify` and scanned again as text. A
+`redact` or `block` finding there blocks the whole result as `policy`;
+placeholders from the leaf pass are not detected again, so a redacted leaf
+never trips it. Sanitized arguments get the same check. The remaining trade
+is availability: a structured result whose secret only a sibling or parent
+key identifies is blocked, not redacted.
+
+**Migration.** A result or argument set that was `blocked` / `policy` only
+because the key-context check found a value its own key identifies is now
+`ok`, with that leaf replaced by a placeholder and its finding reported
+through `onFinding`. Nothing that used to be redacted or blocked passes now.
+If you relied on the block, for example to alert on it, watch `onFinding`
+instead.
 
 **Streamed output.** Every chunk goes through one staged stream, so a secret
 split across chunks is caught. After every chunk the adapter reads the
@@ -170,15 +189,65 @@ are free text that SDKs and hosts log verbatim. The server wrappers catch
 every handler failure themselves, so the SDK's own conversion of a thrown
 error into `isError` text containing `error.message` never runs.
 
+## `resources/read`
+
+The core's
+[`resources/read` contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/mcp-resources-read.md)
+(redact-secret/redact-secret#843) applies the same mapping to what a client
+reads from a server:
+
+```js
+import { toReadResourceResponse } from "@redact-secret/adapter-mcp";
+
+const outcome = await mcp.sanitizeResourceRead(({ signal }) => client.readResource({ uri }, { signal }));
+const response = toReadResourceResponse(outcome); // { result } | { error } | null when cancelled
+```
+
+- The whole `ReadResourceResult` is **one** value under the `resource`
+  label: every `contents[]` entry's `uri`, `mimeType`, `text`, and `_meta`,
+  the result's `_meta`, and unknown fields. Limits count from the result
+  root. `text` is scanned as text whatever its `mimeType`, so a JSON or
+  config file keeps its key context, and a `_meta` leaf its own key
+  identifies is redacted in place. The same key-context backstop runs after.
+- An entry must be exactly one of a string `text` or a `blob`. A `blob`
+  blocks the result as `unsupported_value` unless you set
+  `binaryContent: "pass"`, the same opt-in as tool-result binary content.
+- A `ReadResourceResult` has no `isError`, so every failure is a fixed
+  JSON-RPC error, code `-32603`, no `data`:
+
+  ```json
+  { "code": -32603, "message": "This MCP resource read was blocked by secret-redaction policy. No content, URI, or error detail is included." }
+  { "code": -32603, "message": "This MCP resource read failed. No content, URI, or error detail is included." }
+  ```
+
+  `blocked` maps to the first, `read_error` (a rejected `readResource`, an
+  `McpError`, or a throwing read callback; the error is never read) to the
+  second, and `aborted` to nothing. `wrapResourceReadHandler` throws a
+  `McpResourceError` whose `code` and `message` are exactly these, and both
+  server SDK lines send that as the JSON-RPC error unchanged. The 1.x client
+  exposes it with an `MCP error -32603: ` prefix.
+- **SDK response cache.** The `@modelcontextprotocol/client` 2.x `Client`
+  stores a `resources/read` result in its `responseCacheStore` when the
+  server sends `ttlMs`, before your host sees it. The default store is in
+  memory. If you supply a persistent or shared store, read resources with
+  `cacheMode: "bypass"` (`client.readResource({ uri }, { signal, cacheMode: "bypass" })`),
+  or the raw contents are persisted before the boundary.
+- The client SDKs parse a result with their own schema before the boundary
+  runs. They drop unknown fields inside a `contents` entry, and the `blob`
+  of an entry that also has `text`, and they reject a malformed result
+  (`read_error` here). That only removes content; the boundary still scans
+  everything the host receives.
+
 ## Audit metadata
 
 Two things, and nothing else:
 
 - **Findings**, through the AI-context `onFinding(finding, { boundary })`:
-  exactly the eight allowlisted fields, with `boundary` set to `tool-result`
-  or `tool-arguments`.
+  exactly the eight allowlisted fields, with `boundary` set to `tool-result`,
+  `tool-arguments`, or `resource`.
 - **One record per crossing**, through `onAudit(record)`:
-  `{ stage, outcome, reason?, code? }`. `stage` is `arguments` or `result`,
+  `{ stage, outcome, reason?, code? }`. `stage` is `arguments`, `result`, or
+  `resource`,
   `reason` appears only for `blocked`, and `code` only when the core raised a
   registered error. The record holds no count, size, offset, or text derived
   from input.
@@ -194,6 +263,7 @@ never read, and it never changes an outcome.
 | TypeScript SDK, 2.x | `@modelcontextprotocol/client` and `@modelcontextprotocol/server` `>=2.0.0 <=2.1.0` (optional peers) |
 | Protocol revisions | `2025-06-18` (negotiated by 1.13.0) and `2025-11-25` (1.30.1, 2.0.0, 2.1.0) |
 | Transports | stdio and Streamable HTTP |
+| MCP messages | `tools/call` and `resources/read`, over every line, protocol, and transport above |
 | Core | `@redact-secret/core ^0.1.0-beta.6` (required peer) |
 | Runtime | Node.js 20, 22, 24 |
 
@@ -220,6 +290,10 @@ This package does **not** provide, and must not be described as providing:
 - **Tool permission decisions.** Whether a tool may run, and with which
   arguments, is your host's policy. Argument sanitation redacts secrets in
   arguments. It does not authorize the call.
+- **Resource permissions.** Which resources a client may read, and whether
+  a server should expose them, is the server's and your host's policy.
+  `resources/read` sanitation redacts secrets in what was read. It does not
+  authorize the read.
 - **Model-output moderation.** What the model writes back is a different
   boundary.
 - **Secret restoration.** A placeholder is never turned back into the secret.
@@ -230,13 +304,21 @@ This package does **not** provide, and must not be described as providing:
 
 It also does not cover:
 
-- **A secret split across content blocks, fields, or tool calls.** Each is
-  scanned on its own. Only a split across the chunks of one streamed output
-  is joined.
-- **MCP messages other than `tools/call`**: `resources/read`, `prompts/get`,
-  sampling, elicitation, completion, and logging or progress notifications.
+- **A secret split across content blocks, `contents` entries, fields, tool
+  calls, or reads.** Each is scanned on its own. Only a split across the
+  chunks of one streamed output is joined.
+- **MCP messages other than `tools/call` and `resources/read`**:
+  `resources/list`, `resources/templates/list` (names, titles, and
+  descriptions are server-authored listing metadata), `resources/subscribe`
+  and `notifications/resources/updated` (they carry only a URI; the new
+  contents arrive through a `resources/read`, which is covered),
+  `notifications/resources/list_changed`, `prompts/get`, sampling,
+  elicitation, completion, and logging or progress notifications.
 - **Binary content on opt-in.** With `binaryContent: "pass"`, base64
-  payloads pass unscanned. Decoding them is not attempted.
+  payloads (`image`/`audio` `data`, a `blob`) pass unscanned. Decoding them
+  is not attempted.
+- **Raw results an SDK keeps before the boundary**, such as a persistent
+  `responseCacheStore` on the 2.x client (see [`resources/read`](#resourcesread)).
 - **Anything the AI-context boundary excludes**: encoded values, incomplete
   detection (an `ok` with no findings is not proof that no secret was
   present), plaintext in process memory, and your own callbacks, which are

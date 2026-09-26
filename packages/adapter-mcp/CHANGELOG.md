@@ -14,6 +14,52 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.0-alpha.1] - 2026-09-25
+
+### Added
+
+- **`resources/read`** (redact-secret/redact-secret#843,
+  redact-secret-adapters#33): `sanitizeResourceResult`,
+  `sanitizeResourceRead` (host placement, around a client `readResource`),
+  and `wrapResourceReadHandler` (a server read callback of either SDK line,
+  `McpServer.registerResource` fixed URIs and URI templates, or a low-level
+  `resources/read` handler). A `ReadResourceResult` is one AI-context
+  `sanitizeValue` under the new `resource` label, then the same key-context
+  backstop; entry `text` is scanned as text whatever its `mimeType`; an entry
+  must be exactly one of `text` or `blob`, and a `blob` follows
+  `binaryContent`. Failures map to fixed JSON-RPC errors (code `-32603`, a
+  fixed message, no `data`) through `toReadResourceResponse`, and the wrapper
+  throws them as `McpResourceError`; a read failure is the new `read_error`
+  outcome, its error never read. The audit `stage` gains `resource`.
+  Qualified by the core `mcp-resources-read` fixture and runner vendored at
+  the #843 commit (`test/conformance*.test.ts`), replayed over real SDK
+  clients and servers at both endpoints of both lines on stdio and
+  Streamable HTTP (`test/resources-transport.test.ts`), and exercised at the
+  host placement in `test/e2e.test.ts`. No declared range changes.
+
+### Changed
+
+- **Dependency range: `@redact-secret/adapter-ai-context` `^0.1.0-alpha` →
+  `^0.1.0-alpha.1`** (redact-secret-adapters#36). The narrowed key-context
+  backstop below relies on the key-aware `sanitizeValue`, which the published
+  `0.1.0-alpha` does not have. Paired with it, a `_meta.password` leaf in a
+  `resources/read` result was blocked as `policy` instead of redacted.
+  `scripts/check-published-combination.mjs` guards the pairing.
+
+- **Contract change: the key-context check is narrowed to a backstop**
+  (redact-secret/redact-secret#842, redact-secret-adapters#32). The
+  AI-context `sanitizeValue` is now key-aware and redacts a leaf its own key
+  identifies in place, so the serialized rescan no longer blocks such a
+  result; it still blocks, as `policy`, on context only the serialization
+  shows (a sibling or parent key). **Migration:** a result or argument set
+  that was `blocked` / `policy` only through the key-context check is now
+  `ok`, with that leaf replaced by a placeholder and its finding reported
+  through `onFinding`; hosts that relied on the block should watch
+  `onFinding`. Nothing previously redacted or blocked passes. Qualified by the
+  core fixture vendored at the #842 commit
+  (`packages/adapter-mcp/test/conformance.test.ts`,
+  `packages/adapter-mcp/test/transport.test.ts`) at both SDK line endpoints.
+
 ## [0.1.0-alpha] - 2026-09-25
 
 First release, as a prerelease.

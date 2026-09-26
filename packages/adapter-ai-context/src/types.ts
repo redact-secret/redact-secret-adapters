@@ -33,9 +33,10 @@ export interface AiContextCore {
 /**
  * Where a value is crossing into the AI workflow. Goes to telemetry only;
  * never changes an outcome. `tool-arguments` labels the arguments of a tool
- * call (the MCP boundary's opt-in argument sanitation).
+ * call (the MCP boundary's opt-in argument sanitation), and `resource` the
+ * contents of an MCP `resources/read` result (redact-secret/redact-secret#843).
  */
-export type BoundaryLabel = "user-input" | "tool-result" | "tool-arguments" | "context";
+export type BoundaryLabel = "user-input" | "tool-result" | "tool-arguments" | "resource" | "context";
 
 /** Why an operation was blocked. Fixed set; a new reason is a contract change. */
 export type BlockReason = "policy" | "limit_exceeded" | "unsupported_value" | "lifecycle" | "core_error";

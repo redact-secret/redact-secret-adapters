@@ -15,6 +15,42 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.0-alpha.1] - 2026-09-25
+
+### Added
+
+- The `resource` boundary label (redact-secret/redact-secret#843), for the
+  contents of an MCP `resources/read` result. Telemetry-only, like every
+  label; a type-level addition to `BoundaryLabel`.
+
+### Changed
+
+- **Contract change: key-aware `sanitizeValue`** (redact-secret/redact-secret#842,
+  redact-secret-adapters#32). A string leaf under an object key that its own
+  scan does not redact is scanned once more, through the same
+  `scanAndRedact`, in its key-context view `{"<key>":"<leaf>"}`; a finding
+  there is redacted at the leaf, with leaf offsets. Only the immediate key
+  counts (array elements, parent and sibling keys give none), a finding
+  outside the leaf's span that would redact or block blocks as `policy`, and
+  a view over `maxInputBytes` blocks as `limit_exceeded`. No key pattern or
+  name list is added: the core decides. **Migration:** a leaf that passed in
+  plaintext because only its key identified it (`{"password": "<value>"}`)
+  is now replaced by a placeholder and reported in `ok.findings` and
+  telemetry; nothing previously redacted or blocked passes. Qualified by the
+  core fixture vendored at the #842 commit
+  (`packages/adapter-ai-context/test/conformance.test.ts`) at both core range
+  endpoints.
+- **Dependency range: `@redact-secret/adapter` `^0.1.1` → `^0.1.2`**
+  (redact-secret-adapters#36). The key-aware `sanitizeValue` needs the
+  `walkStrict` that hands each leaf its key, first shipped in
+  `@redact-secret/adapter` `0.1.2`. Against the published `0.1.1`, which
+  `^0.1.1` still allowed, the walker passes no key, so a key-identified leaf
+  such as `{"password": "<value>"}` was blocked as `policy` instead of redacted
+  in place. It failed closed, but it broke the contract above, and no in-repo
+  test could see it because every one uses the workspace walker.
+  `scripts/check-published-combination.mjs` now installs this package with the
+  lowest registry version its range allows and runs the key-aware probe.
+
 ## [0.1.0-alpha] - 2026-09-25
 
 First release, as a prerelease.

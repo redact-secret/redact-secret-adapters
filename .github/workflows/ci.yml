@@ -130,6 +130,28 @@ jobs:
       - run: npm run build
       - run: npm run smoke-test
 
+  published-combination:
+    # The smoke test pairs every tarball with its siblings' tarballs. A
+    # registry consumer can instead get the lowest published sibling each
+    # range admits; this installs that pairing and runs each package's
+    # contract probe, so a range floor below the sibling version that
+    # carries a needed API fails (#36).
+    name: Published sibling combination
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run published-combination
+
   python-wheel-smoke:
     # `pip install -e` (the `python` job above) never builds a wheel. This
     # builds the real sdist and wheel, `twine check`s both, and installs
@@ -257,6 +279,7 @@ jobs:
       - python
       - pack-contents
       - npm-install-smoke
+      - published-combination
       - python-wheel-smoke
       - python-range-endpoints
       - lint

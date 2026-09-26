@@ -28,6 +28,7 @@
     "range-endpoint": "node scripts/install-range-endpoint.mjs",
     "verify-pack-contents": "node scripts/verify-pack-contents.mjs",
     "smoke-test": "node scripts/smoke-test-npm-packages.mjs",
+    "published-combination": "node scripts/check-published-combination.mjs",
     "compat:check": "node scripts/check-compatibility-record.mjs",
     "overhead": "node scripts/measure-overhead.mjs",
     "footprint": "node scripts/measure-footprint.mjs"

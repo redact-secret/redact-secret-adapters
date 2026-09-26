@@ -82,6 +82,11 @@ export interface Connection {
    * result is not an object, so without it that case would hang, not fail.
    */
   callTool(params: { name: string; arguments?: Record<string, unknown> }, signal?: AbortSignal): Promise<unknown>;
+  /**
+   * `client.readResource` of this line. On the 2.x client the response cache
+   * is bypassed, as the contract tells a host with a persistent store to do.
+   */
+  readResource(uri: string, signal?: AbortSignal): Promise<unknown>;
   /** Every JSON-RPC message the server sent (HTTP only; stdio leaves it empty). */
   readonly serverSent: Any[];
   close(): Promise<void>;
@@ -227,6 +232,10 @@ export async function connect(
     callTool(params, signal) {
       const options = { signal, timeout: REQUEST_TIMEOUT_MS };
       return line === "v1" ? client.callTool(params, undefined, options) : client.callTool(params, options);
+    },
+    readResource(uri, signal) {
+      const options = { signal, timeout: REQUEST_TIMEOUT_MS };
+      return client.readResource({ uri }, line === "v1" ? options : { ...options, cacheMode: "bypass" });
     },
     async close() {
       await client.close().catch(() => undefined);
