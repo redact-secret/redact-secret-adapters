@@ -15,6 +15,8 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.0-alpha.1] - 2026-09-25
+
 ### Added
 
 - The `resource` boundary label (redact-secret/redact-secret#843), for the
@@ -38,11 +40,16 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   core fixture vendored at the #842 commit
   (`packages/adapter-ai-context/test/conformance.test.ts`) at both core range
   endpoints.
-- Requires the key-aware `walkStrict` of `@redact-secret/adapter` (its
-  Unreleased entry). The release that ships this change must raise this
-  package's `@redact-secret/adapter` range to the version that carries it;
-  against `0.1.1` the walker passes no key and the leaf pass silently loses
-  key context.
+- **Dependency range: `@redact-secret/adapter` `^0.1.1` → `^0.1.2`**
+  (redact-secret-adapters#36). The key-aware `sanitizeValue` needs the
+  `walkStrict` that hands each leaf its key, first shipped in
+  `@redact-secret/adapter` `0.1.2`. Against the published `0.1.1`, which
+  `^0.1.1` still allowed, the walker passes no key, so a key-identified leaf
+  such as `{"password": "<value>"}` was blocked as `policy` instead of redacted
+  in place. It failed closed, but it broke the contract above, and no in-repo
+  test could see it because every one uses the workspace walker.
+  `scripts/check-published-combination.mjs` now installs this package with the
+  lowest registry version its range allows and runs the key-aware probe.
 
 ## [0.1.0-alpha] - 2026-09-25
 
