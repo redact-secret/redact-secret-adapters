@@ -19,6 +19,8 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-25
+
 ### Added
 
 - `walkStrict` hands each string leaf's visitor a second argument, `key`:

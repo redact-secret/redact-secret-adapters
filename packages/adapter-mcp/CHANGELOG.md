@@ -14,6 +14,8 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.0-alpha.1] - 2026-09-25
+
 ### Added
 
 - **`resources/read`** (redact-secret/redact-secret#843,
@@ -36,6 +38,13 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   host placement in `test/e2e.test.ts`. No declared range changes.
 
 ### Changed
+
+- **Dependency range: `@redact-secret/adapter-ai-context` `^0.1.0-alpha` →
+  `^0.1.0-alpha.1`** (redact-secret-adapters#36). The narrowed key-context
+  backstop below relies on the key-aware `sanitizeValue`, which the published
+  `0.1.0-alpha` does not have. Paired with it, a `_meta.password` leaf in a
+  `resources/read` result was blocked as `policy` instead of redacted.
+  `scripts/check-published-combination.mjs` guards the pairing.
 
 - **Contract change: the key-context check is narrowed to a backstop**
   (redact-secret/redact-secret#842, redact-secret-adapters#32). The

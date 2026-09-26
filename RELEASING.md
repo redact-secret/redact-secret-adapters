@@ -61,8 +61,12 @@ has no dist-tags: pip skips a pre-release unless it is asked for one.
 1. **Bump on `develop`.** In a normal PR, bump each package you're
    releasing (`package.json` / `python/pyproject.toml`) and move its
    CHANGELOG `Unreleased` entries under `## [x.y.z] - YYYY-MM-DD`.
-   If `adapter-pino` or `adapter-otel` needs a new `@redact-secret/adapter`,
-   raise its dependency range in the same PR.
+   If a package needs a new version of a sibling it depends on
+   (`@redact-secret/adapter`, or `adapter-ai-context` for `adapter-mcp`),
+   raise its dependency range to that version in the same PR. The
+   `published-combination` CI job installs each package with the lowest
+   published sibling its range admits and fails when the floor is too low
+   (#36).
 2. **Cut the train.** Run **Cut release candidate** (Actions → *Cut release
    candidate* → Run workflow, on `develop`). It computes the plan
    (`node scripts/release-plan.mjs` shows the same thing locally), pushes
