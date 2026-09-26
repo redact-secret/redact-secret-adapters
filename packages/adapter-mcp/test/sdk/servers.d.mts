@@ -15,3 +15,4 @@ export declare function buildLowLevelServer(
   line: "v1" | "v2",
 ): Promise<{ server: unknown; stats: Record<string, unknown> }>;
 export declare function buildMcpServer(line: "v1" | "v2"): Promise<{ server: unknown }>;
+export declare function materializeValue(value: unknown): unknown;

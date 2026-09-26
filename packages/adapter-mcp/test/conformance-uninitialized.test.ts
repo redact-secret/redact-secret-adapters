@@ -8,12 +8,29 @@
 import * as core from "@redact-secret/core";
 import { expect, test } from "vitest";
 
-import { createAdapterBoundary, loadMcpFixture, loadRunner } from "./conformance.js";
+import {
+  createAdapterBoundary,
+  loadMcpFixture,
+  loadResourceFixture,
+  loadResourceRunner,
+  loadRunner,
+} from "./conformance.js";
 
 test("every uninitialized-phase case of the pinned MCP fixture fails closed as NOT_INITIALIZED", async () => {
   const fixture = loadMcpFixture();
   const { runMcpBoundaryConformance } = await loadRunner();
   const summary = await runMcpBoundaryConformance(core, fixture, {
+    phase: "uninitialized",
+    createBoundary: (api, options) => createAdapterBoundary(api, options),
+  });
+  expect(summary.cases).toBe(fixture.cases.filter((c) => c.phase === "uninitialized").length);
+  expect(summary.cases).toBeGreaterThan(0);
+});
+
+test("every uninitialized-phase case of the pinned resources/read fixture fails closed as NOT_INITIALIZED", async () => {
+  const fixture = loadResourceFixture();
+  const { runMcpResourcesReadConformance } = await loadResourceRunner();
+  const summary = await runMcpResourcesReadConformance(core, fixture, {
     phase: "uninitialized",
     createBoundary: (api, options) => createAdapterBoundary(api, options),
   });

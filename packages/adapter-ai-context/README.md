@@ -68,7 +68,8 @@ from a throwaway project outside the repository.
 | `openStream({ boundary, signal })` | chunks of one logical text: `append`, then `finalize`, or `abort` | one incremental session, staged |
 
 `boundary` is `"user-input"`, `"tool-result"`, `"tool-arguments"` (the
-arguments of a tool call), or `"context"` (the default). It goes to
+arguments of a tool call), `"resource"` (the contents of an MCP
+`resources/read` result), or `"context"` (the default). It goes to
 telemetry only and never changes an outcome. `signal`
 is an `AbortSignal` (or anything with an `aborted` flag).
 
