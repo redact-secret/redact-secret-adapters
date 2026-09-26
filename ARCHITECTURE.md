@@ -224,8 +224,10 @@ with it.
 (redact-secret/redact-secret#612) as a thin specialization of
 `adapter-ai-context`. It contains no scan, walk, policy, or core-error
 mapping: a whole `CallToolResult` is one `sanitizeValue`, a streamed result
-is one `openStream`, and the key-context check is one `sanitizeText` per
-serialized part. What it adds is MCP shape only:
+is one `openStream`, and the key-context backstop is one `sanitizeText` per
+serialized part. Key-identified leaves are redacted in place by the key-aware
+`sanitizeValue` (redact-secret/redact-secret#842), so the backstop blocks only
+on context a leaf pass cannot see (a sibling or parent key). What it adds is MCP shape only:
 
 - **Block types.** The five types of protocol revisions 2025-06-18 and
   2025-11-25. Any other type, and any malformed shape, blocks as

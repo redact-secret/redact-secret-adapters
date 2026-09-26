@@ -98,8 +98,8 @@ takes an AI-context boundary you already built.
 
 | Operation | Input | AI-context path |
 | --- | --- | --- |
-| `sanitizeToolResult(result, { signal })` | one `CallToolResult` | one `sanitizeValue` of the whole result, label `tool-result`, then the key-context check |
-| `sanitizeToolArguments(args, { signal })` | `params.arguments` (opt-in) | one `sanitizeValue`, label `tool-arguments`, then the key-context check |
+| `sanitizeToolResult(result, { signal })` | one `CallToolResult` | one `sanitizeValue` of the whole result, label `tool-result`, then the key-context backstop |
+| `sanitizeToolArguments(args, { signal })` | `params.arguments` (opt-in) | one `sanitizeValue`, label `tool-arguments`, then the key-context backstop |
 | `sanitizeToolCall(invoke, { signal, arguments? })` | the host's invocation (`({ signal, arguments }) => client.callTool(...)`) | optional argument sanitation, then run it: a throw or rejection is `tool_error`; otherwise `sanitizeToolResult` |
 | `sanitizeStreamedToolResult(chunks, { signal })` | an iterable or async iterable of string chunks of one text | one staged `openStream`, label `tool-result`, released as `{ content: [{ type: "text", text }] }` |
 | `wrapToolHandler(handler, { sanitizeArguments })` | a server tool handler, either SDK line | reads `extra.signal` (1.x) or `ctx.mcpReq.signal` (2.x); returns the sanitized result or a fixed result |
@@ -129,17 +129,28 @@ contract does not name, so a future field fails closed.
 | `resource_link` block | every field scanned; a token in a URL query is caught |
 | `image` / `audio` `data`, `resource.blob` | base64, never decoded. **Default: the whole result is `blocked` / `unsupported_value`.** With `binaryContent: "pass"`, a string payload passes unchanged and unscanned at its original key position; every other field of the block is still scanned. A non-string payload always blocks. |
 | any other block type, a non-object block, a non-array `content`, a non-object result | `blocked` / `unsupported_value` |
-| `structuredContent`, `_meta` (result and block), `annotations`, unknown fields | scanned as values, keys included |
+| `structuredContent`, `_meta` (result and block), `annotations`, unknown fields | scanned as values, keys included; each string leaf with its immediate key (key-aware `sanitizeValue`) |
 
-**Key-context check.** A leaf is scanned without the key it sits under, so
-`{"password": "<value>"}` in `structuredContent` would pass when the value
-does not identify itself. After the leaf pass, each value-shaped part of the
-sanitized result (the result without `content`, and each block without its
-scanned `text`) is serialized with `JSON.stringify` and scanned again as
-text. A `redact` or `block` finding there blocks the whole result as
-`policy`. Sanitized arguments get the same check. The trade is availability:
-a structured result that names a secret only by its key is blocked, not
-redacted.
+**Key-context backstop.** The AI-context `sanitizeValue` is key-aware
+(redact-secret/redact-secret#842): each string leaf is scanned with the key
+it sits directly under, so `{"password": "<value>"}` in `structuredContent`
+is redacted at its leaf, like the same pair in a text block, and the result
+stays `ok`. What the leaf pass cannot see is context from a sibling or parent
+key. So after the leaf pass, each value-shaped part of the sanitized result
+(the result without `content`, and each block without its scanned `text`)
+is still serialized with `JSON.stringify` and scanned again as text. A
+`redact` or `block` finding there blocks the whole result as `policy`;
+placeholders from the leaf pass are not detected again, so a redacted leaf
+never trips it. Sanitized arguments get the same check. The remaining trade
+is availability: a structured result whose secret only a sibling or parent
+key identifies is blocked, not redacted.
+
+**Migration.** A result or argument set that was `blocked` / `policy` only
+because the key-context check found a value its own key identifies is now
+`ok`, with that leaf replaced by a placeholder and its finding reported
+through `onFinding`. Nothing that used to be redacted or blocked passes now.
+If you relied on the block, for example to alert on it, watch `onFinding`
+instead.
 
 **Streamed output.** Every chunk goes through one staged stream, so a secret
 split across chunks is caught. After every chunk the adapter reads the

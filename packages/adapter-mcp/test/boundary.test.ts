@@ -109,48 +109,77 @@ describe("sanitizeToolResult", () => {
     expect(audits).toEqual([{ stage: "result", outcome: "blocked", reason: "unsupported_value" }]);
   });
 
-  test("the key-context check blocks a redact finding that only the serialized structure reveals", () => {
-    // A core that, like the real one, flags `"password":"..."` only with its
-    // key context. No single leaf carries it; the serialization does.
+  /**
+   * A core that, like the real one, flags a value only through the context
+   * around it: `"password":"<v>"` (its own key) and
+   * `"provider":"fake","value":"<v>"` (a sibling key), with exact offsets.
+   */
+  function contextualCore() {
     const fake = createFakeCore();
     const scan = fake.core.scanAndRedact;
-    const keyed = {
-      ...fake.core,
-      scanAndRedact: (text: string, options?: Parameters<typeof scan>[1]) =>
-        text.includes('"password":"')
-          ? {
-              text: text.replace(/"password":"[^"]*"/, '"password":"<SECRET_1>"'),
-              findings: [
-                {
-                  id: "finding-1",
-                  type: "password",
-                  detector: "fake",
-                  confidence: "high",
-                  action: "redact",
-                  obfuscation: "none",
-                  start: 0,
-                  end: 1,
-                },
-              ],
-            }
-          : scan(text, options),
-    } as typeof fake.core;
     const scans: string[] = [];
-    const recording = {
-      ...keyed,
-      scanAndRedact: (t: string, o?: Parameters<typeof scan>[1]) => {
-        scans.push(t);
-        return keyed.scanAndRedact(t, o);
+    const patterns = [/"password":"([^"<]+)"/, /"provider":"fake","value":"([^"<]+)"/];
+    const core = {
+      ...fake.core,
+      scanAndRedact: (text: string, options?: Parameters<typeof scan>[1]) => {
+        scans.push(text);
+        for (const pattern of patterns) {
+          const match = pattern.exec(text);
+          if (match?.[1] === undefined) continue;
+          const start = match.index + match[0].length - 1 - match[1].length;
+          const end = start + match[1].length;
+          return {
+            text: `${text.slice(0, start)}<SECRET_1>${text.slice(end)}`,
+            findings: [
+              {
+                id: "finding-1",
+                type: "password",
+                detector: "fake",
+                confidence: "high",
+                action: "redact",
+                obfuscation: "none",
+                start,
+                end,
+              },
+            ],
+          };
+        }
+        return scan(text, options);
       },
-    };
-    const { mcp } = setup({}, {}, { core: recording, calls: fake.calls });
-    const structured = { content: [], structuredContent: { password: "synthetic-not-a-secret" } };
-    expect(mcp.sanitizeToolResult(structured)).toEqual({ outcome: "blocked", reason: "policy" });
-    expect(scans).toContain(JSON.stringify({ structuredContent: { password: "synthetic-not-a-secret" } }));
-    expect(mcp.sanitizeToolArguments({ password: "synthetic-not-a-secret" })).toEqual({
+    } as typeof fake.core;
+    return { core, calls: fake.calls, scans };
+  }
+
+  test("a value only its own key identifies is redacted at its leaf, not blocked (redact-secret/redact-secret#842)", () => {
+    const fake = contextualCore();
+    const { mcp } = setup({}, {}, fake);
+    const structured = { content: [], structuredContent: { user: "deploy-bot", password: "synthetic-not-a-secret" } };
+    const outcome = mcp.sanitizeToolResult(structured);
+    expect(outcome).toMatchObject({
+      outcome: "ok",
+      value: { content: [], structuredContent: { user: "deploy-bot", password: "<SECRET_1>" } },
+    });
+    expect(outcome.outcome === "ok" && outcome.findings.map(({ start, end }) => [start, end])).toEqual([[0, 22]]);
+    expect(fake.scans).toContain('{"password":"synthetic-not-a-secret"}');
+    // The backstop still ran over the sanitized result and found nothing.
+    expect(fake.scans).toContain(JSON.stringify({ structuredContent: { user: "deploy-bot", password: "<SECRET_1>" } }));
+    expect(mcp.sanitizeToolArguments({ password: "synthetic-not-a-secret" })).toMatchObject({
+      outcome: "ok",
+      value: { password: "<SECRET_1>" },
+    });
+  });
+
+  test("the key-context backstop still blocks what only the serialized structure reveals", () => {
+    const fake = contextualCore();
+    const { mcp } = setup({}, {}, fake);
+    // Only a sibling key identifies the value: no leaf pass can see it.
+    const structuredContent = { provider: "fake", value: "synthetic-not-a-secret" };
+    expect(mcp.sanitizeToolResult({ content: [], structuredContent })).toEqual({
       outcome: "blocked",
       reason: "policy",
     });
+    expect(fake.scans).toContain(JSON.stringify({ structuredContent }));
+    expect(mcp.sanitizeToolArguments(structuredContent)).toEqual({ outcome: "blocked", reason: "policy" });
     // A text block's own text already carried its context and is not rescanned as structure.
     expect(mcp.sanitizeToolResult({ content: [{ type: "text", text: "ordinary" }] }).outcome).toBe("ok");
   });

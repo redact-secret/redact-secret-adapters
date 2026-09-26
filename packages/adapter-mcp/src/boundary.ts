@@ -7,7 +7,8 @@
  *
  * - which parts of a `CallToolResult` are scanned (all of it, as one value),
  *   which content block types exist, and what happens to base64 payloads;
- * - the key-context check over the sanitized structured parts;
+ * - the key-context backstop over the sanitized structured parts (narrowed
+ *   by the key-aware `sanitizeValue`, redact-secret/redact-secret#842);
  * - the `tool-arguments` label for opt-in argument sanitation;
  * - a streamed result that stops pulling once the stream stops accepting;
  * - the fixed, input-free `isError` results and audit record;
@@ -246,10 +247,12 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
   }
 
   /**
-   * The key-context check: each value-shaped part of the SANITIZED value is
-   * serialized and scanned once more as text, so a secret identified only by
-   * the key it sits under blocks instead of reaching context. A `redact` or
-   * `block` finding there cannot be mapped back onto one leaf: `policy`.
+   * The key-context backstop: each value-shaped part of the SANITIZED value
+   * is serialized and scanned once more as text. The key-aware leaf pass
+   * already redacted every leaf its own key identifies (placeholders are not
+   * detected again), so what is left for this check is context from a
+   * sibling or parent key. A `redact` or `block` finding here cannot be
+   * mapped back onto one leaf: `policy`.
    */
   function checkKeyContext(parts: unknown[], label: "tool-result" | "tool-arguments", signal?: CancellationSignal) {
     for (const part of parts) {
