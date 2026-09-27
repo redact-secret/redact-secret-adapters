@@ -36,15 +36,8 @@ structural shape, as it is on the wire.
 ```js
 import { createMcpBoundary, toCallToolResult } from "@redact-secret/adapter-mcp";
 
+// Conservative documented default limits. Override any of them below.
 const mcp = await createMcpBoundary({
-  wholeInputLimits: { maxInputBytes: 65536, maxFindings: 256 },
-  incrementalLimits: {
-    maxInputCodeUnits: 1048576,
-    maxBufferedCodeUnits: 65536,
-    maxTokenCodeUnits: 8192,
-    maxMultilineCodeUnits: 32768,
-  },
-  traversalLimits: { maxDepth: 16, maxNodes: 4096 },
   onFinding: (finding, { boundary }) => console.error("finding", boundary, finding.type, finding.action),
   onAudit: (record) => console.error("audit", JSON.stringify(record)),
 });
@@ -64,6 +57,41 @@ if (safe !== null) console.log(JSON.stringify(safe)); // log it, store it, put i
 
 The clean-install smoke test (`npm run smoke-test`) runs this block verbatim
 from a throwaway project outside the repository.
+
+Three things next to that example, because refusing is the point rather than a
+rough edge. A **binary payload** (`image`, `audio`, a base64 `blob`) cannot be
+scanned, so by default it blocks the whole result as `unsupported_value`; pass
+`binaryContent: "pass"` to let a string payload through **unscanned** at its
+original key position, with every other field of the block still scanned. A
+**content type or shape** no qualified protocol revision defines also blocks,
+so a later revision fails closed rather than passing something unscanned. A
+**cancelled** call is `aborted`, and `toCallToolResult` returns `null` for it —
+there is nothing safe to deliver. And an `ok` outcome with no findings is not
+proof the result held no secret.
+
+### Limits
+
+```js
+// Every set is optional and defaults to AI_CONTEXT_DEFAULT_LIMITS; a set you
+// pass is used exactly as given, not merged field by field with the preset.
+const mcp = await createMcpBoundary({
+  wholeInputLimits: { maxInputBytes: 65536, maxFindings: 256 },
+  incrementalLimits: {
+    maxInputCodeUnits: 1048576,
+    maxBufferedCodeUnits: 65536,
+    maxTokenCodeUnits: 8192,
+    maxMultilineCodeUnits: 32768,
+  },
+  traversalLimits: { maxDepth: 16, maxNodes: 4096 },
+});
+```
+
+Those values *are* `AI_CONTEXT_DEFAULT_LIMITS`, re-exported from
+[`@redact-secret/adapter-ai-context`](../adapter-ai-context#limits), which
+documents each one. **There is no unbounded mode**: the preset names the bounds
+so you do not have to invent them, and every one of them still fails an
+oversized result closed as `blocked` / `limit_exceeded`. `createMcpBoundaryWith`,
+over a boundary you built yourself, is unchanged.
 
 ## Where to put it
 

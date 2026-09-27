@@ -13,6 +13,7 @@
 import type {
   AbortedOutcome,
   AiContextBoundaryOptions,
+  AiContextBoundaryOptionsWithDefaults,
   BlockedOutcome,
   BlockReason,
   CancellationSignal,
@@ -103,6 +104,14 @@ export interface McpBoundaryOptions {
 
 /** The live factory's options: the AI-context boundary's, plus the MCP ones. */
 export type CreateMcpBoundaryOptions = AiContextBoundaryOptions & McpBoundaryOptions;
+
+/**
+ * {@link CreateMcpBoundaryOptions} with each limit set optional: what
+ * `createMcpBoundary` takes. An omitted set comes from
+ * `AI_CONTEXT_DEFAULT_LIMITS`, documented and finite; there is no unbounded
+ * mode, and `createMcpBoundaryWith` over an explicit boundary is unchanged.
+ */
+export type CreateMcpBoundaryOptionsWithDefaults = AiContextBoundaryOptionsWithDefaults & McpBoundaryOptions;
 
 export interface McpOperationOptions {
   readonly signal?: CancellationSignal;

@@ -14,6 +14,36 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2026-09-27
+
+### Added
+
+- `createMcpBoundary(options?)` now fills in any of the three limit sets a
+  caller leaves out, from `@redact-secret/adapter-ai-context`'s
+  `AI_CONTEXT_DEFAULT_LIMITS` (redact-secret/redact-secret-adapters#46), so a
+  host can start with `await createMcpBoundary()` and a checked outcome.
+  `binaryContent` and `onAudit` compose with the defaults unchanged.
+- The `CreateMcpBoundaryOptionsWithDefaults` type.
+
+### Changed
+
+- The README leads with the short call, moves the limits below it, and states
+  next to the example what refuses and why: a binary payload blocks by default
+  because it cannot be scanned (`binaryContent: "pass"` passes a string
+  payload unscanned at its original position), a content type no qualified
+  protocol revision defines blocks, and a cancelled call is `aborted` with
+  `toCallToolResult` returning `null`.
+- `@redact-secret/adapter-ai-context` range raised from `^0.1.0-alpha.1` to
+  `^0.1.0-alpha.2`, the version that carries the default limits this release
+  relies on. Backed by this package's tests and the published-sibling
+  combination job.
+
+Not changed: there is no unbounded mode, the bounds still fail an oversized
+result closed as `blocked` / `limit_exceeded`, and `createMcpBoundaryWith` over
+a boundary the host built itself is untouched. `test/defaults.test.ts` asserts
+the defaults, an override, the binary block, an unsupported content type, and
+an aborted call on the real core.
+
 ## [0.1.0-alpha.1] - 2026-09-25
 
 ### Added

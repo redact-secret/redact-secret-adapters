@@ -340,12 +340,15 @@ import {
   type RedactingSpanProcessorOptions,
 } from "@redact-secret/adapter-otel";
 import {
+  AI_CONTEXT_DEFAULT_LIMITS,
   BLOCK_REASONS,
   SAFE_FINDING_FIELDS,
   createAiContextBoundary,
   createAiContextBoundaryWith,
+  withDefaultLimits,
   type AiContextBoundary,
   type AiContextBoundaryOptions,
+  type AiContextLimits,
   type AiContextOutcome,
   type SafeFinding,
 } from "@redact-secret/adapter-ai-context";
@@ -410,8 +413,13 @@ const aiBoundary: AiContextBoundary = createAiContextBoundaryWith({ scanAndRedac
 const aiOutcome: AiContextOutcome<string> = aiBoundary.sanitizeText("x", { boundary: "user-input" });
 if (aiOutcome.outcome === "blocked") void aiOutcome.reason;
 void createAiContextBoundary;
+void createAiContextBoundary();
 void BLOCK_REASONS;
 void SAFE_FINDING_FIELDS;
+const presetLimits: AiContextLimits = AI_CONTEXT_DEFAULT_LIMITS;
+void presetLimits.traversalLimits.maxNodes;
+const defaulted: AiContextBoundaryOptions = withDefaultLimits({ onFinding: () => {} });
+void defaulted.wholeInputLimits;
 
 const mcpBoundary: McpBoundary = createMcpBoundaryWith(aiBoundary, {
   binaryContent: "block",
@@ -420,6 +428,7 @@ const mcpBoundary: McpBoundary = createMcpBoundaryWith(aiBoundary, {
 const mcpOutcome: McpOutcome<unknown> = mcpBoundary.sanitizeToolResult({ content: [] });
 void toCallToolResult(mcpOutcome);
 void createMcpBoundary;
+void createMcpBoundary();
 void MCP_BLOCKED_TEXT;
 // A wrapped handler is assignable to each SDK line's tool callback.
 const handler = mcpBoundary.wrapToolHandler(() => ({ content: [{ type: "text" as const, text: "ok" }] }));

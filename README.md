@@ -170,7 +170,7 @@ plaintext really escapes each wrong one, are in the
 ```js
 import { createAiContextBoundary } from "@redact-secret/adapter-ai-context";
 
-const boundary = await createAiContextBoundary({ wholeInputLimits, incrementalLimits, traversalLimits });
+const boundary = await createAiContextBoundary(); // conservative documented default limits
 const context = boundary.buildContext([
   { role: "user", boundary: "user-input", text: userText },
   { role: "tool", boundary: "tool-result", value: toolResult },
@@ -183,16 +183,24 @@ The core's framework-neutral
 user input, tool results, nested values, constructed context and staged
 streams, each ending in `ok` / `blocked` / `aborted`, fail-closed and
 all-or-nothing, with allowlisted finding metadata. It is qualified by
-replaying the core's own conformance fixture, pinned to a core commit. Published as the
-prerelease `0.1.0-alpha` (`npm install @redact-secret/adapter-ai-context@alpha`);
-see the [package README](./packages/adapter-ai-context#readme).
+replaying the core's own conformance fixture, pinned to a core commit.
+
+The bounds are always in force; `AI_CONTEXT_DEFAULT_LIMITS` only means you no
+longer have to invent them before the first call, and any set can still be
+passed explicitly. There is no unbounded mode. Non-JSON values, binary content
+and encoded text are **blocked, not decoded** — convert them yourself, so what
+is scanned is exactly what you send. Published as the prerelease
+`0.1.0-alpha.1` (`npm install @redact-secret/adapter-ai-context@alpha`);
+`createAiContextBoundary()` with no limits needs `0.1.0-alpha.2`
+(**Unreleased**). See the
+[package README](./packages/adapter-ai-context#readme).
 
 ### MCP (prerelease)
 
 ```js
 import { createMcpBoundary, toCallToolResult } from "@redact-secret/adapter-mcp";
 
-const mcp = await createMcpBoundary({ wholeInputLimits, incrementalLimits, traversalLimits });
+const mcp = await createMcpBoundary(); // conservative documented default limits
 const outcome = await mcp.sanitizeToolCall(({ signal }) => client.callTool(params, undefined, { signal }));
 const safe = toCallToolResult(outcome); // sanitized result, a fixed isError result, or null if cancelled
 ```
@@ -202,9 +210,15 @@ as a thin specialization of `adapter-ai-context`. It scans the whole tool
 result (text, `structuredContent`, `_meta`, resources, links) before the result
 is logged, persisted, or placed into model context. It also offers opt-in
 argument sanitation, streamed tool output that stops reading on failure, and
-fixed `isError` results in place of errors. It names every security non-goal
-in its [package README](./packages/adapter-mcp#readme). Published as the
-prerelease `0.1.0-alpha` (`npm install @redact-secret/adapter-mcp@alpha`).
+fixed `isError` results in place of errors. Binary payloads (`image`, `audio`,
+a base64 `blob`) cannot be scanned, so they **block** the whole result by
+default; `binaryContent: "pass"` lets a string payload through unscanned at its
+original position instead. A content type no qualified protocol revision
+defines also blocks, and a cancelled call is `aborted` with nothing to deliver.
+It names every security non-goal in its
+[package README](./packages/adapter-mcp#readme). Published as the prerelease
+`0.1.0-alpha.1` (`npm install @redact-secret/adapter-mcp@alpha`);
+`createMcpBoundary()` with no limits needs `0.1.0-alpha.2` (**Unreleased**).
 
 ### Masking callbacks (Langfuse and similar)
 
@@ -313,6 +327,17 @@ this table: every declared range, the endpoints CI installs, the runtimes it
 exercises, and the test files that qualify each package.
 `npm run compat:check` fails CI when the record, the manifests, and `ci.yml`
 disagree.
+
+A declared range and a qualified endpoint are different claims. The range says
+what installs; `endpoints` names the two versions CI actually installs and runs
+the real-host tests against, and the semver expression between them is **not**
+evidence that every version inside it was tested. As of 2026-09-27 the core
+endpoints are `0.1.0-beta.6` and `0.1.0-beta.9`. A newer core does not narrow
+the floor: a range is raised only when a package needs an API a lower core
+lacks, which the `published-combination` job enforces. A core version that is
+announced but not yet on the registry qualifies nothing —
+[RELEASING.md § Qualifying a new core release](./RELEASING.md#qualifying-a-new-core-release)
+is the procedure.
 
 An unqualified host is either refused at install time or listed as
 unqualified there:
