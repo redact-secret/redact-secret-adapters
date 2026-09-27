@@ -18,17 +18,25 @@
  */
 
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
-import type { MaskLeafOptions } from "@redact-secret/adapter";
 
-import { RedactingSpanProcessorWith } from "./span-processor.js";
+import { type RedactingSpanProcessorOptions, RedactingSpanProcessorWith } from "./span-processor.js";
 
 export type { MaskLeafOptions } from "@redact-secret/adapter";
-export { type RedactAttributesOptions, RedactingSpanProcessorWith, redactAttributesWith } from "./span-processor.js";
+export {
+  type OtelSpanOutcome,
+  type RedactAttributesOptions,
+  type RedactingSpanProcessorOptions,
+  RedactingSpanProcessorWith,
+  redactAttributesWith,
+} from "./span-processor.js";
 
-/** Awaits `initialize()` once, then wraps `next` with the real scanner. */
+/**
+ * Awaits `initialize()` once, then wraps `next` with the real scanner.
+ * `options.onOutcome` reports one input-free summary per span.
+ */
 export async function createRedactingSpanProcessor(
   next: SpanProcessor,
-  options: MaskLeafOptions = {},
+  options: RedactingSpanProcessorOptions = {},
 ): Promise<RedactingSpanProcessorWith> {
   const { initialize, scanAndRedact } = await import("@redact-secret/core");
   await initialize();

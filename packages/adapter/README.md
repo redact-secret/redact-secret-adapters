@@ -48,6 +48,7 @@ maskLogValueWith(scanAndRedact, { err: new Error("also walks Errors") });
 | `maskLogValueWith(scan, data, { policy, limits })` | The same walk, under its logging-side name |
 | `createMaskSecrets({ policy, limits })` | Live wrapper over the real core |
 | `walkStrict(value, { maxDepth, maxNodes }, { string, key })` | The all-or-nothing walk (see below; since `0.1.1`) |
+| `maskLeafOutcomeWith(scan, text, opts)` / `countLeaf` / `createOutcomeCounter` / `toValueCounts` / `addCounts` / `notify` | The outcome contract (see below; since `0.1.3`) |
 | `ScanAndRedact` | The injected scanner's type |
 
 The walk returns a masked copy of everything JSON serialization would emit:
@@ -82,6 +83,39 @@ copy, or the first failure; no marker is ever substituted.
 
 A shared, acyclic reference is copied as many times as it is reached. A
 visitor that throws is a bug in the caller, and its exception propagates.
+
+## Outcome counters
+
+Since `0.1.3`, the host adapters report what happened to a log record or a span
+through one shared, **input-free** contract. This package holds it; the host
+packages hand it to your callback (`adapter-pino`'s `onOutcome`,
+`adapter-otel`'s `onOutcome`). Nothing here creates a logger, an exporter or a
+network client — you increment your own metrics.
+
+A counter is six non-negative integers and nothing else. There is no field for
+a value, a masked value, a field path, a key, an offset, a detector id or an
+error message, so there is nothing to accidentally forward.
+
+| Count | Means |
+| --- | --- |
+| `scanned` | Leaves handed to the core. A leaf a bound refused before the core saw it is not one of these |
+| `findings` | Findings the core reported, summed. **Not** distinct credentials: one credential in five leaves is five findings |
+| `redacted` | Leaves whose text the core changed. Lower than `findings` when an action leaves text alone (a `warn`) |
+| `blocked` | Leaves replaced whole by `BLOCK_MARKER` |
+| `limited` | Values replaced by `LIMIT_MARKER` — past a walk budget or over `maxStringLength`. Never scanned |
+| `failed` | Values replaced by `ERROR_MARKER`, plus the `CYCLE_MARKER` case |
+
+Pass `{ counter }` in `MaskOptions` to have the walk add to one; the walk only
+ever increments, so a host adapter that masks a unit in more than one pass
+(pino scans a record's arguments *and* its finished line) keeps one accurate
+total per unit rather than double counting. `maskLeafWith` and the walkers
+return exactly what they always did.
+
+A host's own delivery outcome is a separate, named field on that host's outcome
+type, because only that adapter knows it: `adapter-pino`'s `lineReplaced`,
+`adapter-otel`'s `dropped`. **None of them means "delivered" or "exported"** —
+no adapter here learns whether a destination, a handler or an exporter
+succeeded, and none of them claims to.
 
 ## Fail-closed markers
 

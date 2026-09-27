@@ -40,8 +40,30 @@ tarball (`files` in `package.json`), so a consumer can read it from
   pino unchanged; a non-function value for either is a `TypeError` at setup
   rather than a silent replacement.
 
+- `createRedactingHooks({ onOutcome })`: one input-free summary per **log
+  record** (redact-secret/redact-secret-adapters#45), carrying the numeric
+  level, which of the two hooks ran, the six shared value counts, and
+  `lineReplaced`. The pair's two passes over one record are summed rather
+  than reported twice, so a secret in the message is not counted once as a
+  call argument and again as a line value. Only the paired factory takes it,
+  because only the pair can guarantee one summary per record. The observer is
+  called synchronously after masking; anything it throws is swallowed, never
+  read, and never changes what is written; it is re-entrancy-guarded, so an
+  observer that logs through the logger it observes does not recurse; and no
+  logger, exporter or network client is created for it. `lineReplaced` says
+  the `streamWrite` hook could not lex the line and wrote the fixed
+  `[REDACTED:ERROR]` line — it is not a claim that the destination accepted
+  anything.
+- `PINO_ERROR_LINE`, the exact line written in that case, so a host can
+  recognise it without pattern-matching.
+
 ### Changed
 
+- `@redact-secret/adapter` range raised from `^0.1.1` to `^0.1.3`, the
+  version that carries the outcome contract this release reports through.
+  Backed by this package's tests against the workspace's
+  `@redact-secret/adapter` 0.1.3, the npm install smoke test, and the
+  published-sibling combination job.
 - The package README's example is now a complete, executable boundary
   (both hooks, a child binding, `mixin()`, a serializer, pino's own path
   `redact`) and is run verbatim against the real core from a clean install

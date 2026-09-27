@@ -249,6 +249,50 @@ Bounds (`DEFAULT_LIMITS`, overridable per call):
 
 Elements and keys beyond a limit are dropped, not passed through.
 
+## Counting what happened
+
+Every host adapter can report one **input-free** summary per unit of work — one
+pino log record, one span, one Python `logging` record — through the same
+contract, so a consumer can count sanitized, blocked, limited and failed values
+without the adapters coupling to a metrics backend. No adapter here creates a
+logger, an exporter or a network client for it; you increment your own counters.
+
+```js
+const hooks = await createRedactingHooks({
+  onOutcome: ({ level, values }) => metrics.increment("log.redacted_values", values.redacted, { level }),
+});
+```
+
+```python
+handler.addFilter(RedactSecretFilter(on_outcome=lambda o: metrics.increment("log.records", level=o.level)))
+```
+
+A summary carries six non-negative integers and nothing else — no value, no
+masked value, no field path, no key, no offset, no error message:
+
+| Count | Means |
+| --- | --- |
+| `scanned` | Values handed to the core. One a bound refused first is not counted here |
+| `findings` | Findings the core reported, summed. **Not** distinct credentials: one credential in five values is five findings |
+| `redacted` | Values whose text the core changed. Lower than `findings` when a finding leaves text alone (a `warn`) |
+| `blocked` | Values replaced whole by `[REDACTED:BLOCKED]` |
+| `limited` | Values past a bound: replaced by `[REDACTED:LIMIT_EXCEEDED]`, never scanned |
+| `failed` | Values replaced by `[REDACTED:ERROR]`, plus the cycle case |
+
+The unit is the host's, and so is the delivery field: pino reports one summary
+per **record** with both hooks' passes summed rather than double counted, plus
+`lineReplaced`; OpenTelemetry reports one per **span**, plus `dropped`.
+**Neither means "delivered"** — whether a destination, a handler or an exporter
+succeeded is something no adapter here learns, so none of them claims it.
+`dropped` is the adapter's own refusal to forward a span it could not redact,
+not a sampling decision.
+
+An observer runs after the value is masked and cannot change it; anything it
+throws is swallowed and never read; and it is re-entrancy-guarded, so an
+observer that logs through the logger it observes does not recurse.
+**Unreleased** in the Python package. Details:
+[`@redact-secret/adapter`](./packages/adapter#outcome-counters).
+
 ## Supported host versions
 
 A published adapter states the host range it supports and runs a test against a

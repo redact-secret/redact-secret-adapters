@@ -44,6 +44,7 @@ matching ``packages/adapter-otel/src/span-processor.ts``. Install the
 
 from __future__ import annotations
 
+import threading
 import warnings
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -51,26 +52,29 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only, no runtime dependenc
     from opentelemetry.context import Context
     from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor
 
-from .mask_leaf import ERROR_MARKER, mask_leaf_with
+from .mask_leaf import ERROR_MARKER, count_leaf, mask_leaf_outcome_with
+from .outcome import OutcomeCounter, SpanOutcome, notify
 
 __all__ = ["RedactingSpanProcessorWith", "create_redacting_span_processor", "redact_attributes_with"]
 
 
-def _mask_attribute_value(scan_and_redact, value, *, policy, max_string_length):
+def _mask_attribute_value(scan_and_redact, value, *, policy, max_string_length, counter=None):
+    def mask(text):
+        leaf = mask_leaf_outcome_with(scan_and_redact, text, policy=policy, max_string_length=max_string_length)
+        count_leaf(counter, leaf)
+        return leaf.text
+
     try:
         if isinstance(value, str):
-            return mask_leaf_with(scan_and_redact, value, policy=policy, max_string_length=max_string_length)
+            return mask(value)
         if isinstance(value, (list, tuple)) and any(isinstance(item, str) for item in value):
             # The SDK accepts None inside a sequence, so mask each str
             # element and keep everything else in place.
-            masked = [
-                mask_leaf_with(scan_and_redact, item, policy=policy, max_string_length=max_string_length)
-                if isinstance(item, str)
-                else item
-                for item in value
-            ]
+            masked = [mask(item) if isinstance(item, str) else item for item in value]
             return tuple(masked) if isinstance(value, tuple) else masked
     except Exception:
+        if counter is not None:
+            counter.failed += 1
         return ERROR_MARKER
     # Numbers, booleans, and homogeneous number/boolean sequences are the
     # only other attribute value shapes OpenTelemetry allows; none of them
@@ -93,14 +97,22 @@ def redact_attributes_with(
     (event and link attributes always; span attributes once `Span.end()`
     has run, from opentelemetry-sdk 1.43). Writing through its backing `_dict` -- present only on that real type --
     bypasses that guard instead of tripping it."""
+    max_string_length = (limits or {}).get("max_string_length")
+    _redact_bag(
+        attributes,
+        lambda value: _mask_attribute_value(scan_and_redact, value, policy=policy, max_string_length=max_string_length),
+    )
+
+
+def _redact_bag(attributes: Optional[dict], mask: Callable[[Any], Any]) -> None:
+    """Mutates an attribute mapping in place through ``mask``. Shared by
+    :func:`redact_attributes_with` and the processor, so the processor's own
+    masker -- the one that feeds its per-span counter -- is what runs."""
     if attributes is None:
         return
-    max_string_length = (limits or {}).get("max_string_length")
     target = getattr(attributes, "_dict", attributes)
     for key in list(target.keys()):
-        target[key] = _mask_attribute_value(
-            scan_and_redact, target[key], policy=policy, max_string_length=max_string_length
-        )
+        target[key] = mask(target[key])
 
 
 class _Unredactable(Exception):
@@ -138,15 +150,23 @@ class RedactingSpanProcessorWith:
         *,
         policy: Optional[Any] = None,
         limits: Optional[dict] = None,
+        on_outcome: Optional[Callable[[SpanOutcome], None]] = None,
     ) -> None:
         if not callable(getattr(next_processor, "on_end", None)):
             raise TypeError("RedactingSpanProcessorWith: next_processor must be a SpanProcessor")
         if not callable(scan_and_redact):
             raise TypeError("RedactingSpanProcessorWith: scan_and_redact must be callable")
+        if on_outcome is not None and not callable(on_outcome):
+            raise TypeError("RedactingSpanProcessorWith: on_outcome must be callable")
         self._next = next_processor
         self._scan_and_redact = scan_and_redact
         self._policy = policy
         self._limits = limits
+        self._on_outcome = on_outcome
+        # Thread-local, so one thread reporting never suppresses another's
+        # outcome and an observer that traces cannot recurse. The per-span
+        # counter lives on it too: spans end on whatever thread created them.
+        self._state = threading.local()
         self._warned = False
 
     def on_start(self, span: "Span", parent_context: Optional["Context"] = None) -> None:
@@ -165,7 +185,11 @@ class RedactingSpanProcessorWith:
     def _mask_text(self, value: Any) -> Any:
         max_string_length = (self._limits or {}).get("max_string_length")
         return _mask_attribute_value(
-            self._scan_and_redact, value, policy=self._policy, max_string_length=max_string_length
+            self._scan_and_redact,
+            value,
+            policy=self._policy,
+            max_string_length=max_string_length,
+            counter=getattr(self._state, "counter", None),
         )
 
     def _redact_name(self, obj: Any) -> None:
@@ -180,7 +204,7 @@ class RedactingSpanProcessorWith:
         attributes = _private(obj, "_attributes", "attributes")
         if attributes is None:
             return
-        redact_attributes_with(self._scan_and_redact, attributes, policy=self._policy, limits=self._limits)
+        _redact_bag(attributes, self._mask_text)
         public = getattr(obj, "attributes", None)
         if public is not None and dict(public) != dict(getattr(attributes, "_dict", attributes)):
             raise _Unredactable(f"{type(obj).__name__}.attributes")
@@ -213,10 +237,17 @@ class RedactingSpanProcessorWith:
             self._redact_attributes_of(link)
 
     def on_end(self, span: "ReadableSpan") -> None:
+        # A fresh counter per span, so an outcome reports this span's values
+        # and not a running total.
+        counting = self._on_outcome is not None
+        if counting:
+            self._state.counter = OutcomeCounter()
+        dropped = False
         try:
             self._redact_span(span)
         except Exception as error:
             # Fail closed: a span that cannot be redacted is not exported.
+            dropped = True
             if not self._warned:
                 self._warned = True
                 reason = str(error) if isinstance(error, _Unredactable) else type(error).__name__
@@ -226,8 +257,26 @@ class RedactingSpanProcessorWith:
                     RuntimeWarning,
                     stacklevel=2,
                 )
+        try:
+            if not dropped:
+                self._next.on_end(span)
+        finally:
+            if counting:
+                self._report(dropped)
+
+    def _report(self, dropped: bool) -> None:
+        """Reports one outcome per span, whether it was forwarded or dropped,
+        and after the next processor has had it, so an observer cannot affect
+        what is exported."""
+        counter = getattr(self._state, "counter", None) or OutcomeCounter()
+        self._state.counter = None
+        if getattr(self._state, "reporting", False):
             return
-        self._next.on_end(span)
+        self._state.reporting = True
+        try:
+            notify(self._on_outcome, SpanOutcome(values=counter.snapshot(), dropped=dropped))
+        finally:
+            self._state.reporting = False
 
     def shutdown(self) -> None:
         self._next.shutdown()
@@ -238,7 +287,11 @@ class RedactingSpanProcessorWith:
 
 
 def create_redacting_span_processor(
-    next_processor: "SpanProcessor", *, policy: Optional[Any] = None, limits: Optional[dict] = None
+    next_processor: "SpanProcessor",
+    *,
+    policy: Optional[Any] = None,
+    limits: Optional[dict] = None,
+    on_outcome: Optional[Callable[[SpanOutcome], None]] = None,
 ) -> RedactingSpanProcessorWith:
     """The live wrapper: wraps `next_processor` with the real
     `redact_secret.scan_and_redact`. There is no init step for the Python
@@ -246,4 +299,6 @@ def create_redacting_span_processor(
     the JS package's `await initialize()`."""
     import redact_secret
 
-    return RedactingSpanProcessorWith(next_processor, redact_secret.scan_and_redact, policy=policy, limits=limits)
+    return RedactingSpanProcessorWith(
+        next_processor, redact_secret.scan_and_redact, policy=policy, limits=limits, on_outcome=on_outcome
+    )

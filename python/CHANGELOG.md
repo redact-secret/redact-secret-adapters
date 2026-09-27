@@ -20,6 +20,41 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+### Added
+
+- `redact_secret_adapters.outcome`: the same input-free outcome contract as
+  the TypeScript `@redact-secret/adapter`
+  (redact-secret/redact-secret-adapters#45). `OutcomeCounter` /
+  `ValueCounts` hold six non-negative integers — `scanned`, `findings`,
+  `redacted`, `blocked`, `limited`, `failed` — and nothing else, so there is
+  no field for a value, a record attribute, a key, an offset or an exception
+  message. `findings` and `redacted` are separate because a `warn` finding
+  changes no text, and neither is a count of distinct credentials.
+- `RedactSecretFilter(on_outcome=...)`: one `LogRecordOutcome` per record
+  the filter masks, carrying the numeric level and the value counts. A record
+  through two filtered handlers is two passes and reports twice, which is what
+  a per-handler count means.
+- `create_redacting_span_processor(on_outcome=...)` and the same keyword on
+  `RedactingSpanProcessorWith`: one `SpanOutcome` per span, with `dropped`.
+  `dropped` is this processor's own decision and is never a claim that an
+  exporter succeeded or that a span was sampled out.
+- Both observers are called after the record or span is fully masked;
+  anything they raise is swallowed, never read, and never changes what is
+  emitted. The re-entrancy guard is thread-local, so an observer that logs or
+  traces does not recurse and one thread never suppresses another's outcome.
+  Neither creates a logger, a handler, an exporter or a network client.
+- `mask_leaf_outcome_with` and `count_leaf`; `mask_leaf_with` is now a
+  one-line wrapper over the former and returns exactly the same string for
+  every input.
+
+### Fixed
+
+- A span's **attribute** values are now counted by the processor's own masker.
+  They were redacted correctly, but went through the module-level
+  `redact_attributes_with`, so a processor reporting outcomes would have
+  counted only the span and event names. Found by the new per-span count
+  tests.
+
 ### Changed
 
 - The README now states where `RedactSecretFilter` has to be attached in an

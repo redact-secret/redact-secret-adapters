@@ -36,11 +36,13 @@ export { formatPinoMessage } from "./format-message.js";
 export {
   createRedactingHooksWith,
   type PinoHostHooks,
+  type PinoLogOutcome,
+  type PinoRedactionStage,
   type RedactingHooks,
   type RedactingHooksOptions,
 } from "./hooks.js";
 export { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
-export { createRedactingStreamWriteWith, type RedactingStreamWrite } from "./stream-write.js";
+export { createRedactingStreamWriteWith, PINO_ERROR_LINE, type RedactingStreamWrite } from "./stream-write.js";
 
 async function initializedScanner(): Promise<ScanAndRedact> {
   const { initialize, scanAndRedact } = await import("@redact-secret/core");

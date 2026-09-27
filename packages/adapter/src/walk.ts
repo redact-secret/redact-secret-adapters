@@ -4,13 +4,24 @@
  * reaches a host's serializer unmasked.
  */
 
-import { CYCLE_MARKER, DEFAULT_LIMITS, ERROR_MARKER, LIMIT_MARKER, maskLeafWith, resolveLimit } from "./mask-leaf.js";
+import {
+  CYCLE_MARKER,
+  countLeaf,
+  DEFAULT_LIMITS,
+  ERROR_MARKER,
+  LIMIT_MARKER,
+  maskLeafOutcomeWith,
+  resolveLimit,
+} from "./mask-leaf.js";
+import type { OutcomeCounter } from "./outcome.js";
 import type { Limits, MaskOptions, Policy, ScanAndRedact } from "./types.js";
 
 export interface WalkContext {
   readonly policy: Policy;
   readonly limits: Limits;
   readonly budget: { leaves: number };
+  /** Optional, caller-owned: see `./outcome.ts`. Absent means nothing is counted. */
+  readonly counter?: OutcomeCounter | undefined;
 }
 
 /** Per-key fallback to `DEFAULT_LIMITS`, so `{ maxDepth: undefined }` or `NaN` never disables a bound. */
@@ -24,7 +35,7 @@ export function resolveLimits(overrides: Partial<Limits> | undefined): Limits {
 
 export function createWalkContext(options: MaskOptions): WalkContext {
   const limits = resolveLimits(options.limits);
-  return { policy: options.policy, limits, budget: { leaves: limits.maxTotalLeaves } };
+  return { policy: options.policy, limits, budget: { leaves: limits.maxTotalLeaves }, counter: options.counter };
 }
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -34,12 +45,17 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 export function maskString(scanAndRedact: ScanAndRedact, value: string, ctx: WalkContext): string {
-  if (ctx.budget.leaves <= 0) return LIMIT_MARKER;
+  if (ctx.budget.leaves <= 0) {
+    if (ctx.counter !== undefined) ctx.counter.limited += 1;
+    return LIMIT_MARKER;
+  }
   ctx.budget.leaves -= 1;
-  return maskLeafWith(scanAndRedact, value, {
+  const leaf = maskLeafOutcomeWith(scanAndRedact, value, {
     policy: ctx.policy,
     maxStringLength: ctx.limits.maxStringLength,
   });
+  countLeaf(ctx.counter, leaf);
+  return leaf.text;
 }
 
 /** Defines a data key without invoking inherited setters such as `__proto__`. */
@@ -53,6 +69,20 @@ export function defineDataKey(out: object, key: string, value: unknown): void {
 }
 
 type Walk = (value: unknown, depth: number) => unknown;
+
+/**
+ * Counts a marker this walk produced for a whole value rather than for a
+ * scanned leaf: a container past `maxDepth`, a cycle, a value that could not
+ * be read. `CYCLE_MARKER` joins `failed` — both are values the walk could
+ * not represent.
+ */
+function countMarker(ctx: WalkContext, marker: string): string {
+  if (ctx.counter !== undefined) {
+    if (marker === LIMIT_MARKER) ctx.counter.limited += 1;
+    else ctx.counter.failed += 1;
+  }
+  return marker;
+}
 
 /**
  * Copies `source`'s own enumerable string keys into `out`, masked. Keys past
@@ -74,7 +104,7 @@ function maskProperties(
     try {
       masked = walk(record[key], depth + 1);
     } catch {
-      masked = ERROR_MARKER;
+      masked = countMarker(ctx, ERROR_MARKER);
     }
     defineDataKey(out, key, masked);
   }
@@ -119,7 +149,7 @@ function maskObject(value: object, scanAndRedact: ScanAndRedact, walk: Walk, ctx
     try {
       json = toJSON.call(value, "");
     } catch {
-      return ERROR_MARKER;
+      return countMarker(ctx, ERROR_MARKER);
     }
     // One level deeper, so a toJSON that returns a fresh toJSON object
     // each call still terminates at maxDepth.
@@ -145,13 +175,13 @@ export function walkValue(scanAndRedact: ScanAndRedact, data: unknown, options: 
   const walk: Walk = (value, depth) => {
     if (typeof value === "string") return maskString(scanAndRedact, value, ctx);
     if (typeof value !== "object" || value === null) return value;
-    if (depth >= ctx.limits.maxDepth) return LIMIT_MARKER;
-    if (seen.has(value)) return CYCLE_MARKER;
+    if (depth >= ctx.limits.maxDepth) return countMarker(ctx, LIMIT_MARKER);
+    if (seen.has(value)) return countMarker(ctx, CYCLE_MARKER);
     seen.add(value);
     try {
       return maskObject(value, scanAndRedact, walk, ctx, depth);
     } catch {
-      return ERROR_MARKER;
+      return countMarker(ctx, ERROR_MARKER);
     } finally {
       seen.delete(value);
     }

@@ -16,6 +16,13 @@ import { ERROR_MARKER, LIMIT_MARKER, maskLogValueWith } from "@redact-secret/ada
 /** The exact shape of pino's `hooks.streamWrite`. */
 export type RedactingStreamWrite = (line: string) => string;
 
+/**
+ * The fixed line written in place of one that could not be lexed. Public so a
+ * host observing outcomes can recognise it without pattern-matching: pino
+ * always emits a `level`, so this can never be a line pino itself produced.
+ */
+export const PINO_ERROR_LINE = JSON.stringify({ msg: ERROR_MARKER });
+
 const QUOTE = 34;
 const BACKSLASH = 92;
 const COLON = 58;
@@ -81,7 +88,9 @@ export function createRedactingStreamWriteWith(
     try {
       return redactLine(scanAndRedact, line, options);
     } catch {
-      return `${JSON.stringify({ msg: ERROR_MARKER })}${String(line).endsWith("\n") ? "\n" : ""}`;
+      // The whole line is one value the adapter could not represent.
+      if (options.counter !== undefined) options.counter.failed += 1;
+      return `${PINO_ERROR_LINE}${String(line).endsWith("\n") ? "\n" : ""}`;
     }
   };
 }

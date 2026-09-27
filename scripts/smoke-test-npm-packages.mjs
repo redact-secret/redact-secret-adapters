@@ -310,11 +310,16 @@ import {
   ERROR_MARKER,
   LIMIT_MARKER,
   createMaskSecrets,
+  createOutcomeCounter,
+  maskLeafOutcomeWith,
   maskLeafWith,
   maskLogValueWith,
   maskSecretsWith,
+  toValueCounts,
   type MaskOptions,
+  type OutcomeCounter,
   type ScanAndRedact,
+  type ValueCounts,
 } from "@redact-secret/adapter";
 import {
   createRedactingHooks,
@@ -330,7 +335,9 @@ import {
   createRedactingSpanProcessor,
   RedactingSpanProcessorWith,
   redactAttributesWith,
+  type OtelSpanOutcome,
   type RedactAttributesOptions,
+  type RedactingSpanProcessorOptions,
 } from "@redact-secret/adapter-otel";
 import {
   BLOCK_REASONS,
@@ -356,7 +363,11 @@ import { McpServer as McpServerV2 } from "@modelcontextprotocol/server";
 import { initialize, scanAndRedact, createIncrementalSanitizer } from "@redact-secret/core";
 
 const scanner: ScanAndRedact = (text) => ({ text, findings: [] });
-const options: MaskOptions = { limits: { ...DEFAULT_LIMITS } };
+const counter: OutcomeCounter = createOutcomeCounter();
+const counts: ValueCounts = toValueCounts(counter);
+void counts.redacted;
+void maskLeafOutcomeWith(scanner, "x").outcome;
+const options: MaskOptions = { limits: { ...DEFAULT_LIMITS }, counter };
 void BLOCK_MARKER;
 void CYCLE_MARKER;
 void ERROR_MARKER;
@@ -367,7 +378,10 @@ void maskLogValueWith(scanner, "x");
 void createMaskSecrets;
 
 const logMethod: RedactingLogMethod = createRedactingLogMethodWith(scanner);
-const hookOptions: RedactingHooksOptions = { hooks: { logMethod } };
+const hookOptions: RedactingHooksOptions = {
+  hooks: { logMethod },
+  onOutcome: ({ level, stages, values, lineReplaced }) => void [level, stages[0], values.redacted, lineReplaced],
+};
 const redactingHooks: RedactingHooks = createRedactingHooksWith(scanner, hookOptions);
 void pino({ hooks: redactingHooks });
 void createRedactingHooks;
@@ -375,9 +389,13 @@ void createRedactingLogMethod;
 void formatPinoMessage;
 void logMethod;
 
-const otelOptions: RedactAttributesOptions = {};
+const otelOptions: RedactingSpanProcessorOptions = {
+  onOutcome: (outcome: OtelSpanOutcome) => void [outcome.dropped, outcome.values.blocked],
+};
+const deprecatedOtelOptions: RedactAttributesOptions = {};
 void redactAttributesWith;
 void createRedactingSpanProcessor;
+void deprecatedOtelOptions;
 const processor = new RedactingSpanProcessorWith(new SimpleSpanProcessor(new InMemorySpanExporter()), scanner, otelOptions);
 void new BasicTracerProvider({ spanProcessors: [processor] });
 

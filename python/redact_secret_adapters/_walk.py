@@ -15,32 +15,64 @@ from __future__ import annotations
 import traceback
 from typing import Any, Callable, Optional
 
-from .mask_leaf import CYCLE_MARKER, DEFAULT_LIMITS, ERROR_MARKER, LIMIT_MARKER, mask_leaf_with
+from .mask_leaf import (
+    CYCLE_MARKER,
+    DEFAULT_LIMITS,
+    ERROR_MARKER,
+    LIMIT_MARKER,
+    count_leaf,
+    mask_leaf_outcome_with,
+)
+from .outcome import OutcomeCounter
 
 
 class _Walk:
-    __slots__ = ("scan_and_redact", "policy", "limits", "leaves", "seen")
+    __slots__ = ("scan_and_redact", "policy", "limits", "leaves", "seen", "counter")
 
-    def __init__(self, scan_and_redact: Callable[..., Any], policy: Any, limits: Optional[dict[str, int]]) -> None:
+    def __init__(
+        self,
+        scan_and_redact: Callable[..., Any],
+        policy: Any,
+        limits: Optional[dict[str, int]],
+        counter: Optional[OutcomeCounter] = None,
+    ) -> None:
         self.scan_and_redact = scan_and_redact
         self.policy = policy
         self.limits = {**DEFAULT_LIMITS, **(limits or {})}
         self.leaves = self.limits["max_total_leaves"]
         self.seen: set[int] = set()
+        # Caller-owned; see ``outcome.py``. ``None`` means nothing is counted.
+        self.counter = counter
+
+    def marker(self, marker: str) -> str:
+        """Counts a marker produced for a whole value rather than a scanned
+        leaf: a container past ``max_depth``, a cycle, an unreadable value.
+        ``CYCLE_MARKER`` joins ``failed`` -- both are values the walk could
+        not represent."""
+        if self.counter is not None:
+            if marker == LIMIT_MARKER:
+                self.counter.limited += 1
+            else:
+                self.counter.failed += 1
+        return marker
 
     def string(self, value: str) -> str:
         if self.leaves <= 0:
+            if self.counter is not None:
+                self.counter.limited += 1
             return LIMIT_MARKER
         self.leaves -= 1
-        return mask_leaf_with(
+        leaf = mask_leaf_outcome_with(
             self.scan_and_redact, value, policy=self.policy, max_string_length=self.limits["max_string_length"]
         )
+        count_leaf(self.counter, leaf)
+        return leaf.text
 
     def stack(self, exc: BaseException) -> str:
         try:
             formatted = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         except Exception:
-            return ERROR_MARKER
+            return self.marker(ERROR_MARKER)
         return self.string(formatted)
 
     def exception(self, exc: BaseException, depth: int) -> dict[str, Any]:
@@ -51,7 +83,7 @@ class _Walk:
             message = None
         out: dict[str, Any] = {
             "type": type(exc).__name__,
-            "message": ERROR_MARKER if message is None else self.string(message),
+            "message": self.marker(ERROR_MARKER) if message is None else self.string(message),
             "stack": self.stack(exc),
         }
         # The exception's own attributes (``exc.status = ...``, ``__notes__``),
@@ -73,9 +105,9 @@ class _Walk:
             return value
 
         if depth >= self.limits["max_depth"]:
-            return LIMIT_MARKER
+            return self.marker(LIMIT_MARKER)
         if id(value) in self.seen:
-            return CYCLE_MARKER
+            return self.marker(CYCLE_MARKER)
         self.seen.add(id(value))
         try:
             if isinstance(value, BaseException):
@@ -92,9 +124,14 @@ class _Walk:
 
 
 def walk(
-    scan_and_redact: Callable[..., Any], data: Any, *, policy: Optional[Any], limits: Optional[dict[str, int]]
+    scan_and_redact: Callable[..., Any],
+    data: Any,
+    *,
+    policy: Optional[Any],
+    limits: Optional[dict[str, int]],
+    counter: Optional[OutcomeCounter] = None,
 ) -> Any:
-    return _Walk(scan_and_redact, policy, limits).value(data, 0)
+    return _Walk(scan_and_redact, policy, limits, counter).value(data, 0)
 
 
 def mask_exception_text_with(
@@ -103,11 +140,12 @@ def mask_exception_text_with(
     *,
     policy: Optional[Any] = None,
     limits: Optional[dict[str, int]] = None,
+    counter: Optional[OutcomeCounter] = None,
 ) -> str:
     """The masked ``stack`` that walking ``exc`` would produce, without
     scanning the message or cause separately: the formatted traceback
     already contains both, and the logging filter keeps only this text."""
-    state = _Walk(scan_and_redact, policy, limits)
+    state = _Walk(scan_and_redact, policy, limits, counter)
     if state.limits["max_depth"] <= 0:
-        return LIMIT_MARKER
+        return state.marker(LIMIT_MARKER)
     return state.stack(exc)

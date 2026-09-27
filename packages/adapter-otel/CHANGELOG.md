@@ -20,6 +20,42 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-27
+
+### Added
+
+- `onOutcome`, on both `createRedactingSpanProcessor` and
+  `RedactingSpanProcessorWith`: one input-free summary per **span**
+  (redact-secret/redact-secret-adapters#45), carrying the six shared value
+  counts and `dropped`. `dropped` is this processor's own decision — it did
+  not hand the span to the next processor because a masked value would not
+  write back. It does **not** mean the span was sampled out, and `false` does
+  not mean the span was exported: whether the next processor kept it and
+  whether an exporter succeeded are things this adapter never learns and does
+  not report. The observer is called synchronously once the span has been
+  forwarded or dropped; anything it throws is swallowed, never read, and
+  never changes what is exported; it is re-entrancy- and thread-guarded; and
+  no exporter or network client is created for it.
+- `RedactingSpanProcessorOptions` and `OtelSpanOutcome` types. The
+  processor's third argument was already `{ policy, maxStringLength }` and
+  still accepts exactly that.
+
+### Fixed
+
+- A span's **attribute** values are now counted by the processor's own
+  masker. They were redacted correctly, but went through the module-level
+  `redactAttributesWith`, so a processor reporting outcomes would have
+  counted only the span and event names. Found by the new per-span count
+  tests.
+
+### Changed
+
+- `@redact-secret/adapter` range raised from `^0.1.1` to `^0.1.3`, the
+  version that carries the outcome contract this release reports through.
+  Backed by this package's tests against the workspace's
+  `@redact-secret/adapter` 0.1.3, the npm install smoke test, and the
+  published-sibling combination job.
+
 ## [0.1.1] - 2026-09-25
 
 ### Changed

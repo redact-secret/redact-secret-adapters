@@ -96,6 +96,49 @@ Two things still run after the last scan and are outside this boundary: a
 *around* the composed pair by hand. A custom hook placed there can introduce
 new plaintext after sanitation.
 
+## Counting what happened
+
+Since `0.1.2`, `createRedactingHooks({ onOutcome })` reports one summary per
+**log record**. It is observational: increment your own counters from it. This
+package creates no logger, exporter or network client for you.
+
+```js
+const hooks = await createRedactingHooks({
+  onOutcome: ({ level, values, lineReplaced }) => {
+    metrics.increment("log.records", { level });
+    metrics.increment("log.redacted_values", values.redacted);
+    if (lineReplaced) metrics.increment("log.lines_replaced");
+  },
+});
+```
+
+```text
+{ host: "pino", unit: "log-record", level: 30,
+  stages: ["log-method", "stream-write"],
+  values: { scanned, findings, redacted, blocked, limited, failed },
+  lineReplaced: false }
+```
+
+Both hooks' passes over one record are **summed**, not reported twice: a secret
+in the message is one `redacted`, not one per hook. The counts are defined in
+[`@redact-secret/adapter`](../adapter#outcome-counters) — `findings` is not a
+count of distinct credentials, and `redacted` is lower than `findings` whenever
+a finding leaves text alone.
+
+`lineReplaced` means the `streamWrite` hook could not lex the line and wrote
+the fixed `[REDACTED:ERROR]` line (exported as `PINO_ERROR_LINE`) instead of
+it. **It is not a claim that the destination accepted anything**: whether a
+destination or transport succeeded is not something this adapter learns.
+
+- Masking finishes before the observer runs, and anything it throws is
+  swallowed, never read, and never changes what is written.
+- It is re-entrancy-guarded: an observer that logs through the logger it
+  observes does not recurse, and those nested records are simply not reported.
+- A record a *host* `logMethod` drops before the redacting hook runs is not
+  reported at all — this adapter never saw it.
+- Only the paired factory takes `onOutcome`, because only the pair can
+  guarantee one summary per record.
+
 ## What is redacted
 
 With `hooks.logMethod`, before pino serializes anything:

@@ -40,9 +40,50 @@ assertion is not optional.
 | `RedactingSpanProcessorWith` | `new (next, scanAndRedact, options?)` — injected scanner |
 | `redactAttributesWith(scanAndRedact, attributes, options?)` | Mutates one attribute bag in place; throws a `TypeError` (naming no value) if it cannot |
 
-`options` is `MaskLeafOptions` (`{ policy, maxStringLength }`), re-exported
-here; the older `RedactAttributesOptions` alias is deprecated. See
+`options` is `{ policy, maxStringLength }` — `MaskLeafOptions`, re-exported
+here — plus `onOutcome` since `0.1.2`. The older `RedactAttributesOptions`
+alias is deprecated. See
 [`@redact-secret/adapter`](../adapter#fail-closed-markers) for the markers.
+
+## Counting what happened
+
+Since `0.1.2`, `onOutcome` reports one summary per **span**. It is
+observational: increment your own counters from it. This package creates no
+exporter or network client for you.
+
+```js
+const processor = await createRedactingSpanProcessor(new BatchSpanProcessor(exporter), {
+  onOutcome: ({ values, dropped }) => {
+    metrics.increment("span.redacted_values", values.redacted);
+    if (dropped) metrics.increment("span.dropped_unredactable");
+  },
+});
+```
+
+```text
+{ host: "otel", unit: "span",
+  values: { scanned, findings, redacted, blocked, limited, failed },
+  dropped: false }
+```
+
+The counts are defined in
+[`@redact-secret/adapter`](../adapter#outcome-counters) — `findings` is not a
+count of distinct credentials, and `redacted` is lower than `findings` whenever
+a finding leaves text alone. Every string attribute, array element, event name
+and status message is its own counted leaf; attribute *names* are not scanned
+and not counted.
+
+`dropped` is **this processor's** decision: it did not hand the span to the
+next processor because a masked value would not write back (see the
+load-bearing assumption above). It does not mean the span was sampled out, and
+`dropped: false` does **not** mean the span was exported — whether the next
+processor kept it and whether an exporter succeeded are things this adapter
+never learns and does not report.
+
+- The observer runs once the span has been forwarded or dropped, so it cannot
+  change what is exported, and anything it throws is swallowed and never read.
+- It is re-entrancy- and thread-guarded: an observer that ends another span
+  does not recurse, and one thread's report never suppresses another's.
 
 ## Supported SDK versions
 

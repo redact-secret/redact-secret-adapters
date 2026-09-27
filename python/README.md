@@ -87,6 +87,61 @@ filtered handlers on one record are safe. What the filter does **not** cover:
 record attributes you did not name in `extra_fields`, and anything a custom
 formatter adds after it runs.
 
+## Counting what happened
+
+**Unreleased.** `on_outcome` reports one summary per unit — one `logging`
+record, one span. It is observational: increment your own counters from it.
+Nothing here creates a logger, a handler, an exporter or a network client.
+
+```python
+from redact_secret_adapters.logging_filter import RedactSecretFilter
+
+
+def observe(outcome):  # LogRecordOutcome(level=..., values=ValueCounts(...))
+    metrics.increment("log.records", level=outcome.level)
+    metrics.increment("log.redacted_values", outcome.values.redacted)
+
+
+handler.addFilter(RedactSecretFilter(on_outcome=observe))
+```
+
+```python
+from redact_secret_adapters.otel import create_redacting_span_processor
+
+
+def observe(outcome):  # SpanOutcome(values=ValueCounts(...), dropped=False)
+    if outcome.dropped:
+        metrics.increment("span.dropped_unredactable")
+
+
+provider.add_span_processor(create_redacting_span_processor(next_processor, on_outcome=observe))
+```
+
+A `ValueCounts` is six non-negative integers and nothing else — there is no
+field for a value, a record attribute, a key, an offset or an exception
+message:
+
+| Count | Means |
+| --- | --- |
+| `scanned` | Leaves handed to the core. A leaf a bound refused before the core saw it is not one of these |
+| `findings` | Findings the core reported, summed. **Not** distinct credentials: one credential in five leaves is five findings |
+| `redacted` | Leaves whose text the core changed. Lower than `findings` when an action leaves text alone (a `warn`) |
+| `blocked` | Leaves replaced whole by `BLOCK_MARKER` |
+| `limited` | Values replaced by `LIMIT_MARKER`; never scanned |
+| `failed` | Values replaced by `ERROR_MARKER`, plus the `CYCLE_MARKER` case |
+
+The units follow placement: a record through **two** filtered handlers is two
+passes and reports twice, which is what a per-handler count means — the second
+pass finds nothing left to redact. `SpanOutcome.dropped` is this processor's
+own decision (a masked value would not write back); it is **not** a claim that
+an exporter succeeded, nor that a span was sampled out.
+
+Both observers run after the record or span is fully masked, so neither can
+turn a protected one into an unprotected one, and anything they raise is
+swallowed, never read, and never re-raised. The re-entrancy guard is
+thread-local: an observer that logs or traces does not recurse, and one thread
+never suppresses another's outcome.
+
 ## Masking callbacks (Langfuse and similar)
 
 ```python
