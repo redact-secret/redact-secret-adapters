@@ -19,6 +19,32 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-27
+
+### Added
+
+- The shared outcome contract the host adapters report through
+  (redact-secret/redact-secret-adapters#45): `createOutcomeCounter`,
+  `toValueCounts`, `addCounts`, `countLeaf`, `notify`, and the
+  `OutcomeCounter` / `ValueCounts` / `LeafOutcome` types. A counter is six
+  non-negative integers — `scanned`, `findings`, `redacted`, `blocked`,
+  `limited`, `failed` — and nothing else, so it is input-free by
+  construction: there is no field for a value, a masked value, a field path,
+  a key, an offset, a detector id or an error message. `findings` and
+  `redacted` are separate because a `warn` finding changes no text, and
+  neither is a count of distinct credentials.
+- `maskLeafOutcomeWith`, `maskLeafWith` plus what happened to that leaf.
+  `maskLeafWith` is now a one-line wrapper over it and returns exactly the
+  same string for every input.
+- `MaskOptions.counter`: an optional, caller-owned accumulator the walk adds
+  to while it masks. The walk only ever increments it, so a host adapter that
+  masks one unit in more than one pass (pino scans a record's arguments and
+  its finished line) can keep one accurate total per unit instead of double
+  counting. Omitted, nothing is counted and there is no new work.
+- The walk now attributes its container-level markers too: a value past
+  `maxDepth` or a leaf budget counts as `limited`, and a cycle or an
+  unreadable getter/`toJSON()` as `failed`.
+
 ## [0.1.2] - 2026-09-25
 
 ### Added

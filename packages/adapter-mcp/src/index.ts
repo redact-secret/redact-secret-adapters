@@ -6,7 +6,7 @@
  * ```js
  * import { createMcpBoundary, toCallToolResult } from "@redact-secret/adapter-mcp";
  *
- * const mcp = await createMcpBoundary({ wholeInputLimits, incrementalLimits, traversalLimits });
+ * const mcp = await createMcpBoundary(); // conservative documented defaults
  * const outcome = await mcp.sanitizeToolCall(({ signal }) => client.callTool(params, undefined, { signal }));
  * const safe = toCallToolResult(outcome); // null when aborted
  *
@@ -21,7 +21,7 @@
 import { createAiContextBoundary } from "@redact-secret/adapter-ai-context";
 
 import { createMcpBoundaryWith } from "./boundary.js";
-import type { CreateMcpBoundaryOptions, McpBoundary } from "./types.js";
+import type { CreateMcpBoundaryOptionsWithDefaults, McpBoundary } from "./types.js";
 
 export {
   createMcpBoundaryWith,
@@ -46,6 +46,7 @@ export {
 } from "./boundary.js";
 export type {
   CreateMcpBoundaryOptions,
+  CreateMcpBoundaryOptionsWithDefaults,
   JsonObject,
   McpAuditRecord,
   McpBinaryContent,
@@ -74,12 +75,17 @@ export type {
  * Loads and initializes `@redact-secret/core` through
  * `createAiContextBoundary`, and returns the MCP boundary over it.
  *
+ * Any limit set left out comes from `AI_CONTEXT_DEFAULT_LIMITS` — documented,
+ * finite values, never an unbounded mode. Passing all three, as callers before
+ * `0.1.0-alpha.2` had to, behaves exactly as it did, and
+ * `createMcpBoundaryWith` over an explicit boundary is unchanged.
+ *
  * Like the AI-context live factory, it never rejects for an initialization
  * failure: every operation then fails closed as `blocked` / `core_error`,
  * which maps to the fixed blocked result. Rejects only for malformed
  * `options`, with a fixed message.
  */
-export async function createMcpBoundary(options: CreateMcpBoundaryOptions): Promise<McpBoundary> {
+export async function createMcpBoundary(options: CreateMcpBoundaryOptionsWithDefaults = {}): Promise<McpBoundary> {
   if (options === null || typeof options !== "object") {
     throw new TypeError("createMcpBoundary: options are required");
   }

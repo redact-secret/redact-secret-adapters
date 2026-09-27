@@ -56,6 +56,40 @@ without `--tag` anyway. A prerelease whose first identifier can't be a tag
 by its exact version or tag (`npm install <package>@alpha`). The PyPI package
 has no dist-tags: pip skips a pre-release unless it is asked for one.
 
+### Qualifying a new core release
+
+A new `@redact-secret/core` / `redact-secret` release does **not** move a
+declared range on its own, and a declared range is never narrowed just to make
+the next release simpler. What a new core version changes is the *ceiling CI
+exercises*, which is a record, not a range:
+
+1. Run both endpoints locally against the new core and check they pass:
+   `npm run range-endpoint -- highest && npm run build && npm run typecheck && npm test`,
+   then `npm run range-endpoint -- lowest` and the same again; on the Python
+   side, `python scripts/install-range-endpoint.py highest|lowest && pytest`.
+   Restore your tree with `npm ci` afterwards — `range-endpoint` rewrites
+   `node_modules`.
+2. `npm run compat:check -- --resolve` reports what each range now resolves to
+   without failing. Record the new `endpoints.highest` and
+   `endpointsResolvedAt` in [`compatibility.json`](./compatibility.json) by
+   hand, keeping its formatting, and re-run `npm run compat:check`. CI's
+   `range-endpoints` and `python-range-endpoints` jobs then install exactly
+   those endpoints on every run, which is what makes the record evidence rather
+   than a claim.
+3. **Raise the declared floor only when something needs it.** A package raises
+   its `@redact-secret/core` range when it uses an API a lower core does not
+   have, and the `published-combination` job is what catches a floor that is
+   too low. Raising it because a newer core exists would drop consumers the
+   suite still passes against, and a semver expression alone is not evidence
+   that every version inside it was tested — `endpoints` names the two that
+   were.
+4. A core version that is **announced but not published** qualifies nothing.
+   Wait for the real registry artifact: there is nothing to install, nothing
+   for CI to exercise, and nothing to record.
+
+The same rule holds for a host SDK: `pino`, `@opentelemetry/sdk-trace-base`,
+the MCP SDK lines, `opentelemetry-sdk`.
+
 ## Cutting a release
 
 1. **Bump on `develop`.** In a normal PR, bump each package you're

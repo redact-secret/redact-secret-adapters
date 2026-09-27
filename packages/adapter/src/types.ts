@@ -6,6 +6,8 @@
 
 import type { ScanAndRedactOptions, ScanResult } from "@redact-secret/core";
 
+import type { OutcomeCounter } from "./outcome.js";
+
 /** The injected scanner: `scanAndRedact` from `@redact-secret/core`, or a fake. */
 export type ScanAndRedact = (text: string, options?: ScanAndRedactOptions) => ScanResult;
 
@@ -29,4 +31,13 @@ export interface MaskLeafOptions {
 export interface MaskOptions {
   readonly policy?: Policy;
   readonly limits?: Partial<Limits> | undefined;
+  /**
+   * An optional, caller-owned accumulator the walk adds to while it masks
+   * (`createOutcomeCounter()`; see `./outcome.ts`). It holds six non-negative
+   * integers and nothing derived from the input. Omit it and nothing is
+   * counted. The walk only ever increments it — a host adapter owns the
+   * lifetime, which is how "one summary per log record or span" is kept
+   * accurate across more than one masking pass.
+   */
+  readonly counter?: OutcomeCounter | undefined;
 }

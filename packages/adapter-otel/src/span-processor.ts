@@ -27,8 +27,15 @@
  */
 
 import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
-import type { MaskLeafOptions, ScanAndRedact } from "@redact-secret/adapter";
-import { ERROR_MARKER, maskLeafWith } from "@redact-secret/adapter";
+import type { MaskLeafOptions, OutcomeCounter, ScanAndRedact, ValueCounts } from "@redact-secret/adapter";
+import {
+  countLeaf,
+  createOutcomeCounter,
+  ERROR_MARKER,
+  maskLeafOutcomeWith,
+  notify,
+  toValueCounts,
+} from "@redact-secret/adapter";
 
 /**
  * @deprecated Use `MaskLeafOptions` (`{ policy, maxStringLength }`), which
@@ -37,16 +44,56 @@ import { ERROR_MARKER, maskLeafWith } from "@redact-secret/adapter";
  */
 export type RedactAttributesOptions = MaskLeafOptions;
 
+/**
+ * One summary per **span**, the unit a host counts in
+ * (redact-secret/redact-secret-adapters#45). Every field is bounded and
+ * enumerated; `values`' definitions are in `@redact-secret/adapter`'s
+ * `outcome.ts`. No attribute name, key, value or error text is in it.
+ */
+export interface OtelSpanOutcome {
+  readonly host: "otel";
+  readonly unit: "span";
+  readonly values: ValueCounts;
+  /**
+   * `true` when **this processor** did not hand the span to the next one,
+   * because a masked value would not write back. It does not mean the span
+   * was sampled out, and `false` does not mean the span was exported: whether
+   * the next processor kept it and whether an exporter succeeded are things
+   * this adapter never learns and does not report.
+   */
+  readonly dropped: boolean;
+}
+
+export interface RedactingSpanProcessorOptions extends MaskLeafOptions {
+  /**
+   * Observational: called once per span, synchronously at the end of `onEnd`,
+   * after the span has either been forwarded or dropped. Increment your own
+   * counters from it.
+   *
+   * It cannot change what is exported, and anything it throws is swallowed,
+   * never read, and never rethrown — including for a span that was dropped.
+   * It is re-entrancy-guarded. No exporter or network client is created for it.
+   */
+  readonly onOutcome?: (outcome: OtelSpanOutcome) => void;
+}
+
 type Mask = (text: string) => string;
 
 /** A span field that did not take a masked write. The message names the field, never its value. */
 class UnredactableFieldError extends Error {}
 
-function maskerFor(scanAndRedact: ScanAndRedact, options: MaskLeafOptions): Mask {
+/**
+ * `counter` is read on every call, not captured, so one masker serves every
+ * span and the processor can swap in a fresh per-span counter.
+ */
+function maskerFor(scanAndRedact: ScanAndRedact, options: MaskLeafOptions, counter?: () => OutcomeCounter): Mask {
   return (text) => {
     try {
-      return maskLeafWith(scanAndRedact, text, options);
+      const leaf = maskLeafOutcomeWith(scanAndRedact, text, options);
+      if (counter !== undefined) countLeaf(counter(), leaf);
+      return leaf.text;
     } catch {
+      if (counter !== undefined) counter().failed += 1;
       return ERROR_MARKER;
     }
   };
@@ -127,17 +174,25 @@ function redactSpan(mask: Mask, span: ReadableSpan): void {
 export class RedactingSpanProcessorWith implements SpanProcessor {
   readonly #next: SpanProcessor;
   readonly #mask: Mask;
+  readonly #onOutcome: ((outcome: OtelSpanOutcome) => void) | undefined;
+  #counter: OutcomeCounter = createOutcomeCounter();
+  #reporting = false;
   #warned = false;
 
-  constructor(next: SpanProcessor, scanAndRedact: ScanAndRedact, options: MaskLeafOptions = {}) {
+  constructor(next: SpanProcessor, scanAndRedact: ScanAndRedact, options: RedactingSpanProcessorOptions = {}) {
     if (typeof next?.onEnd !== "function") {
       throw new TypeError("RedactingSpanProcessorWith: next must be a SpanProcessor");
     }
     if (typeof scanAndRedact !== "function") {
       throw new TypeError("RedactingSpanProcessorWith: scanAndRedact must be a function");
     }
+    const { onOutcome, ...maskOptions } = options;
+    if (onOutcome !== undefined && typeof onOutcome !== "function") {
+      throw new TypeError("RedactingSpanProcessorWith: onOutcome must be a function");
+    }
     this.#next = next;
-    this.#mask = maskerFor(scanAndRedact, options);
+    this.#onOutcome = onOutcome;
+    this.#mask = maskerFor(scanAndRedact, maskOptions, onOutcome === undefined ? undefined : () => this.#counter);
   }
 
   onStart(...args: Parameters<SpanProcessor["onStart"]>): void {
@@ -155,13 +210,47 @@ export class RedactingSpanProcessorWith implements SpanProcessor {
 
   /** Never throws: a span that cannot be redacted is dropped, not exported. */
   onEnd(span: ReadableSpan): void {
+    const counting = this.#onOutcome !== undefined;
+    // A fresh counter per span, so `onOutcome` reports this span's values and
+    // not a running total, and the previous one is restored: a downstream
+    // processor may end a span synchronously inside `#next.onEnd` below (a
+    // `SimpleSpanProcessor` over an instrumented exporter, or any processor
+    // that emits a span of its own), which re-enters this method.
+    const outer = this.#counter;
+    if (counting) this.#counter = createOutcomeCounter();
+    let dropped = false;
+    let counts: ValueCounts | undefined;
     try {
-      redactSpan(this.#mask, span);
-    } catch (error) {
-      this.#warnDropped(error instanceof UnredactableFieldError ? error.message : "unexpected span shape");
-      return;
+      try {
+        redactSpan(this.#mask, span);
+      } catch (error) {
+        this.#warnDropped(error instanceof UnredactableFieldError ? error.message : "unexpected span shape");
+        dropped = true;
+      }
+      // Snapshotted before delegating, because this span's numbers are final
+      // here and `#report` runs after a nested `onEnd` may have replaced the
+      // field.
+      if (counting) counts = toValueCounts(this.#counter);
+    } finally {
+      this.#counter = outer;
     }
-    this.#next.onEnd(span);
+    // Reported whether the span was forwarded or dropped, and after the next
+    // processor has had it, so an observer cannot affect what is exported.
+    try {
+      if (!dropped) this.#next.onEnd(span);
+    } finally {
+      if (counts !== undefined) this.#report(counts, dropped);
+    }
+  }
+
+  #report(values: ValueCounts, dropped: boolean): void {
+    if (this.#onOutcome === undefined || this.#reporting) return;
+    this.#reporting = true;
+    try {
+      notify(this.#onOutcome, { host: "otel", unit: "span", values, dropped } satisfies OtelSpanOutcome);
+    } finally {
+      this.#reporting = false;
+    }
   }
 
   shutdown(): Promise<void> {

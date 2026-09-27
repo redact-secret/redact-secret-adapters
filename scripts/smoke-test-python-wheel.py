@@ -33,6 +33,8 @@ DIST_DIR = PYTHON_DIR / "dist"
 # this smoke test runs from a venv outside it.
 SMOKE_TEST_PY = """
 import logging
+import logging.handlers
+import queue
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -71,19 +73,46 @@ class ListHandler(logging.Handler):
         self.records.append(self.format(record))
 
 
+# The documented placement: the filter on every emitting handler, not on the
+# logger. Two handlers, so the setup the README recommends for a real
+# application is what runs here.
 logger = logging.getLogger("redact-secret-adapters-smoke-test")
 logger.setLevel(logging.INFO)
-handler = ListHandler()
-logger.addHandler(handler)
-logger.addFilter(RedactSecretFilter(fake_scan_and_redact))
+logger.propagate = False
+console, audit = ListHandler(), ListHandler()
+redact = RedactSecretFilter(fake_scan_and_redact)
+for handler in (console, audit):
+    handler.addFilter(redact)
+    logger.addHandler(handler)
 
 logger.info("token is %s", "SECRET_TOKEN_1")
 
-assert len(handler.records) == 1, handler.records
-assert "<SECRET_1>" in handler.records[0], handler.records
-assert "SECRET_TOKEN_1" not in handler.records[0], handler.records
+for handler in (console, audit):
+    assert len(handler.records) == 1, handler.records
+    assert "<SECRET_1>" in handler.records[0], handler.records
+    assert "SECRET_TOKEN_1" not in handler.records[0], handler.records
 
-print("redact_secret_adapters: ok (py.typed present, RedactSecretFilter redacts on a real Logger)")
+# A propagated child record is covered by the filter on the parent's handlers.
+child = logging.getLogger(f"{logger.name}.child")
+child.setLevel(logging.INFO)
+child.info("child token is %s", "SECRET_TOKEN_2")
+assert len(console.records) == 2, console.records
+assert "<SECRET_1>" in console.records[1], console.records
+assert "SECRET_TOKEN_2" not in console.records[1], console.records
+
+# The filter on a QueueHandler: only masked records cross the queue.
+records = queue.Queue()
+queue_handler = logging.handlers.QueueHandler(records)
+queue_handler.addFilter(RedactSecretFilter(fake_scan_and_redact))
+queue_logger = logging.getLogger("redact-secret-adapters-smoke-test-queue")
+queue_logger.setLevel(logging.INFO)
+queue_logger.propagate = False
+queue_logger.addHandler(queue_handler)
+queue_logger.info("queued token is %s", "SECRET_TOKEN_3")
+queued = records.get_nowait()
+assert queued.getMessage() == "queued token is <SECRET_1>", queued.getMessage()
+
+print("redact_secret_adapters: ok (py.typed present, filter placement holds on a real Logger)")
 """
 
 

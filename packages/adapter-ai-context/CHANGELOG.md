@@ -15,6 +15,51 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2026-09-27
+
+### Added
+
+- `AI_CONTEXT_DEFAULT_LIMITS` and `withDefaultLimits(options?)`, and
+  `createAiContextBoundary(options?)` now fills in any of the three limit sets
+  a caller leaves out (redact-secret/redact-secret-adapters#46). A new
+  integration no longer has to invent four security numbers before its first
+  `sanitizeText`. The values are the ones this repository has been exercising
+  all along — the README example, the clean-install smoke test, and the core's
+  conformance replay.
+- The `AiContextLimits` and `AiContextBoundaryOptionsWithDefaults` types.
+
+### Fixed
+
+- `withDefaultLimits` reads `policy`, `placeholderFormatter` and `onFinding`
+  by name rather than by spreading `options`, so an options object layered over
+  a shared base (`Object.create(defaults)`) keeps them.
+  `createAiContextBoundaryWith` destructures its options, which follows the
+  prototype chain, so before this an inherited `policy` would have been
+  silently dropped and the boundary would have run on the core's default
+  policy — a quiet weakening, with no error. An inherited limit set is used
+  rather than overwritten by the preset, and a key this helper does not know
+  about is forwarded rather than dropped.
+
+### Changed
+
+- The README leads with the short call and moves the limits below it, with a
+  table of what each bound covers, and states next to the example that
+  non-JSON values, binary content and encoded text are blocked rather than
+  decoded, and that a cancelled operation is `aborted`.
+
+Not changed, deliberately: limits are still mandatory and still finite.
+`AI_CONTEXT_DEFAULT_LIMITS` is a frozen set of eight positive integers, **not
+an unbounded mode** and not a way to switch a bound off. A limit set that is
+passed is used exactly as passed, never merged field by field with the preset,
+because a half-specified set should be rejected by the core rather than
+silently completed. `createAiContextBoundaryWith`, the injected API, still
+requires all three sets and throws a `TypeError` without them — pass
+`withDefaultLimits()` to hand it the preset. Every existing caller that passes
+all three behaves exactly as it did. `test/defaults.test.ts` asserts against
+the real core that each preset bound is enforced and fails closed as
+`limit_exceeded`, that a streamed text agrees with `sanitizeText` at every
+chunk partition under it, and that an override replaces rather than widens.
+
 ## [0.1.0-alpha.1] - 2026-09-25
 
 ### Added

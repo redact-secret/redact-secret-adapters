@@ -19,6 +19,82 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-27
+
+### Added
+
+- `createRedactingHooks` / `createRedactingHooksWith`, one setup step that
+  returns both hooks (`{ logMethod, streamWrite }`) ready to pass as
+  `pino({ hooks })` (redact-secret/redact-secret-adapters#44). Installing only
+  one of the two was the documented misassembly this closes: `logMethod`
+  alone never sees child-logger bindings or `mixin()` output, and
+  `streamWrite` alone lets raw values reach the host's own serializers and
+  `formatters` first.
+- The pair composes with the application's own hooks:
+  `createRedactingHooks({ hooks: myHooks })`. Redaction always runs last,
+  closest to the bytes — a host `logMethod` runs first and the redacting hook
+  runs immediately before pino's `method`, and a host `streamWrite` runs first
+  on pino's line with the redacting hook masking what it returns — so values
+  a host hook adds are scanned too. A host hook that drops a record still
+  drops it. Keys other than `logMethod` and `streamWrite` are forwarded to
+  pino unchanged; a non-function value for either is a `TypeError` at setup
+  rather than a silent replacement.
+
+- `createRedactingHooks({ onOutcome })`: one input-free summary per **log
+  record** (redact-secret/redact-secret-adapters#45), carrying the numeric
+  level, which of the two hooks ran, the six shared value counts, and
+  `lineReplaced`. The pair's two passes over one record are summed rather
+  than reported twice, so a secret in the message is not counted once as a
+  call argument and again as a line value. Only the paired factory takes it,
+  because only the pair can guarantee one summary per record. The observer is
+  called synchronously after masking; anything it throws is swallowed, never
+  read, and never changes what is written; it is re-entrancy-guarded, so an
+  observer that logs through the logger it observes does not recurse; and no
+  logger, exporter or network client is created for it. `lineReplaced` says
+  the `streamWrite` hook could not lex the line and wrote the fixed
+  `[REDACTED:ERROR]` line — it is not a claim that the destination accepted
+  anything.
+- `PINO_ERROR_LINE`, the exact line written in that case, so a host can
+  recognise it without pattern-matching.
+
+### Fixed
+
+- The counter the walkers are given is resolved per masking call, so a log
+  emitted from a **getter or `toJSON()` on the merging object** — which runs
+  *during* the walk, unlike a `mixin()` or serializer that logs after it — no
+  longer takes the outer record's partial counts with it. Both records now
+  report only the values they carried. Masking was never affected; only the
+  attribution was.
+- A value the walk dropped past `maxArrayLength` and `streamWrite` replaced
+  with `[REDACTED:LIMIT_EXCEEDED]` is now counted as `limited`. The walk could
+  not count it — it never saw it — so `limited` under-reported exactly the
+  values that were refused.
+- A caller's own `MaskOptions.counter` is no longer discarded when `onOutcome`
+  is set: each record's counts are added into it once the record is reported.
+
+### Documented
+
+- A host `streamWrite` hook receives pino's line **unmasked** (bindings and
+  `mixin()` output included), because the ordering rule runs it first. What
+  reaches the destination is masked either way, but a host hook that tees or
+  copies the line elsewhere is handling plaintext.
+
+### Changed
+
+- `@redact-secret/adapter` range raised from `^0.1.1` to `^0.1.3`, the
+  version that carries the outcome contract this release reports through.
+  Backed by this package's tests against the workspace's
+  `@redact-secret/adapter` 0.1.3, the npm install smoke test, and the
+  published-sibling combination job.
+- The package README's example is now a complete, executable boundary
+  (both hooks, a child binding, `mixin()`, a serializer, pino's own path
+  `redact`) and is run verbatim against the real core from a clean install
+  outside the workspace by `npm run smoke-test`
+  (redact-secret/redact-secret-adapters#42). `createRedactingLogMethod` and
+  `createRedactingStreamWrite` are documented as not being the complete
+  boundary on their own; both stay exported, unchanged, for advanced
+  composition and migration.
+
 ## [0.1.1] - 2026-09-25
 
 ### Added
