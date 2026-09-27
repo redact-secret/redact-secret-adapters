@@ -19,6 +19,38 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-27
+
+### Added
+
+- `createRedactingHooks` / `createRedactingHooksWith`, one setup step that
+  returns both hooks (`{ logMethod, streamWrite }`) ready to pass as
+  `pino({ hooks })` (redact-secret/redact-secret-adapters#44). Installing only
+  one of the two was the documented misassembly this closes: `logMethod`
+  alone never sees child-logger bindings or `mixin()` output, and
+  `streamWrite` alone lets raw values reach the host's own serializers and
+  `formatters` first.
+- The pair composes with the application's own hooks:
+  `createRedactingHooks({ hooks: myHooks })`. Redaction always runs last,
+  closest to the bytes — a host `logMethod` runs first and the redacting hook
+  runs immediately before pino's `method`, and a host `streamWrite` runs first
+  on pino's line with the redacting hook masking what it returns — so values
+  a host hook adds are scanned too. A host hook that drops a record still
+  drops it. Keys other than `logMethod` and `streamWrite` are forwarded to
+  pino unchanged; a non-function value for either is a `TypeError` at setup
+  rather than a silent replacement.
+
+### Changed
+
+- The package README's example is now a complete, executable boundary
+  (both hooks, a child binding, `mixin()`, a serializer, pino's own path
+  `redact`) and is run verbatim against the real core from a clean install
+  outside the workspace by `npm run smoke-test`
+  (redact-secret/redact-secret-adapters#42). `createRedactingLogMethod` and
+  `createRedactingStreamWrite` are documented as not being the complete
+  boundary on their own; both stay exported, unchanged, for advanced
+  composition and migration.
+
 ## [0.1.1] - 2026-09-25
 
 ### Added

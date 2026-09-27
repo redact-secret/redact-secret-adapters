@@ -27,11 +27,65 @@ masked, and a dict/list/tuple extra is walked and replaced by a masked copy.
 If the message cannot be formatted (a bad `%` format, a raising `__str__`), it
 becomes `[REDACTED:ERROR]` rather than raising into the logging call.
 
-Attach it to each emitting **handler**: ancestor logger filters do not run for
-propagated child records.
-
 `RedactSecretFilter(scan_and_redact, ...)` accepts an injected scanner; with no
 argument it uses `redact_secret.scan_and_redact`.
+
+### Where to attach it
+
+A `logging.Filter` runs **only where it is attached**. In an application with
+more than one handler, placement is the security decision, not the filter. The
+supported setup is one line per emitting handler:
+
+```python
+import logging
+from redact_secret_adapters.logging_filter import RedactSecretFilter
+
+console = logging.StreamHandler()
+audit = logging.FileHandler("audit.log")
+
+redact = RedactSecretFilter()  # no per-record state: one instance can be shared
+for handler in (console, audit):
+    handler.addFilter(redact)  # every emitting handler, not the logger
+    logging.getLogger().addHandler(handler)
+```
+
+This is not global automatic protection. A handler added anywhere else — by a
+library, by `logging.basicConfig`, by a child logger of your own — is
+unprotected until it, too, carries the filter.
+
+| Placement | Covers | Leaves unprotected |
+| --- | --- | --- |
+| Every emitting **handler** (supported) | that handler, and any handler that runs after it on the same record | a handler attached later without the filter |
+| A **handler** on an ancestor logger | records that propagate to it, including from child loggers | a handler the child carries itself |
+| A **logger** | records logged directly on that logger | records **propagated** from child loggers — `Logger.filter` never runs for an ancestor |
+| The `QueueListener`'s sink handler | the final destination | the record while it sits on the queue, and anywhere a `QueueHandler` subclass sends it (a socket, a `multiprocessing` queue) |
+
+Handlers run in the order they were added and the filter mutates the record in
+place, so a filtered handler also protects every handler after it — and an
+**unfiltered handler that runs before it emits plaintext**. Do not rely on
+order: filter each one.
+
+For a `QueueHandler`/`QueueListener` pair, attach the filter to the
+**`QueueHandler`**. It runs in the emitting thread, so only masked records
+cross the queue:
+
+```python
+handler = logging.handlers.QueueHandler(records)
+handler.addFilter(RedactSecretFilter())
+listener = logging.handlers.QueueListener(records, logging.StreamHandler())
+```
+
+`python/tests/test_logging_placement.py` asserts each supported placement and,
+as synthetic negative controls, that plaintext really does escape each wrong
+one.
+
+The filter changes nothing else about your configuration: each handler keeps
+its own formatter, named `extra_fields` still render, exception logging still
+works, and a record with no finding is formatted byte-for-byte as it would be
+without the filter. Masking an already-masked record again is a no-op, so two
+filtered handlers on one record are safe. What the filter does **not** cover:
+record attributes you did not name in `extra_fields`, and anything a custom
+formatter adds after it runs.
 
 ## Masking callbacks (Langfuse and similar)
 

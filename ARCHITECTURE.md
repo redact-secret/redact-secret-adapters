@@ -155,6 +155,29 @@ lexed. It is a second scan of each line, so it is a separate hook the host
 installs next to `logMethod` rather than a replacement: `logMethod` still keeps
 raw values away from the host's own serializers, formatters and `mixin()`.
 
+Because the pair is what covers the boundary and either hook alone leaves a
+plaintext path, `createRedactingHooks` returns both, shaped as pino's `hooks`
+option, so the complete setup is one call rather than two the host has to know
+to pair. The single-hook factories stay exported: they are the escape hatch for
+a host that knowingly has no bindings, `mixin()` or `base` and wants one scan
+per line, and the migration path from `0.1.0`/`0.1.1`.
+
+A host that already passes its own `hooks` hands them to the factory, which
+composes rather than replaces them. One rule decides the order, in both hooks:
+**redaction runs last, closest to the bytes.** The host's `logMethod` runs
+first and is handed a `method` that redacts and then calls pino's real one, so
+arguments the host's hook adds or rewrites are scanned, and a host hook that
+never calls `method` still drops the record. The host's `streamWrite` runs
+first on pino's own line and the redacting hook masks what it returns — pino
+requires a `streamWrite` hook to return valid JSON, which is what the line
+lexer is specified against — so fields the host's hook adds are scanned too. A
+throwing or non-string host `streamWrite` falls back to redacting pino's own
+line rather than letting it through. Keys other than these two are forwarded
+to pino unchanged: a future pino hook is neither dropped nor claimed as
+covered. What is still outside the boundary, and documented as such, is a
+destination or transport that adds text after `streamWrite`, and any hook the
+host wraps *around* the composed pair by hand.
+
 ### OpenTelemetry
 
 The processor wraps any object shaped like a `SpanProcessor` and, in `onEnd`
@@ -264,12 +287,25 @@ masked as its formatted traceback, also one L1 leaf, and cached `exc_text` and
 `stack_info` likewise. Only the `extra_fields` a caller names go through the L2
 walker.
 
-A `logging.Filter` runs only where it is attached. On a handler, it redacts the
-record before that handler formats it, and since the record is mutated in
-place, before any handler that runs afterwards; a handler without the filter
-that runs earlier sees plaintext. On a logger, it runs for records logged on
-that logger before any handler, but not for records propagated from child
-loggers. Attach it to every emitting handler.
+A `logging.Filter` runs only where it is attached, which makes *placement* the
+security decision in any application with more than one handler. On a handler,
+it redacts the record before that handler formats it, and since the record is
+mutated in place, before any handler that runs afterwards; a handler without
+the filter that runs earlier sees plaintext. On a logger, it runs for records
+logged on that logger before any handler, but not for records propagated from
+child loggers — nor does a filter on an ancestor logger cover a child's own
+handlers. For a `QueueHandler`/`QueueListener` pair the filter belongs on the
+`QueueHandler`, which runs in the emitting thread, so only masked records cross
+the queue; on the listener's sink it protects the final destination but not the
+queue, and not wherever a `QueueHandler` subclass sends the record instead (a
+socket, a `multiprocessing` queue). Attach it to every emitting handler.
+
+Because none of that can be enforced from inside a filter, it is held by tests
+instead: `python/tests/test_logging_placement.py` asserts each supported
+placement and, as synthetic negative controls, that plaintext really does
+escape each wrong one. The filter is idempotent, so two filtered handlers on
+one record are safe, and a record with no finding is formatted exactly as it
+would be without the filter.
 
 ## Cross-language contract
 

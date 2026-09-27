@@ -20,6 +20,20 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+### Changed
+
+- The README now states where `RedactSecretFilter` has to be attached in an
+  application with more than one handler, with propagating child loggers, or
+  with a `QueueHandler`/`QueueListener` pair, and what each wrong placement
+  leaves unprotected (redact-secret/redact-secret-adapters#48). No code
+  change: a `logging.Filter` runs only where it is attached, so placement was
+  always the security decision — it was documented in one line under a
+  single-handler example that could be read as global automatic protection.
+  `python/tests/test_logging_placement.py` asserts each supported placement
+  and, as synthetic negative controls, that plaintext really does escape each
+  wrong one; the wheel smoke test now installs the multi-handler setup the
+  README recommends instead of attaching the filter to a logger.
+
 ### Deprecated
 
 - `RedactSecretFilter(name=...)`: it was accepted but never honored (the

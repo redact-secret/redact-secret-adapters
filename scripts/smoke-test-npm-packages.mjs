@@ -114,6 +114,34 @@ function main() {
     console.log("+ node smoke-test.mjs");
     execFileSync(process.execPath, ["smoke-test.mjs"], { cwd: projectDir, stdio: "inherit" });
 
+    // 5a. adapter-pino's README example, verbatim, on the real core and a
+    // real pino logger: the complete documented boundary (both hooks), with
+    // the secret in the message, an interpolation value, a merging object
+    // behind a serializer, a child binding and `mixin()` output. The
+    // assertions read the bytes that reached the destination.
+    writeFileSync(join(projectDir, "pino-example.mjs"), readmeExample("adapter-pino"));
+    console.log("+ node pino-example.mjs");
+    const pinoPrinted = execFileSync(process.execPath, ["pino-example.mjs"], {
+      cwd: projectDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    const pinoLine = JSON.parse(pinoPrinted.trim().split("\n").at(-1));
+    if (pinoPrinted.includes("ghp_SYNTHETIC")) {
+      throw new Error("adapter-pino: the synthetic token reached the destination in plaintext");
+    }
+    // msg and req.auth come from `logMethod`; session (a child binding) only
+    // from `streamWrite`. Asserting both is what proves the pair is installed.
+    if (
+      pinoLine.msg !== "deploy with token <SECRET_1>" ||
+      pinoLine.req?.auth !== "Bearer <SECRET_1>" ||
+      pinoLine.session !== "<SECRET_1>" ||
+      pinoLine.requestId !== "req-42"
+    ) {
+      throw new Error(`adapter-pino: unexpected destination line ${JSON.stringify(pinoLine)}`);
+    }
+    console.log("@redact-secret/adapter-pino: README example ok");
+
     // 5b. adapter-ai-context's README example, verbatim, on the real core.
     writeFileSync(join(projectDir, "ai-context-example.mjs"), readmeExample("adapter-ai-context"));
     console.log("+ node ai-context-example.mjs");
@@ -191,7 +219,7 @@ const SMOKE_TEST_MJS = `import assert from "node:assert/strict";
 import pino from "pino";
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { BLOCK_MARKER, ERROR_MARKER, maskSecretsWith } from "@redact-secret/adapter";
-import { createRedactingLogMethodWith } from "@redact-secret/adapter-pino";
+import { createRedactingHooksWith, createRedactingLogMethodWith } from "@redact-secret/adapter-pino";
 import { RedactingSpanProcessorWith } from "@redact-secret/adapter-otel";
 import { createAiContextBoundaryWith } from "@redact-secret/adapter-ai-context";
 import { createMcpBoundaryWith, mcpBlockedResult, toCallToolResult } from "@redact-secret/adapter-mcp";
@@ -214,6 +242,24 @@ logger.info("token is %s", "SECRET_TOKEN_1");
 const raw = chunks.join("");
 assert.ok(raw.includes("<SECRET_1>"), "expected the masked marker in the pino output");
 assert.ok(!raw.includes("SECRET_TOKEN_1"), "the plaintext secret reached the pino transport");
+
+// The paired factory, composing a host hook, over a child binding that only
+// the streamWrite half of the pair can see.
+const pairChunks = [];
+const paired = pino(
+  {
+    base: null,
+    timestamp: false,
+    hooks: createRedactingHooksWith(fakeScanAndRedact, {
+      hooks: { logMethod(args, method) { method.apply(this, args); } },
+    }),
+  },
+  { write(chunk) { pairChunks.push(chunk); return true; } },
+);
+paired.child({ session: "SECRET_TOKEN_2" }).info("plain");
+const pairedLine = JSON.parse(pairChunks.join(""));
+assert.equal(pairedLine.session, "<SECRET_1>", "a child binding reached the destination unmasked");
+assert.equal(pairedLine.msg, "plain");
 console.log("@redact-secret/adapter-pino: ok");
 
 // @redact-secret/adapter-otel: a real span through the packed adapter.
@@ -271,9 +317,13 @@ import {
   type ScanAndRedact,
 } from "@redact-secret/adapter";
 import {
+  createRedactingHooks,
+  createRedactingHooksWith,
   createRedactingLogMethod,
   createRedactingLogMethodWith,
   formatPinoMessage,
+  type RedactingHooks,
+  type RedactingHooksOptions,
   type RedactingLogMethod,
 } from "@redact-secret/adapter-pino";
 import {
@@ -317,7 +367,10 @@ void maskLogValueWith(scanner, "x");
 void createMaskSecrets;
 
 const logMethod: RedactingLogMethod = createRedactingLogMethodWith(scanner);
-void pino;
+const hookOptions: RedactingHooksOptions = { hooks: { logMethod } };
+const redactingHooks: RedactingHooks = createRedactingHooksWith(scanner, hookOptions);
+void pino({ hooks: redactingHooks });
+void createRedactingHooks;
 void createRedactingLogMethod;
 void formatPinoMessage;
 void logMethod;
