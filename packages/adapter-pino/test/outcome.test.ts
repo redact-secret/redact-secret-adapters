@@ -256,6 +256,41 @@ test("a destination that fails after masking still reports one outcome, and does
   expect(outcomes[0]?.lineReplaced).toBe(false);
 });
 
+test("observing does not change a byte of the output, msgPrefix included", () => {
+  // `logMethod` reads `this.msgPrefix` off the logger to scan a prefix
+  // together with the message. The observing wrapper hands the redacting hook
+  // a `method` of its own, so `this` has to survive two layers — if it did
+  // not, the prefix would stop giving the core its context and nothing else
+  // would fail.
+  const write = (into: string[]) => ({
+    write(chunk: string) {
+      into.push(chunk);
+      return true;
+    },
+  });
+  const plain: string[] = [];
+  const observed: string[] = [];
+  const outcomes: PinoLogOutcome[] = [];
+  const base: pino.LoggerOptions = { base: null, timestamp: false };
+  pino({ ...base, hooks: createRedactingHooksWith(fakeScanAndRedact) }, write(plain))
+    .child({}, { msgPrefix: "api_key=" })
+    .info("SECRET_TOKEN_1");
+  pino(
+    {
+      ...base,
+      hooks: createRedactingHooksWith(fakeScanAndRedact, { onOutcome: (outcome) => outcomes.push(outcome) }),
+    },
+    write(observed),
+  )
+    .child({}, { msgPrefix: "api_key=" })
+    .info("SECRET_TOKEN_1");
+
+  expect(observed.join("")).toBe(plain.join(""));
+  expect(plain.join("")).toContain('"msg":"api_key=<SECRET_1>"');
+  expect(outcomes).toHaveLength(1);
+  expect(outcomes[0]?.values.redacted).toBe(1);
+});
+
 test("without onOutcome the hooks are the plain pair and nothing is observed", () => {
   const hooks = createRedactingHooksWith(fakeScanAndRedact);
   expect(Object.keys(hooks).sort()).toEqual(["logMethod", "streamWrite"]);
