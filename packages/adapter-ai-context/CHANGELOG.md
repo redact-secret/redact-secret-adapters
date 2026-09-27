@@ -28,6 +28,18 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   conformance replay.
 - The `AiContextLimits` and `AiContextBoundaryOptionsWithDefaults` types.
 
+### Fixed
+
+- `withDefaultLimits` reads `policy`, `placeholderFormatter` and `onFinding`
+  by name rather than by spreading `options`, so an options object layered over
+  a shared base (`Object.create(defaults)`) keeps them.
+  `createAiContextBoundaryWith` destructures its options, which follows the
+  prototype chain, so before this an inherited `policy` would have been
+  silently dropped and the boundary would have run on the core's default
+  policy — a quiet weakening, with no error. An inherited limit set is used
+  rather than overwritten by the preset, and a key this helper does not know
+  about is forwarded rather than dropped.
+
 ### Changed
 
 - The README leads with the short call and moves the limits below it, with a

@@ -129,6 +129,30 @@ class SpanOutcomeTest(unittest.TestCase):
         self.assertEqual(len(next_processor.exported), 2)
         self.assertEqual(next_processor.exported[0]._attributes["a"], "<SECRET_1>")
 
+    def test_a_downstream_processor_that_ends_a_span_does_not_steal_this_spans_counts(self) -> None:
+        # The re-entrant path that is *not* the observer: a processor that
+        # emits a span of its own re-enters ``on_end`` from inside
+        # ``next.on_end``, before this span has been reported. Each span must
+        # still report its own numbers.
+        outcomes: list[SpanOutcome] = []
+        processor: RedactingSpanProcessorWith
+
+        class NestingNext(FakeNextProcessor):
+            def on_end(self, span) -> None:
+                super().on_end(span)
+                if span._name == "outer":
+                    processor.on_end(FakeSpan(attributes={"b": "plain"}, name="nested"))
+
+        processor = RedactingSpanProcessorWith(NestingNext(), fake_scan_and_redact, on_outcome=outcomes.append)
+        processor.on_end(FakeSpan(attributes={"a": _TOKEN + "20"}, name="outer"))
+
+        self.assertEqual(len(outcomes), 2)
+        # The nested span is reported first, then the outer one with its own
+        # redaction -- not a fresh, empty counter.
+        self.assertEqual(outcomes[0].values.redacted, 0)
+        self.assertEqual(outcomes[1].values.redacted, 1)
+        self.assertEqual(outcomes[1].values.scanned, 2)
+
     def test_an_observer_that_ends_another_span_does_not_recurse(self) -> None:
         outcomes: list[SpanOutcome] = []
         processor: RedactingSpanProcessorWith

@@ -83,6 +83,33 @@ describe("withDefaultLimits", () => {
     expect(() => withDefaultLimits(null as unknown as undefined)).toThrow(TypeError);
   });
 
+  test("an option reaching options through a prototype is kept, not silently dropped", () => {
+    // `createAiContextBoundaryWith` destructures `options`, which follows the
+    // prototype chain, so an options object layered over a shared base kept
+    // its `policy` before this helper existed. A plain spread would drop it
+    // and the boundary would quietly run on the core's default policy.
+    const policy = (() => "redact") as unknown as AiContextBoundaryOptions["policy"];
+    const onFinding = () => {};
+    const layered = Object.create({ policy, onFinding }) as AiContextBoundaryOptions;
+    const resolved = withDefaultLimits(layered);
+
+    expect(resolved.policy).toBe(policy);
+    expect(resolved.onFinding).toBe(onFinding);
+    expect(resolved.traversalLimits).toBe(AI_CONTEXT_DEFAULT_LIMITS.traversalLimits);
+  });
+
+  test("an inherited limit set is used, rather than overwritten by the preset", () => {
+    const traversalLimits = { maxDepth: 2, maxNodes: 8 };
+    const layered = Object.create({ traversalLimits }) as AiContextBoundaryOptions;
+    expect(withDefaultLimits(layered).traversalLimits).toBe(traversalLimits);
+  });
+
+  test("an option this helper does not know about is forwarded rather than dropped", () => {
+    // Forward compatibility: a key the boundary adds later must survive.
+    const resolved = withDefaultLimits({ future: "kept" } as unknown as AiContextBoundaryOptions);
+    expect((resolved as unknown as Record<string, unknown>).future).toBe("kept");
+  });
+
   test("a limit key that is present but undefined is left undefined, so it still fails loudly", () => {
     // `traversalLimits: config.limits` with a missing `config` is a caller's
     // bug. Turning it into the preset would hide it, so the key is kept and

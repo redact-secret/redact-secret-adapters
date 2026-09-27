@@ -63,8 +63,12 @@ function redactLine(scanAndRedact: ScanAndRedact, line: string, options: MaskOpt
   let out = "";
   let last = 0;
   spans.forEach(([start, end], index) => {
-    // Values past maxArrayLength were dropped by the walk: never pass them through.
-    const value = index < masked.length ? masked[index] : LIMIT_MARKER;
+    // Values past maxArrayLength were dropped by the walk: never pass them
+    // through. The walk could not count them — it never saw them — so they are
+    // counted here, or `limited` would under-report exactly the refused values.
+    const dropped = index >= masked.length;
+    if (dropped && options.counter !== undefined) options.counter.limited += 1;
+    const value = dropped ? LIMIT_MARKER : masked[index];
     if (value === values[index]) return;
     out += `${line.slice(last, start)}${JSON.stringify(value)}`;
     last = end;

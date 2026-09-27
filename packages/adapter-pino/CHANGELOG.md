@@ -57,6 +57,28 @@ tarball (`files` in `package.json`), so a consumer can read it from
 - `PINO_ERROR_LINE`, the exact line written in that case, so a host can
   recognise it without pattern-matching.
 
+### Fixed
+
+- The counter the walkers are given is resolved per masking call, so a log
+  emitted from a **getter or `toJSON()` on the merging object** — which runs
+  *during* the walk, unlike a `mixin()` or serializer that logs after it — no
+  longer takes the outer record's partial counts with it. Both records now
+  report only the values they carried. Masking was never affected; only the
+  attribution was.
+- A value the walk dropped past `maxArrayLength` and `streamWrite` replaced
+  with `[REDACTED:LIMIT_EXCEEDED]` is now counted as `limited`. The walk could
+  not count it — it never saw it — so `limited` under-reported exactly the
+  values that were refused.
+- A caller's own `MaskOptions.counter` is no longer discarded when `onOutcome`
+  is set: each record's counts are added into it once the record is reported.
+
+### Documented
+
+- A host `streamWrite` hook receives pino's line **unmasked** (bindings and
+  `mixin()` output included), because the ordering rule runs it first. What
+  reaches the destination is masked either way, but a host hook that tees or
+  copies the line elsewhere is handling plaintext.
+
 ### Changed
 
 - `@redact-secret/adapter` range raised from `^0.1.1` to `^0.1.3`, the

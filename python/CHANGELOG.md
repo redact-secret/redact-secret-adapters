@@ -54,6 +54,17 @@ can read it without leaving their environment.
   `redact_attributes_with`, so a processor reporting outcomes would have
   counted only the span and event names. Found by the new per-span count
   tests.
+- The per-span counter is saved and restored around `on_end`, and its values
+  are snapshotted before the span is handed to the next processor. A
+  downstream processor that ends a span synchronously inside `next.on_end`
+  re-enters `on_end` before the outer span has been reported, and used to
+  leave the outer span reporting an **empty** counter. Redaction and export
+  were never affected — only the reported numbers.
+
+Note on `mask_leaf_outcome_with`: counting findings needs
+`len(result.findings)`, so a malformed core result whose `findings` has no
+length (a generator) now fails closed to `ERROR_MARKER` where `0.1.0` returned
+the masked text. That is the direction a malformed result should fail in.
 
 ### Changed
 

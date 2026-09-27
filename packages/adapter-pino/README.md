@@ -96,6 +96,12 @@ Two things still run after the last scan and are outside this boundary: a
 *around* the composed pair by hand. A custom hook placed there can introduce
 new plaintext after sanitation.
 
+One consequence of that ordering to be aware of: because your `streamWrite`
+runs **first**, it receives pino's line **unmasked** — child bindings and
+`mixin()` output included, the two inputs `logMethod` cannot cover. A hook that
+transforms the line it is given and returns it is fine; a hook that tees,
+copies or logs that line somewhere else is handling plaintext.
+
 ## Counting what happened
 
 Since `0.1.2`, `createRedactingHooks({ onOutcome })` reports one summary per

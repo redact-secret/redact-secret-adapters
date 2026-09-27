@@ -47,6 +47,15 @@ tarball (`files` in `package.json`), so a consumer can read it from
   `redactAttributesWith`, so a processor reporting outcomes would have
   counted only the span and event names. Found by the new per-span count
   tests.
+- The per-span counter is now call-local, and the values are snapshotted
+  before the span is handed to the next processor. A downstream processor that
+  ends a span synchronously inside `next.onEnd` — a `SimpleSpanProcessor` over
+  an instrumented exporter, or any processor that emits a span of its own —
+  re-enters `onEnd` before the outer span has been reported, and used to
+  overwrite its counts: both outcomes reported the nested span's numbers. The
+  `#reporting` guard did not cover this, because the re-entry is through
+  `next.onEnd` rather than through the observer. Redaction and export were
+  never affected — only the reported numbers.
 
 ### Changed
 

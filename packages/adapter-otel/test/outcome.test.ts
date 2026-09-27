@@ -142,6 +142,31 @@ test("an observer that throws changes neither the export nor the next span", () 
   expect(exported[0]?.attributes.a).toBe("<SECRET_1>");
 });
 
+test("a downstream processor that ends a span synchronously does not steal this span's counts", () => {
+  // The re-entrant path that is *not* the observer: a `SimpleSpanProcessor`
+  // over an instrumented exporter, or any processor that emits a span of its
+  // own, re-enters `onEnd` from inside `next.onEnd` — before this span has
+  // been reported. Each span must still report its own numbers.
+  const outcomes: OtelSpanOutcome[] = [];
+  let processor: RedactingSpanProcessorWith;
+  const next = {
+    onEnd(span: ReadableSpan) {
+      if (span.name === "outer") processor.onEnd(spanLike({ b: "plain" }, "nested"));
+    },
+  } as unknown as SpanProcessor;
+  processor = new RedactingSpanProcessorWith(next, fakeScanAndRedact, {
+    onOutcome: (outcome) => outcomes.push(outcome),
+  });
+  processor.onEnd(spanLike({ a: "SECRET_TOKEN_1" }, "outer"));
+
+  expect(outcomes).toHaveLength(2);
+  // The nested span first (it is reported before the outer one unwinds), then
+  // the outer span with its own redaction.
+  expect(outcomes[0]?.values.redacted).toBe(0);
+  expect(outcomes[1]?.values.redacted).toBe(1);
+  expect(outcomes[1]?.values.scanned).toBe(2);
+});
+
 test("an observer that ends another span does not recurse", () => {
   const outcomes: OtelSpanOutcome[] = [];
   let processor: RedactingSpanProcessorWith;

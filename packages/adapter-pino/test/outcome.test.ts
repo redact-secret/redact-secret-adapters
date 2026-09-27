@@ -6,10 +6,11 @@
  * what is written.
  */
 
+import { createOutcomeCounter } from "@redact-secret/adapter";
 import pino from "pino";
 import { expect, test } from "vitest";
-
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
+
 import { createRedactingHooksWith, type PinoLogOutcome, type RedactingHooksOptions } from "../src/index.js";
 
 function observedLogger(
@@ -186,6 +187,47 @@ test("an observer that logs through the same logger does not recurse", () => {
   // One outcome for the original record; the nested one is not reported.
   expect(observed).toBe(1);
   expect(chunks.join("")).toContain("observer says hello");
+});
+
+test("a getter that logs during the walk does not steal the outer record's counts", () => {
+  // The re-entrant path that is *not* the observer and *not* a serializer: a
+  // getter (or `toJSON()`) on the merging object runs while the walk is
+  // masking, so a log from there opens a nested record mid-pass. Each record
+  // must report only the values it actually carried.
+  const { logger, outcomes, raw } = observedLogger();
+  logger.info(
+    {
+      token: "SECRET_TOKEN_1",
+      get lazy() {
+        logger.warn("nested");
+        return "SECRET_TOKEN_2";
+      },
+    },
+    "msg",
+  );
+
+  expect(raw()).not.toMatch(/SECRET_TOKEN_\d/);
+  expect(outcomes).toHaveLength(2);
+  const [nested, outer] = outcomes;
+  // The nested record is one plain message plus its line value: no finding.
+  expect(nested?.level).toBe(40);
+  expect(nested?.values).toMatchObject({ findings: 0, redacted: 0, scanned: 2 });
+  // The outer record carried both secrets, across both hooks.
+  expect(outer?.level).toBe(30);
+  expect(outer?.values).toMatchObject({ findings: 2, redacted: 2, scanned: 6 });
+});
+
+test("a caller's own counter accumulates every record, not just the last", () => {
+  // `counter` is a documented public option of `MaskOptions`; setting
+  // `onOutcome` must not quietly discard it.
+  const mine = createOutcomeCounter();
+  const { logger, outcomes } = observedLogger({ counter: mine });
+  logger.info("token is %s", "SECRET_TOKEN_1");
+  logger.info("plain");
+
+  expect(outcomes).toHaveLength(2);
+  expect(mine.redacted).toBe(1);
+  expect(mine.scanned).toBe(outcomes.reduce((total, outcome) => total + outcome.values.scanned, 0));
 });
 
 test("an outcome carries no value, key, marker or message text", () => {

@@ -176,7 +176,20 @@ line rather than letting it through. Keys other than these two are forwarded
 to pino unchanged: a future pino hook is neither dropped nor claimed as
 covered. What is still outside the boundary, and documented as such, is a
 destination or transport that adds text after `streamWrite`, and any hook the
-host wraps *around* the composed pair by hand.
+host wraps *around* the composed pair by hand. That ordering has one
+consequence worth naming: a host `streamWrite` receives pino's line
+**unmasked**, bindings and `mixin()` output included, so a hook that tees or
+copies the line elsewhere is handling plaintext even though what reaches the
+destination is masked.
+
+Reporting an outcome per record (#45) rides on the same seam. The two hooks
+share a stack of in-flight records and the counter handed to the walkers is
+resolved per masking call, because this path is re-entrant in three different
+ways: `mixin()` and a serializer can log *after* masking, and a getter or
+`toJSON()` on the merging object can log *during* the walk. A single shared
+counter would give a nested record the outer record's partial numbers. The
+masking is unaffected either way; only the attribution was, which is why it
+took a test that logs from a getter to catch it.
 
 ### OpenTelemetry
 

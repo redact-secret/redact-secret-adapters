@@ -210,35 +210,44 @@ export class RedactingSpanProcessorWith implements SpanProcessor {
 
   /** Never throws: a span that cannot be redacted is dropped, not exported. */
   onEnd(span: ReadableSpan): void {
+    const counting = this.#onOutcome !== undefined;
     // A fresh counter per span, so `onOutcome` reports this span's values and
-    // not a running total. Read through a getter by `#mask`.
-    if (this.#onOutcome !== undefined) this.#counter = createOutcomeCounter();
+    // not a running total, and the previous one is restored: a downstream
+    // processor may end a span synchronously inside `#next.onEnd` below (a
+    // `SimpleSpanProcessor` over an instrumented exporter, or any processor
+    // that emits a span of its own), which re-enters this method.
+    const outer = this.#counter;
+    if (counting) this.#counter = createOutcomeCounter();
     let dropped = false;
+    let counts: ValueCounts | undefined;
     try {
-      redactSpan(this.#mask, span);
-    } catch (error) {
-      this.#warnDropped(error instanceof UnredactableFieldError ? error.message : "unexpected span shape");
-      dropped = true;
+      try {
+        redactSpan(this.#mask, span);
+      } catch (error) {
+        this.#warnDropped(error instanceof UnredactableFieldError ? error.message : "unexpected span shape");
+        dropped = true;
+      }
+      // Snapshotted before delegating, because this span's numbers are final
+      // here and `#report` runs after a nested `onEnd` may have replaced the
+      // field.
+      if (counting) counts = toValueCounts(this.#counter);
+    } finally {
+      this.#counter = outer;
     }
     // Reported whether the span was forwarded or dropped, and after the next
     // processor has had it, so an observer cannot affect what is exported.
     try {
       if (!dropped) this.#next.onEnd(span);
     } finally {
-      this.#report(dropped);
+      if (counts !== undefined) this.#report(counts, dropped);
     }
   }
 
-  #report(dropped: boolean): void {
+  #report(values: ValueCounts, dropped: boolean): void {
     if (this.#onOutcome === undefined || this.#reporting) return;
     this.#reporting = true;
     try {
-      notify(this.#onOutcome, {
-        host: "otel",
-        unit: "span",
-        values: toValueCounts(this.#counter),
-        dropped,
-      } satisfies OtelSpanOutcome);
+      notify(this.#onOutcome, { host: "otel", unit: "span", values, dropped } satisfies OtelSpanOutcome);
     } finally {
       this.#reporting = false;
     }

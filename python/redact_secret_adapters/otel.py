@@ -53,7 +53,7 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only, no runtime dependenc
     from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor
 
 from .mask_leaf import ERROR_MARKER, count_leaf, mask_leaf_outcome_with
-from .outcome import OutcomeCounter, SpanOutcome, notify
+from .outcome import OutcomeCounter, SpanOutcome, ValueCounts, notify
 
 __all__ = ["RedactingSpanProcessorWith", "create_redacting_span_processor", "redact_attributes_with"]
 
@@ -238,11 +238,15 @@ class RedactingSpanProcessorWith:
 
     def on_end(self, span: "ReadableSpan") -> None:
         # A fresh counter per span, so an outcome reports this span's values
-        # and not a running total.
+        # and not a running total, and the previous one is restored: a
+        # downstream processor may end a span synchronously inside
+        # ``self._next.on_end`` below, which re-enters this method.
         counting = self._on_outcome is not None
+        outer = getattr(self._state, "counter", None)
         if counting:
             self._state.counter = OutcomeCounter()
         dropped = False
+        values = None
         try:
             self._redact_span(span)
         except Exception as error:
@@ -257,24 +261,30 @@ class RedactingSpanProcessorWith:
                     RuntimeWarning,
                     stacklevel=2,
                 )
+        finally:
+            # Snapshotted before delegating: this span's numbers are final
+            # here, and _report runs after a nested on_end may have replaced
+            # the thread-local counter.
+            if counting:
+                values = (getattr(self._state, "counter", None) or OutcomeCounter()).snapshot()
+            self._state.counter = outer
+
         try:
             if not dropped:
                 self._next.on_end(span)
         finally:
-            if counting:
-                self._report(dropped)
+            if values is not None:
+                self._report(values, dropped)
 
-    def _report(self, dropped: bool) -> None:
+    def _report(self, values: ValueCounts, dropped: bool) -> None:
         """Reports one outcome per span, whether it was forwarded or dropped,
         and after the next processor has had it, so an observer cannot affect
         what is exported."""
-        counter = getattr(self._state, "counter", None) or OutcomeCounter()
-        self._state.counter = None
         if getattr(self._state, "reporting", False):
             return
         self._state.reporting = True
         try:
-            notify(self._on_outcome, SpanOutcome(values=counter.snapshot(), dropped=dropped))
+            notify(self._on_outcome, SpanOutcome(values=values, dropped=dropped))
         finally:
             self._state.reporting = False
 

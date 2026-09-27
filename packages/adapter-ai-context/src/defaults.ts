@@ -69,6 +69,19 @@ export type AiContextBoundaryOptionsWithDefaults = Omit<
 const LIMIT_KEYS = ["wholeInputLimits", "incrementalLimits", "traversalLimits"] as const;
 
 /**
+ * Every documented key of {@link AiContextBoundaryOptions}, read by name.
+ *
+ * `createAiContextBoundaryWith` destructures `options`, which follows the
+ * prototype chain, so an options object layered over a shared base
+ * (`Object.create(defaults)`) kept its `policy` before this module existed. A
+ * plain spread copies own enumerable properties only and would drop it — which
+ * would silently run the boundary on the core's default policy. So the three
+ * non-limit keys are read with `in` and a property read, both of which follow
+ * the chain.
+ */
+const OPTION_KEYS = [...LIMIT_KEYS, "policy", "placeholderFormatter", "onFinding"] as const;
+
+/**
  * Fills in any limit set `options` **omits** from
  * {@link AI_CONTEXT_DEFAULT_LIMITS}, and returns complete
  * {@link AiContextBoundaryOptions}.
@@ -85,7 +98,8 @@ const LIMIT_KEYS = ["wholeInputLimits", "incrementalLimits", "traversalLimits"] 
  *    `createAiContextBoundaryWith`'s validation and throws, exactly as before
  *    this preset existed.
  * 3. Everything that is not a limit set (`policy`, `placeholderFormatter`,
- *    `onFinding`) passes through untouched.
+ *    `onFinding`) passes through untouched, **including when it reaches
+ *    `options` through a prototype** — see {@link OPTION_KEYS}.
  *
  * That is the whole migration path: an existing caller that passes all three
  * sets gets exactly what it passed, an existing caller that passed a broken
@@ -96,11 +110,14 @@ export function withDefaultLimits(options: AiContextBoundaryOptionsWithDefaults 
   if (options === null || typeof options !== "object") {
     throw new TypeError("createAiContextBoundary: options are required");
   }
-  const resolved = { ...options } as Record<string, unknown>;
-  for (const key of LIMIT_KEYS) {
-    // `in`, not `?? default`: an explicit `undefined` is a caller's bug, not
-    // an omission, and must still fail loudly.
-    if (!(key in options)) resolved[key] = AI_CONTEXT_DEFAULT_LIMITS[key];
-  }
+  const source = options as Record<string, unknown>;
+  // Own enumerable keys first, so a key this module does not know about — a
+  // future option the boundary adds — is still forwarded rather than dropped.
+  const resolved: Record<string, unknown> = { ...options };
+  // Both `in` and the read follow the prototype chain, which a spread does not.
+  for (const key of OPTION_KEYS) if (key in source) resolved[key] = source[key];
+  // `in`, not `?? default`: an explicit `undefined` is a caller's bug, not an
+  // omission, and must still fail loudly.
+  for (const key of LIMIT_KEYS) if (!(key in source)) resolved[key] = AI_CONTEXT_DEFAULT_LIMITS[key];
   return resolved as unknown as AiContextBoundaryOptions;
 }

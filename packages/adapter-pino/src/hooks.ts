@@ -23,8 +23,14 @@
  *
  * What is still outside the boundary: a `destination`/transport that adds
  * text of its own after `streamWrite`, and a host hook wrapped *around* the
- * composed pair by hand. Both run after the last scan. See
- * ARCHITECTURE.md § pino.
+ * composed pair by hand. Both run after the last scan.
+ *
+ * And one consequence of that ordering, which a host has to know: because the
+ * host's `streamWrite` runs **first**, it receives pino's line **unmasked** —
+ * including child bindings and `mixin()` output, the two inputs `logMethod`
+ * cannot cover. A host hook that only transforms the line it is given and
+ * returns it is fine; one that tees, copies or logs the line elsewhere is
+ * reading plaintext. See ARCHITECTURE.md § pino.
  */
 
 import type { MaskOptions, OutcomeCounter, ScanAndRedact, ValueCounts } from "@redact-secret/adapter";
@@ -161,9 +167,11 @@ interface PendingRecord {
  * `logMethod` runs, then the line is built, then `streamWrite` runs. So the
  * `logMethod` pass opens a record, the `streamWrite` pass adds to it and
  * reports it, and the `logMethod` wrapper reports it itself if no line ever
- * arrived (a destination that threw, a `streamWrite` the host replaced). A
- * stack, not a single slot, because a serializer or `mixin()` that logs
- * re-enters this path.
+ * arrived (a destination that threw, a `streamWrite` the host replaced).
+ *
+ * A stack, not a single slot, because this path is re-entrant: a `mixin()` or
+ * a serializer that logs re-enters it after masking, and a **getter or
+ * `toJSON()` on the merging object that logs re-enters it during the walk**.
  *
  * One scratch counter is reused and drained after each pass, rather than one
  * per call: the walkers only ever increment what they are given, so draining
@@ -174,19 +182,22 @@ function observed(
   maskOptions: MaskOptions,
   onOutcome: (outcome: PinoLogOutcome) => void,
 ): { logMethod: RedactingLogMethod; streamWrite: RedactingStreamWrite } {
-  const scratch = createOutcomeCounter();
-  const inner = {
-    logMethod: createRedactingLogMethodWith(scanAndRedact, { ...maskOptions, counter: scratch }),
-    streamWrite: createRedactingStreamWriteWith(scanAndRedact, { ...maskOptions, counter: scratch }),
-  };
   const stack: PendingRecord[] = [];
   let reporting = false;
-
-  function drain(into: OutcomeCounter, stage: PinoRedactionStage, stages: PinoRedactionStage[]): void {
-    addCounts(into, scratch);
-    for (const key of Object.keys(scratch) as (keyof OutcomeCounter)[]) scratch[key] = 0;
-    stages.push(stage);
-  }
+  // Read fresh by `createWalkContext` on every masking call, so counts land on
+  // the record being masked right now, however deeply nested. A single shared
+  // counter drained after each pass would hand a nested record the outer
+  // record's partial numbers.
+  const counted: MaskOptions = {
+    ...maskOptions,
+    get counter(): OutcomeCounter | undefined {
+      return stack[stack.length - 1]?.counts;
+    },
+  };
+  const inner = {
+    logMethod: createRedactingLogMethodWith(scanAndRedact, counted),
+    streamWrite: createRedactingStreamWriteWith(scanAndRedact, counted),
+  };
 
   function report(pending: PendingRecord): void {
     pending.reported = true;
@@ -205,6 +216,15 @@ function observed(
     } finally {
       reporting = false;
     }
+  }
+
+  /**
+   * A caller's own `counter` is a documented option, so a record's counts are
+   * added to it as well. It is not handed to the walkers directly: they would
+   * then mix this record's numbers with the next one's.
+   */
+  function addToCallerCounter(counts: OutcomeCounter): void {
+    if (maskOptions.counter !== undefined) addCounts(maskOptions.counter, counts);
   }
 
   /** A line with no `logMethod` pass in flight: reported on its own, with no level. */
@@ -240,7 +260,7 @@ function observed(
           args,
           function afterMasking(this: Logger, ...masked: Parameters<LogFn>): void {
             // Masking is done; the line has not been built yet.
-            drain(pending.counts, "log-method", pending.stages);
+            pending.stages.push("log-method");
             method.apply(this, masked);
           } as LogFn,
           level,
@@ -248,24 +268,42 @@ function observed(
       } finally {
         const index = stack.lastIndexOf(pending);
         if (index !== -1) stack.splice(index, 1);
-        if (!pending.reported) report(pending);
+        if (!pending.reported) {
+          report(pending);
+          addToCallerCounter(pending.counts);
+        }
       }
     },
     streamWrite: function observedStreamWrite(line) {
-      const out = inner.streamWrite(line);
       const pending = stack[stack.length - 1];
-      const replaced = out === PINO_ERROR_LINE || out === `${PINO_ERROR_LINE}\n`;
       if (pending === undefined) {
-        // Rather than attribute it to an unrelated record.
-        const counts = createOutcomeCounter();
-        const stages: PinoRedactionStage[] = [];
-        drain(counts, "stream-write", stages);
-        reportOrphanLine(counts, stages, replaced);
+        // A line with no `logMethod` pass of ours in flight. It gets a record
+        // of its own rather than being attributed to an unrelated one, pushed
+        // first so the line's own values are counted onto it.
+        const orphan: PendingRecord = {
+          counts: createOutcomeCounter(),
+          stages: ["stream-write"],
+          level: -1,
+          lineReplaced: false,
+          reported: false,
+        };
+        stack.push(orphan);
+        let out: string;
+        try {
+          out = inner.streamWrite(line);
+        } finally {
+          stack.pop();
+        }
+        orphan.lineReplaced = out === PINO_ERROR_LINE || out === `${PINO_ERROR_LINE}\n`;
+        reportOrphanLine(orphan.counts, orphan.stages, orphan.lineReplaced);
+        addToCallerCounter(orphan.counts);
         return out;
       }
-      drain(pending.counts, "stream-write", pending.stages);
-      pending.lineReplaced = replaced;
+      const out = inner.streamWrite(line);
+      pending.stages.push("stream-write");
+      pending.lineReplaced = out === PINO_ERROR_LINE || out === `${PINO_ERROR_LINE}\n`;
       report(pending);
+      addToCallerCounter(pending.counts);
       return out;
     },
   };

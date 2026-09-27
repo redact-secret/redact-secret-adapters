@@ -79,8 +79,15 @@ def mask_leaf_outcome_with(
     max_string_length: Optional[int] = None,
 ) -> MaskedLeaf:
     """:func:`mask_leaf_with`, plus what happened, for a host adapter that
-    reports outcome counters. Exactly the same masking decisions; nothing
-    derived from the leaf's text is in the result besides the masked text."""
+    reports outcome counters. Nothing derived from the leaf's text is in the
+    result besides the masked text itself.
+
+    The masking decisions are the same, with one deliberate difference from
+    ``0.1.0``: counting the findings needs ``len(result.findings)``, so a
+    malformed core result whose ``findings`` has no length -- a generator --
+    now fails closed to ``ERROR_MARKER`` where it used to return the masked
+    text. That is the direction a malformed result should fail in.
+    """
     if not isinstance(text, str):
         raise TypeError("mask_leaf_with: text must be a str")
 
