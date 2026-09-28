@@ -14,6 +14,34 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+### Added
+
+- `pii` on `createMcpBoundary`, forwarded to `createAiContextBoundary` the
+  way the limits already are
+  (redact-secret/redact-secret-adapters#51). It activates core PII
+  selectors for the whole process. The factory's contract of never
+  rejecting is unchanged: a selection that cannot be shown to be active
+  fails every operation closed as `blocked` / `core_error`, which maps to
+  the fixed blocked result, rather than quietly sanitizing with PII off.
+
+### Fixed
+
+- An application that had already run `initialize({ pii })` got a boundary
+  that blocked everything, because the AI-context factory's argument-free
+  `initialize()` rejected with `PII_ACTIVATION_CONFLICT` against the
+  core's one-shot selection cell and that mapped to a fail-closed
+  `blocked` / `core_error`. That conflict now counts as success. Every
+  other initialization failure still fails closed exactly as before.
+
+### Documented
+
+- Activating PII is not the same as masking every PII value: under the
+  core's default policy `High`-confidence PII redacts while `Medium` and
+  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
+  an `ok` outcome can carry findings whose text was not changed. Supply
+  your own `policy` mapping those findings to `redact` if you need them
+  masked.
+
 ## [0.1.0-alpha.2] - 2026-09-27
 
 ### Added

@@ -183,7 +183,45 @@ limits.
 | `formatPinoMessage(fmt, values)` | Internal: the port of pino's message formatter the hook joins with. Kept for compatibility, not a supported API |
 
 `options` is `{ policy, limits }` for the single-hook factories, and
-`{ policy, limits, hooks }` for the pair.
+`{ policy, limits, hooks }` for the pair. Every live factory also takes `pii`.
+
+## PII detection is opt-in
+
+**Unreleased.** The core detects credentials out of the box; PII detection is a
+separate activation, and it is process-wide and one-shot — the first selection
+wins, and a later *different* one fails with `PII_ACTIVATION_CONFLICT`.
+
+Either order works. Activate it yourself before building the logger:
+
+```js
+await initialize({ pii: ["pii:global"] });
+const logger = pino({ hooks: await createRedactingHooks() }); // accepted, not fought over
+```
+
+or let the factory do it, which is the order to prefer when this adapter is the
+first thing in the process to touch the core:
+
+```js
+const logger = pino({ hooks: await createRedactingHooks({ pii: ["pii:global"] }) });
+```
+
+When you pass `pii`, the factory reads the core's `piiActivation()` afterwards
+and **rejects** if the active selection is not the one you asked for, rather
+than returning hooks that scan with PII silently off. The rejection carries a
+fixed `code` — `PII_ACTIVATION_NOT_ACTIVE`, or `PII_ACTIVATION_UNSUPPORTED`
+against a core too old to report an activation — and never echoes a selector,
+the input, or the core's own message. Omitting `pii` needs no newer core: the
+declared `@redact-secret/core` range is unchanged, and every other
+initialization failure still rejects exactly as it did.
+
+**Activation is not masking.** Under the core's default policy, PII types are
+confidence-gated rather than always redacted: a `High`-confidence finding
+redacts, while `Medium` and `Low` resolve to `warn` — and a `warn` finding
+leaves the text alone. Enabling PII therefore still lets lower-confidence PII
+reach the transport as plaintext. Pass your own `policy` mapping those findings
+to `redact` if you need them masked; this package decides nothing about policy.
+The outcome counters above make it visible: a record whose `values.findings`
+is non-zero while `values.redacted` stays at zero is exactly this case.
 
 ## Supported pino versions
 
