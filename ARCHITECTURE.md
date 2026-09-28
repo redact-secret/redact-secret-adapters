@@ -360,8 +360,58 @@ holding the two languages together, so they are shared — one copy, read by bot
 - Fixtures and tests use unmistakably synthetic values only. A real credential
   never enters this repository, in any file, including documentation.
 
+## The reversible boundary
+
+`@redact-secret/vault` is an opt-in, in-memory capture published by the sibling
+[`redact-secret-reversible`](https://github.com/redact-secret/redact-secret-reversible)
+repository. It replaces a detected secret with a `<rsv_…>` token on the way to
+a model and restores the original value into an application-designated field on
+the way back. **This repository does not depend on it, and must not**: the core
+and the adapters stay one-way. What is written down here is only how the two
+sit next to each other.
+
+| Owned here | Owned by the reversible repository |
+| --- | --- |
+| Host integrations: pino, OpenTelemetry, Python `logging`, AI context, MCP | `capture()`, the token mapping, `restore()` |
+| Fail-closed masking and the four markers | Reversibility, and every decision about who may reverse |
+
+Three rules follow, and all three are tests
+(`packages/*/test/vault-token.test.ts`, `python/tests/test_vault_token.py`,
+from the shared `fixtures/vault-token-cases.json`):
+
+- **Capture first, adapters after.** `capture()` and `createAiContextBoundary`
+  occupy the same seam — the path to the model — so the order is fixed. What
+  reaches an adapter is already tokenized text, and the adapter scans it as it
+  would any other string.
+- **A token passes through untouched.** No adapter here parses, rewrites or
+  restores a `<rsv_…>` token. A rewrite would not leak anything; it would
+  destroy a value the application still needs, and `restore()` would answer
+  `RESTORE_DENIED` with nothing to point at. The core reports no finding on a
+  token today, in a call argument, a `Bearer` header, an environment assignment
+  or a JSON value under `api_key` — and the pinned tests are what keeps a
+  widened detector from changing that silently.
+- **A restored value never reaches an observability sink.** Restoration puts
+  plaintext back; a log, a span or a model context is exactly where it must not
+  go. The adapters have no restoration to misuse, which is the point of keeping
+  it on the other side of the boundary.
+
+Two paths are known **not** to preserve a token, and both are this
+repository's documented fail-closed behavior rather than a bug: a leaf past
+`maxStringLength` becomes `[REDACTED:LIMIT_EXCEEDED]`, and a core failure
+becomes `[REDACTED:ERROR]`. Either replaces the whole leaf, tokens included,
+with no error raised. They are asserted explicitly in both languages so a
+reader meets them stated rather than as a value that can no longer be restored.
+
+Separately, no default this repository ships may emit the literal `rsv_`: the
+vault refuses any input that already contains one (`TOKEN_LITERAL_IN_INPUT`).
+A custom `placeholderFormatter` is a supported option of `adapter-ai-context`,
+so that is a test, not an assumption.
+
 ## Deliberate exclusions
 
+- **Restoration.** Reversibility, token mapping and `restore()` belong to
+  `@redact-secret/vault`; see [The reversible boundary](#the-reversible-boundary).
+  No adapter here gains a dependency on it, or vault-aware behavior of its own.
 - **Stream adapters** (Node `Transform`, Web `TransformStream`) belong to
   `@redact-secret/core` and stay there. The word "adapter" in this repository
   means an external host integration; the core repository additionally uses
