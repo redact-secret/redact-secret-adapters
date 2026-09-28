@@ -72,7 +72,9 @@ exercises*, which is a record, not a range:
 2. `npm run compat:check -- --resolve` reports what each range now resolves to
    without failing. Record the new `endpoints.highest` and
    `endpointsResolvedAt` in [`compatibility.json`](./compatibility.json) by
-   hand, keeping its formatting, and re-run `npm run compat:check`. CI's
+   hand, keeping its formatting, and re-run `npm run compat:check`, then
+   `npm run feed:generate` to carry the new endpoints into the
+   [site release feed](#the-site-release-feed). CI's
    `range-endpoints` and `python-range-endpoints` jobs then install exactly
    those endpoints on every run, which is what makes the record evidence rather
    than a claim.
@@ -100,7 +102,9 @@ the MCP SDK lines, `opentelemetry-sdk`.
    raise its dependency range to that version in the same PR. The
    `published-combination` CI job installs each package with the lowest
    published sibling its range admits and fails when the floor is too low
-   (#36).
+   (#36). Run `npm run feed:generate` and commit the regenerated
+   `site-feed/v1/adapters.json` in the same PR; CI's `lint` job fails while
+   it is stale.
 2. **Cut the train.** Run **Cut release candidate** (Actions → *Cut release
    candidate* → Run workflow, on `develop`). It computes the plan
    (`node scripts/release-plan.mjs` shows the same thing locally), pushes
@@ -151,6 +155,91 @@ the MCP SDK lines, `opentelemetry-sdk`.
 A dry run of the whole release (no publish, no tags) is **Release** with
 `dry_run` on, from any branch. On a branch with nothing bumped it runs CI
 and reports an empty plan.
+
+## The site release feed
+
+[`site-feed/v1/adapters.json`](site-feed/v1/adapters.json) is the adapter
+inventory redact-secret-www publishes, so that the site stops asking npm and
+PyPI what this repository ships (#61). It is generated, never edited:
+
+```bash
+npm run feed:generate   # rewrite it from the manifests
+npm run feed:check      # fail if the committed file is stale or schema-invalid (CI, lint job)
+```
+
+**Inputs.** `PACKAGES` in [`scripts/release-plan.mjs`](scripts/release-plan.mjs)
+(which packages ship, their id and tag prefix), each package's own manifest
+(name, declared version, sibling dependencies), and
+[`compatibility.json`](compatibility.json) (runtime, core and host ranges and
+their tested endpoints, already held equal to the manifests by
+`compat:check`). No Markdown, no registry lookup, no network.
+
+**Shape.** One entry per released package, in release-plan order:
+
+```json
+{
+  "schemaVersion": "redact-secret-adapters.release-feed/v1",
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "repository": "https://github.com/redact-secret/redact-secret-adapters",
+  "sources": ["scripts/release-plan.mjs", "compatibility.json", "packages/adapter/package.json", "..."],
+  "packages": [
+    {
+      "id": "adapter-pino",
+      "ecosystem": "npm",
+      "name": "@redact-secret/adapter-pino",
+      "version": "0.1.2",
+      "channel": "latest",
+      "prerelease": false,
+      "gitTag": "adapter-pino@0.1.2",
+      "sourcePath": "packages/adapter-pino",
+      "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-pino",
+      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "tested": ["20", "22", "24"] },
+      "core": { "name": "@redact-secret/core", "range": "^0.1.0-beta.6", "kind": "peerDependency", "optional": false,
+                "tested": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.10" } },
+      "hosts": [{ "name": "pino", "range": "^10.0.0", "kind": "peerDependency", "optional": false,
+                  "tested": { "lowest": "10.0.0", "highest": "10.3.1" } }],
+      "dependsOn": [{ "name": "@redact-secret/adapter", "range": "^0.1.3" }]
+    }
+  ]
+}
+```
+
+The schema, [`site-feed/v1/adapters.schema.json`](site-feed/v1/adapters.schema.json)
+(JSON Schema draft 2020-12), defines every field. `channel` is the npm
+dist-tag (`distTagFor`), or for PyPI `latest` / `alpha` / `beta` / `rc` /
+`dev` from the PEP 440 version.
+
+**Determinism.** The file is a pure function of its inputs. `generatedAt` is
+`compatibility.json`'s `endpointsResolvedAt` at midnight UTC, not the time the
+generator ran, so regenerating an unchanged tree reproduces the committed bytes
+exactly; that equality is what `feed:check` tests. The feed does not carry its
+own revision or digest, because a file cannot name the commit it is in.
+
+**Consuming it.** Fetch the file at a full commit SHA,
+`https://raw.githubusercontent.com/redact-secret/redact-secret-adapters/<40-hex sha>/site-feed/v1/adapters.json`,
+record that SHA as the source revision, and compute the SHA-256 of the bytes
+received. Resolve the SHA from **`main`**: `version` is the version the
+manifest *declares*, and only `main` (and `release`) are guaranteed to declare
+published versions, since reconcile verifies every one is on its registry
+before it opens `release → main`. On `develop` a version may be bumped ahead
+of the next train and not installable yet. Refuse a `schemaVersion` you do not
+recognise, and validate against the schema fetched at the same SHA: the schema
+is closed (`additionalProperties: false`), so it describes exactly the file
+beside it.
+
+**Compatibility policy.** Within `v1`, fields may be *added* (a consumer
+ignores what it does not know; the schema here is updated in the same PR), and
+packages may appear or disappear as the release plan changes. Removing or
+renaming a field, changing a field's type or meaning, or changing the
+determinism rule above is a breaking change: it ships as a new
+`site-feed/v2/adapters.json` and `adapters.schema.json` with
+`schemaVersion` `redact-secret-adapters.release-feed/v2`, and `v1` keeps being
+generated unchanged until its consumers have moved.
+
+**What it may say.** Only what the manifests and the compatibility record
+already publish: names, versions, ranges and the endpoints CI tests. No
+registry state (publish dates, download counts), no benchmark numbers, nothing
+secret-shaped.
 
 ## One-time setup
 
