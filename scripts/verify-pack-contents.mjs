@@ -18,6 +18,8 @@
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 
+import { workspaceDirs } from "./workspace-dirs.mjs";
+
 const packagesDir = new URL("../packages/", import.meta.url);
 const allowedTopLevel = new Set(["README.md", "LICENSE", "CHANGELOG.md", "package.json"]);
 
@@ -35,7 +37,7 @@ function listFilesRecursive(dirUrl, prefix = "") {
 
 let failed = false;
 
-for (const dir of readdirSync(packagesDir)) {
+for (const dir of workspaceDirs(packagesDir)) {
   const pkgDir = new URL(`${dir}/`, packagesDir);
   const manifest = JSON.parse(readFileSync(new URL("package.json", pkgDir), "utf-8"));
   const name = manifest.name;

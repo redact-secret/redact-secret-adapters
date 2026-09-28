@@ -16,7 +16,9 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+
+import { workspaceDirs } from "./workspace-dirs.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), "utf-8");
@@ -49,7 +51,7 @@ function pyproject() {
 const byName = new Map(record.packages.map((entry) => [entry.name, entry]));
 if (byName.size !== record.packages.length) problem("a package is recorded more than once");
 
-const npmPackages = readdirSync(new URL("packages/", root)).map((dir) => ({
+const npmPackages = workspaceDirs(new URL("packages/", root)).map((dir) => ({
   dir,
   manifest: JSON.parse(read(`packages/${dir}/package.json`)),
 }));

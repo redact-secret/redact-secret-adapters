@@ -23,6 +23,11 @@ python/dist/
 /.claude/settings.json
 /.claude/settings.local.json
 /.claude/skills/graft/
+# Agent worktrees: a full checkout of this repository nested inside itself.
+# Ignoring it keeps one `git add -A` from committing an entire second copy,
+# and keeps `biome check .` from reporting the nested biome.json as a second
+# root configuration.
+/.claude/worktrees/
 /.mcp.json
 /.rtk/
 /RTK.md
