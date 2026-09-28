@@ -21,16 +21,39 @@
  * before tracing" case, not only Langfuse's form.
  */
 
+import { activateCore } from "./activation.js";
 import { maskSecretsWith } from "./mask-secrets.js";
-import type { MaskOptions } from "./types.js";
+import type { CoreActivation, MaskOptions } from "./types.js";
+
+/** {@link MaskOptions} plus the live factory's PII activation. */
+export type CreateMaskSecretsOptions = MaskOptions & CoreActivation;
 
 /**
- * Awaits `initialize()` once, then returns `maskSecrets(data)`. `await
- * initialize()` must resolve before the core's `scanAndRedact` is used;
- * this factory enforces that order so a caller can't forget it.
+ * Reads `pii` by property rather than by rest-destructuring, the way the host
+ * packages' live factories do: a property read follows the prototype chain,
+ * so an options object layered over a shared base keeps its activation, and
+ * the rest of `options` reaches `maskSecretsWith` as the same object with its
+ * inherited `policy`, `limits` and `counter` intact.
  */
-export async function createMaskSecrets(options: MaskOptions = {}): Promise<(data: unknown) => unknown> {
-  const { initialize, scanAndRedact } = await import("@redact-secret/core");
-  await initialize();
-  return (data) => maskSecretsWith(scanAndRedact, data, options);
+function activationOf(options: CoreActivation): CoreActivation {
+  return options.pii === undefined ? {} : { pii: options.pii };
+}
+
+/**
+ * Runs the one core-activation step, then returns `maskSecrets(data)`.
+ * Activation must resolve before the core's `scanAndRedact` is used; this
+ * factory enforces that order so a caller can't forget it.
+ *
+ * Activation is shared with every other live factory
+ * (`activateCore`): omitting `pii` asserts no selection and tolerates an
+ * application that already activated its own, while passing `pii` selects
+ * and then verifies it. Before that was true here, this factory's bare
+ * `initialize()` made `@redact-secret/adapter`'s own documented Langfuse
+ * path the one entry point that still broke under application-first PII
+ * activation (#57).
+ */
+export async function createMaskSecrets(options: CreateMaskSecretsOptions = {}): Promise<(data: unknown) => unknown> {
+  const loaded = await import("@redact-secret/core");
+  await activateCore(loaded, activationOf(options));
+  return (data) => maskSecretsWith(loaded.scanAndRedact, data, options);
 }
