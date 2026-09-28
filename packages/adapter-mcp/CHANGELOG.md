@@ -13,7 +13,7 @@ dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
 not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
-
+## [0.1.0-alpha.2] - 2026-09-28
 ### Added
 
 - `pii` on `createMcpBoundary`, forwarded to `createAiContextBoundary` the
@@ -23,6 +23,13 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   rejecting is unchanged: a selection that cannot be shown to be active
   fails every operation closed as `blocked` / `core_error`, which maps to
   the fixed blocked result, rather than quietly sanitizing with PII off.
+
+- `createMcpBoundary(options?)` now fills in any of the three limit sets a
+  caller leaves out, from `@redact-secret/adapter-ai-context`'s
+  `AI_CONTEXT_DEFAULT_LIMITS` (redact-secret/redact-secret-adapters#46), so a
+  host can start with `await createMcpBoundary()` and a checked outcome.
+  `binaryContent` and `onAudit` compose with the defaults unchanged.
+- The `CreateMcpBoundaryOptionsWithDefaults` type.
 
 ### Fixed
 
@@ -41,17 +48,6 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   an `ok` outcome can carry findings whose text was not changed. Supply
   your own `policy` mapping those findings to `redact` if you need them
   masked.
-
-## [0.1.0-alpha.2] - 2026-09-27
-
-### Added
-
-- `createMcpBoundary(options?)` now fills in any of the three limit sets a
-  caller leaves out, from `@redact-secret/adapter-ai-context`'s
-  `AI_CONTEXT_DEFAULT_LIMITS` (redact-secret/redact-secret-adapters#46), so a
-  host can start with `await createMcpBoundary()` and a checked outcome.
-  `binaryContent` and `onAudit` compose with the defaults unchanged.
-- The `CreateMcpBoundaryOptionsWithDefaults` type.
 
 ### Changed
 
@@ -73,7 +69,6 @@ the defaults, an override, the binary block, an unsupported content type, and
 an aborted call on the real core.
 
 ## [0.1.0-alpha.1] - 2026-09-25
-
 ### Added
 
 - **`resources/read`** (redact-secret/redact-secret#843,
@@ -119,7 +114,6 @@ an aborted call on the real core.
   `packages/adapter-mcp/test/transport.test.ts`) at both SDK line endpoints.
 
 ## [0.1.0-alpha] - 2026-09-25
-
 First release, as a prerelease.
 
 ### Added
@@ -158,3 +152,4 @@ First release, as a prerelease.
   and 2.1.0 negotiate 2025-11-25.
 - Depends on `@redact-secret/adapter-ai-context ^0.1.0-alpha` (which pulls in
   `@redact-secret/adapter ^0.1.1`).
+

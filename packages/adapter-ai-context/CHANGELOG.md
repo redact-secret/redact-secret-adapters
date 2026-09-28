@@ -14,7 +14,7 @@ dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
 not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
-
+## [0.1.0-alpha.2] - 2026-09-28
 ### Added
 
 - `pii` on `createAiContextBoundary`, carried by
@@ -28,36 +28,6 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   PII off. `pii` is read by property, so an activation inherited through a
   prototype survives, the same rule `withDefaultLimits` follows.
 
-### Fixed
-
-- An application that had already run `initialize({ pii })` got a boundary
-  that blocked everything: the factory's own argument-free `initialize()`
-  is a different selection to the core's one-shot cell and rejected with
-  `PII_ACTIVATION_CONFLICT`, which this package maps to a fail-closed
-  `blocked` / `core_error` — a silently blocked boundary rather than a
-  visible error. That conflict now counts as success, since it means the
-  core is already loaded under the application's own selection. Every
-  other initialization failure still fails closed exactly as before.
-
-### Changed
-
-- The declared `@redact-secret/adapter` range rises to `^0.1.3`, the
-  version that carries `activateCore`. The declared
-  `@redact-secret/core` range is unchanged at `^0.1.0-beta.6`.
-
-### Documented
-
-- Activating PII is not the same as masking every PII value: under the
-  core's default policy `High`-confidence PII redacts while `Medium` and
-  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
-  an `ok` outcome can carry findings whose text was not changed and
-  lower-confidence PII reaches the model as plaintext. Supply your own
-  `policy` mapping those findings to `redact` if you need them masked.
-
-## [0.1.0-alpha.2] - 2026-09-27
-
-### Added
-
 - `AI_CONTEXT_DEFAULT_LIMITS` and `withDefaultLimits(options?)`, and
   `createAiContextBoundary(options?)` now fills in any of the three limit sets
   a caller leaves out (redact-secret/redact-secret-adapters#46). A new
@@ -68,6 +38,15 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 - The `AiContextLimits` and `AiContextBoundaryOptionsWithDefaults` types.
 
 ### Fixed
+
+- An application that had already run `initialize({ pii })` got a boundary
+  that blocked everything: the factory's own argument-free `initialize()`
+  is a different selection to the core's one-shot cell and rejected with
+  `PII_ACTIVATION_CONFLICT`, which this package maps to a fail-closed
+  `blocked` / `core_error` — a silently blocked boundary rather than a
+  visible error. That conflict now counts as success, since it means the
+  core is already loaded under the application's own selection. Every
+  other initialization failure still fails closed exactly as before.
 
 - `withDefaultLimits` reads `policy`, `placeholderFormatter` and `onFinding`
   by name rather than by spreading `options`, so an options object layered over
@@ -80,6 +59,10 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   about is forwarded rather than dropped.
 
 ### Changed
+
+- The declared `@redact-secret/adapter` range rises to `^0.1.3`, the
+  version that carries `activateCore`. The declared
+  `@redact-secret/core` range is unchanged at `^0.1.0-beta.6`.
 
 - The README leads with the short call and moves the limits below it, with a
   table of what each bound covers, and states next to the example that
@@ -99,8 +82,16 @@ the real core that each preset bound is enforced and fails closed as
 `limit_exceeded`, that a streamed text agrees with `sanitizeText` at every
 chunk partition under it, and that an override replaces rather than widens.
 
-## [0.1.0-alpha.1] - 2026-09-25
+### Documented
 
+- Activating PII is not the same as masking every PII value: under the
+  core's default policy `High`-confidence PII redacts while `Medium` and
+  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
+  an `ok` outcome can carry findings whose text was not changed and
+  lower-confidence PII reaches the model as plaintext. Supply your own
+  `policy` mapping those findings to `redact` if you need them masked.
+
+## [0.1.0-alpha.1] - 2026-09-25
 ### Added
 
 - The `resource` boundary label (redact-secret/redact-secret#843), for the
@@ -136,7 +127,6 @@ chunk partition under it, and that an override replaces rather than widens.
   lowest registry version its range allows and runs the key-aware probe.
 
 ## [0.1.0-alpha] - 2026-09-25
-
 First release, as a prerelease.
 
 ### Added
@@ -167,3 +157,4 @@ First release, as a prerelease.
   `test/e2e.test.ts` at both range endpoints in CI.
 - Depends on `@redact-secret/adapter ^0.1.1`, the first version that exports
   `walkStrict`. `0.1.0` lacks it, so the import failed against it.
+

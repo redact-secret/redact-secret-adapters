@@ -18,7 +18,7 @@ tarball (`files` in `package.json`), so a consumer can read it from
 `node_modules` without leaving their editor.
 
 ## [Unreleased]
-
+## [0.1.2] - 2026-09-28
 ### Added
 
 - `pii` on `createRedactingHooks`, `createRedactingLogMethod` and
@@ -30,29 +30,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   (`PII_ACTIVATION_NOT_ACTIVE`, or `PII_ACTIVATION_UNSUPPORTED` against a
   core that reports no activation) and no selector, input or core message
   in the error — rather than return hooks that scan with PII silently off.
-
-### Fixed
-
-- An application that had already run `initialize({ pii })` could not build
-  these hooks: the factory's own argument-free `initialize()` is a
-  different selection to the core's one-shot cell and rejected with
-  `PII_ACTIVATION_CONFLICT`. That conflict now counts as success, since it
-  means the core is already loaded under the application's own selection.
-  Every other initialization failure still rejects exactly as before.
-
-### Documented
-
-- Activating PII is not the same as masking every PII value: under the
-  core's default policy `High`-confidence PII redacts while `Medium` and
-  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
-  lower-confidence PII still reaches the transport as plaintext unless the
-  caller supplies a `policy` that maps those findings to `redact`. The
-  outcome counters make it visible: a record with a non-zero
-  `values.findings` and `values.redacted` still at zero is this case.
-
-## [0.1.2] - 2026-09-27
-
-### Added
 
 - `createRedactingHooks` / `createRedactingHooksWith`, one setup step that
   returns both hooks (`{ logMethod, streamWrite }`) ready to pass as
@@ -90,6 +67,13 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ### Fixed
 
+- An application that had already run `initialize({ pii })` could not build
+  these hooks: the factory's own argument-free `initialize()` is a
+  different selection to the core's one-shot cell and rejected with
+  `PII_ACTIVATION_CONFLICT`. That conflict now counts as success, since it
+  means the core is already loaded under the application's own selection.
+  Every other initialization failure still rejects exactly as before.
+
 - The counter the walkers are given is resolved per masking call, so a log
   emitted from a **getter or `toJSON()` on the merging object** — which runs
   *during* the walk, unlike a `mixin()` or serializer that logs after it — no
@@ -104,6 +88,14 @@ tarball (`files` in `package.json`), so a consumer can read it from
   is set: each record's counts are added into it once the record is reported.
 
 ### Documented
+
+- Activating PII is not the same as masking every PII value: under the
+  core's default policy `High`-confidence PII redacts while `Medium` and
+  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
+  lower-confidence PII still reaches the transport as plaintext unless the
+  caller supplies a `policy` that maps those findings to `redact`. The
+  outcome counters make it visible: a record with a non-zero
+  `values.findings` and `values.redacted` still at zero is this case.
 
 - A host `streamWrite` hook receives pino's line **unmasked** (bindings and
   `mixin()` output included), because the ordering rule runs it first. What
@@ -127,7 +119,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   composition and migration.
 
 ## [0.1.1] - 2026-09-25
-
 ### Added
 
 - `createRedactingStreamWrite` / `createRedactingStreamWriteWith`, a pino
@@ -180,7 +171,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   instead of the raw arguments.
 
 ## [0.1.0] - 2026-09-22
-
 Initial release.
 
 ### Added
@@ -193,3 +183,4 @@ Initial release.
   `pino ^10.0.0` is verified by a real `pino` logger writing to a captured
   stream at both ends of the range; `pino 9.x` is deliberately not declared —
   it may work, but it is untested, so it is not claimed.
+
