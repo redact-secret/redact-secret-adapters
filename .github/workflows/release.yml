@@ -84,7 +84,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
@@ -129,7 +134,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
@@ -172,7 +182,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
@@ -217,7 +232,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
@@ -262,7 +282,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
