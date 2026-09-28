@@ -397,6 +397,31 @@ The core is released in lockstep across Rust, npm, PyPI and the CLI. These
 packages are not part of that lockstep: a new pino release moves
 `adapter-pino` and nothing else.
 
+## Composing with the reversible vault
+
+`@redact-secret/vault`, from the sibling
+[`redact-secret-reversible`](https://github.com/redact-secret/redact-secret-reversible)
+repository, is opt-in, in-memory capture: it replaces a detected secret with a
+`<rsv_…>` token on the way to a model and restores the original value into a
+field the application designates. **Nothing here depends on it**, and the two
+compose in one order:
+
+1. **Capture first.** `capture()` and `createAiContextBoundary` sit on the same
+   seam — the path to the model — so the vault runs first and the adapter sees
+   already-tokenized text.
+2. **Adapters after.** A `<rsv_…>` token passes through every adapter here
+   byte for byte. No adapter parses, rewrites or restores one; a rewrite would
+   not leak anything, it would destroy a value the application still needs, and
+   `restore()` would answer `RESTORE_DENIED`.
+3. **Never route a restored value to an observability sink.** Restoration puts
+   plaintext back. Log it, attach it to a span, or put it back into model
+   context, and the capture bought nothing.
+
+Two paths deliberately do not preserve a token — a leaf past `maxStringLength`,
+and a core failure — because both replace the whole leaf with a marker. Both are
+pinned as tests, in both languages, along with the pass-through itself:
+[ARCHITECTURE.md § The reversible boundary](./ARCHITECTURE.md#the-reversible-boundary).
+
 ## What this repository does not contain
 
 No detection: deciding what a secret is stays in the core. Also out of scope
