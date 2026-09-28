@@ -1,0 +1,8 @@
+{
+  "name": "release-npm-tools",
+  "private": true,
+  "description": "Pins the npm CLI used by the release workflows. Install with `npm ci`; the lockfile carries the integrity hashes.",
+  "dependencies": {
+    "npm": "11.19.1"
+  }
+}
