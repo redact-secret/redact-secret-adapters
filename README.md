@@ -40,25 +40,52 @@ that the input held no secret**.
 
 ## Packages
 
-| Package | Registry | Host | Published |
-| --- | --- | --- | --- |
-| `@redact-secret/adapter` | npm | — (shared base) | `0.1.2`, beta |
-| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.1`, beta |
-| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.1`, beta |
-| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.0`, beta |
-| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha.1`, prerelease (dist-tag `alpha`) |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha.1`, prerelease (dist-tag `alpha`) |
+**This README describes `develop`.** The two columns are different claims: what
+you can install today, and what this branch declares for the next release
+train. A version in the second column exists only here until that train is cut.
+
+| Package | Registry | Host | Published — installable now | Declared on `develop` |
+| --- | --- | --- | --- | --- |
+| `@redact-secret/adapter` | npm | — (shared base) | `0.1.2`, beta | `0.1.3` |
+| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.1`, beta | `0.1.2` |
+| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.1`, beta | `0.1.2` |
+| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.0`, beta | `0.1.1` |
+| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha.1`, prerelease (dist-tag `alpha`) | `0.1.0-alpha.2` |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha.1`, prerelease (dist-tag `alpha`) | `0.1.0-alpha.2` |
+
+A prerelease publishes under the npm dist-tag `alpha`, never `latest`, so it is
+opt-in by tag or exact version. pip skips a pre-release unless asked for one.
+Statuses are not gradations of care — see
+[Which package do I need?](#which-package-do-i-need).
 
 Every `0.1.0` was published on 2026-09-22 in release train
 [`2026.09.22`](https://github.com/redact-secret/redact-secret-adapters/releases/tag/train/2026.09.22);
-the versions above shipped in the trains after it. All of them require core
-`0.1.0-beta.6` or later; `0.1.0-beta.9` is the newest core release and the
-combination the quick starts below are verified against. This README describes
-`develop`. Anything marked **Unreleased** below is not in a published package:
-the Python package is still `0.1.0`, `adapter-pino`'s
-`createRedactingHooks` is declared for `0.1.2`, and the
+the published column above shipped in the trains after it. The
 [`0.1.0` README](https://github.com/redact-secret/redact-secret-adapters/blob/2368d8c99f6b10e18874df0bcfec1818afd588ec/README.md)
 describes exactly what that release contains.
+
+**Not in any published package yet**, and so not installable until the next
+train: the opt-in [`pii` activation option](#pii-detection-is-opt-in) on every
+live factory, `adapter-pino`'s `createRedactingHooks`, the outcome counters
+under [Counting what happened](#counting-what-happened), and the Python
+package's corrected activation guidance.
+
+### Core versions
+
+Every package declares `@redact-secret/core` / `redact-secret`
+`0.1.0-beta.6` or later, and none of that changes here. Core
+`0.1.0-beta.10` — the release that adds opt-in PII detection — is the newest,
+and is what the quick starts below are verified against; `0.1.0-beta.6` is the
+floor, and CI runs the real-host tests at both. Passing `pii` to a factory
+needs beta.10; everything else works at the floor. See
+[Supported host versions](#supported-host-versions).
+
+`@redact-secret/vault`, from the sibling reversible repository, pins the core
+to `0.1.0-beta.9` **exactly**. An application that installs it alongside these
+adapters and moves to beta.10 therefore hits a peer conflict — not because
+either range is wrong, but because the pins have not yet met. Nothing here
+depends on the vault and an adapter release does not wait on it; see
+[Composing with the reversible vault](#composing-with-the-reversible-vault).
 
 Every package declares a compatibility range against `@redact-secret/core` /
 `redact-secret` and is tested against the host versions it claims. Each host
@@ -391,13 +418,33 @@ disagree.
 A declared range and a qualified endpoint are different claims. The range says
 what installs; `endpoints` names the two versions CI actually installs and runs
 the real-host tests against, and the semver expression between them is **not**
-evidence that every version inside it was tested. As of 2026-09-27 the core
-endpoints are `0.1.0-beta.6` and `0.1.0-beta.9`. A newer core does not narrow
+evidence that every version inside it was tested. As of 2026-09-28 the core
+endpoints are `0.1.0-beta.6` and `0.1.0-beta.10`. A newer core does not narrow
 the floor: a range is raised only when a package needs an API a lower core
 lacks, which the `published-combination` job enforces. A core version that is
 announced but not yet on the registry qualifies nothing —
 [RELEASING.md § Qualifying a new core release](./RELEASING.md#qualifying-a-new-core-release)
 is the procedure.
+
+`qualifiedBy` in that record lists the tests that make an endpoint evidence,
+and it is deliberately narrower than "the tests that cover this package". A
+test that injects or mocks the core proves nothing about either endpoint, so
+it is not listed there however thorough it is, and most of the activation
+tests are exactly that — a real core's PII selection is process-wide and
+one-shot, so a single test worker can exercise one ordering against it. The
+two that do run against a real core, one ordering per spawned process
+(`packages/adapter/test/activation-live.test.ts` and
+`python/tests/test_pii_activation.py`), are listed.
+
+### Combinations that are not claimed
+
+| Combination | Status |
+| --- | --- |
+| Core between the two endpoints, e.g. `0.1.0-beta.8` | Installs; inside the declared range but not an endpoint CI runs. Not claimed. |
+| Core below `0.1.0-beta.6` | Refused at install (`ERESOLVE`, or pip). |
+| A factory's `pii` option on a core below `0.1.0-beta.10` | Refused at runtime with a fixed code. Omitting `pii` works at the floor. |
+| `@redact-secret/vault` with core `0.1.0-beta.10` | Peer conflict: the vault pins `0.1.0-beta.9` exactly. Its own bump is tracked in the reversible repository. |
+| Any version in the "Declared on `develop`" column | Not published. Nothing installs it until the train is cut. |
 
 An unqualified host is either refused at install time or listed as
 unqualified there:
