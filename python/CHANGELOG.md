@@ -19,7 +19,7 @@ package whose declared version isn't on its registry yet — see
 can read it without leaving their environment.
 
 ## [Unreleased]
-
+## [0.1.1] - 2026-09-28
 ### Fixed
 
 - The "there is no init step for the Python bindings" claim in
@@ -31,6 +31,66 @@ can read it without leaving their environment.
   selection wins and whose later, different selection raises
   `PiiActivationConflictError`. Corrected there and in
   `logging_filter.py`.
+
+- A span's **attribute** values are now counted by the processor's own masker.
+  They were redacted correctly, but went through the module-level
+  `redact_attributes_with`, so a processor reporting outcomes would have
+  counted only the span and event names. Found by the new per-span count
+  tests.
+- The per-span counter is saved and restored around `on_end`, and its values
+  are snapshotted before the span is handed to the next processor. A
+  downstream processor that ends a span synchronously inside `next.on_end`
+  re-enters `on_end` before the outer span has been reported, and used to
+  leave the outer span reporting an **empty** counter. Redaction and export
+  were never affected — only the reported numbers.
+
+Note on `mask_leaf_outcome_with`: counting findings needs
+`len(result.findings)`, so a malformed core result whose `findings` has no
+length (a generator) now fails closed to `ERROR_MARKER` where `0.1.0` returned
+the masked text. That is the direction a malformed result should fail in.
+
+- `otel`: a string-sequence attribute containing `None` (which the SDK
+  accepts) was exported unscanned. Each `str` element is now masked and
+  `None` kept in place.
+- `otel`: the span name, status description, event names, and link
+  attributes are now redacted, not only span and event attributes.
+- `RedactSecretFilter`: a `%`-formatting error (`logger.info("value", x)`,
+  `logger.info("%d", "abc")`) or a message whose `__str__` raises no longer
+  raises out of the filter into the logging call; the message becomes
+  `[REDACTED:ERROR]` and the arguments are cleared, so the handler's
+  `handleError` never prints them.
+- An exception whose `__str__` raises no longer crashes `logger.exception()`
+  or `mask_log_value_with`; its `message` becomes `[REDACTED:ERROR]`. The
+  filter now scans an exception once, as its formatted traceback (which
+  already includes the message and the cause chain), instead of also
+  scanning the message and every cause and discarding the results.
+- `otel`: if a private span field the processor writes is missing, or a
+  write does not show through the public accessor (an SDK release that
+  moved the field), the span is now dropped with a one-time
+  `RuntimeWarning` instead of being exported unredacted. No redaction
+  failure raises out of `on_end`.
+- `mask_secrets_with` / `mask_log_value_with`: tuples and `dict`/`list`
+  subclasses (`OrderedDict`, `defaultdict`, ...) were returned unscanned
+  because only exact `dict`/`list` were walked. Both functions now share one
+  walker that walks them; a tuple comes back as a plain `tuple`, a
+  `dict`/`list` subclass as a plain `dict`/`list`. `mask_secrets_with` now
+  also walks exceptions, as `mask_log_value_with` already did.
+- `RedactSecretFilter(extra_fields="auth")` named the fields `a`, `u`, `t`,
+  `h`; a bare string now names one field. A listed extra holding a
+  dict/list/tuple was left unscanned; it is now walked and replaced by a
+  masked copy (the caller's object is not mutated).
+- `RedactSecretFilter`: a record with `exc_info=(None, None, None)` and a
+  cached `exc_text` left that text unscanned; it is now masked.
+- `otel`: only `on_end` is required of the wrapped processor, as the
+  constructor already checked; a missing `on_start` is skipped and a
+  missing `force_flush` returns `True`, like the JS package.
+- `mask_log_value_with` / `mask_secrets_with`: an exception's own
+  attributes (its `__dict__`, e.g. `exc.headers` or `__notes__`) were
+  dropped from the masked mapping. They are now walked and included, like
+  the JS `maskError`'s own enumerable properties.
+- Build requirement raised from `hatchling>=1.25` to `hatchling>=1.27`:
+  1.25.0 cannot build this project (`license-files` must be a table), and
+  1.26.x builds a wheel whose metadata omits the `MIT` license expression.
 
 ### Documented
 
@@ -80,25 +140,6 @@ can read it without leaving their environment.
   one-line wrapper over the former and returns exactly the same string for
   every input.
 
-### Fixed
-
-- A span's **attribute** values are now counted by the processor's own masker.
-  They were redacted correctly, but went through the module-level
-  `redact_attributes_with`, so a processor reporting outcomes would have
-  counted only the span and event names. Found by the new per-span count
-  tests.
-- The per-span counter is saved and restored around `on_end`, and its values
-  are snapshotted before the span is handed to the next processor. A
-  downstream processor that ends a span synchronously inside `next.on_end`
-  re-enters `on_end` before the outer span has been reported, and used to
-  leave the outer span reporting an **empty** counter. Redaction and export
-  were never affected — only the reported numbers.
-
-Note on `mask_leaf_outcome_with`: counting findings needs
-`len(result.findings)`, so a malformed core result whose `findings` has no
-length (a generator) now fails closed to `ERROR_MARKER` where `0.1.0` returned
-the masked text. That is the direction a malformed result should fail in.
-
 ### Changed
 
 - The README now states where `RedactSecretFilter` has to be attached in an
@@ -121,53 +162,7 @@ the masked text. That is the direction a malformed result should fail in.
   `DeprecationWarning`; the parameter will be removed in a later minor
   release. Attach the filter where it should apply instead.
 
-### Fixed
-
-- `otel`: a string-sequence attribute containing `None` (which the SDK
-  accepts) was exported unscanned. Each `str` element is now masked and
-  `None` kept in place.
-- `otel`: the span name, status description, event names, and link
-  attributes are now redacted, not only span and event attributes.
-- `RedactSecretFilter`: a `%`-formatting error (`logger.info("value", x)`,
-  `logger.info("%d", "abc")`) or a message whose `__str__` raises no longer
-  raises out of the filter into the logging call; the message becomes
-  `[REDACTED:ERROR]` and the arguments are cleared, so the handler's
-  `handleError` never prints them.
-- An exception whose `__str__` raises no longer crashes `logger.exception()`
-  or `mask_log_value_with`; its `message` becomes `[REDACTED:ERROR]`. The
-  filter now scans an exception once, as its formatted traceback (which
-  already includes the message and the cause chain), instead of also
-  scanning the message and every cause and discarding the results.
-- `otel`: if a private span field the processor writes is missing, or a
-  write does not show through the public accessor (an SDK release that
-  moved the field), the span is now dropped with a one-time
-  `RuntimeWarning` instead of being exported unredacted. No redaction
-  failure raises out of `on_end`.
-- `mask_secrets_with` / `mask_log_value_with`: tuples and `dict`/`list`
-  subclasses (`OrderedDict`, `defaultdict`, ...) were returned unscanned
-  because only exact `dict`/`list` were walked. Both functions now share one
-  walker that walks them; a tuple comes back as a plain `tuple`, a
-  `dict`/`list` subclass as a plain `dict`/`list`. `mask_secrets_with` now
-  also walks exceptions, as `mask_log_value_with` already did.
-- `RedactSecretFilter(extra_fields="auth")` named the fields `a`, `u`, `t`,
-  `h`; a bare string now names one field. A listed extra holding a
-  dict/list/tuple was left unscanned; it is now walked and replaced by a
-  masked copy (the caller's object is not mutated).
-- `RedactSecretFilter`: a record with `exc_info=(None, None, None)` and a
-  cached `exc_text` left that text unscanned; it is now masked.
-- `otel`: only `on_end` is required of the wrapped processor, as the
-  constructor already checked; a missing `on_start` is skipped and a
-  missing `force_flush` returns `True`, like the JS package.
-- `mask_log_value_with` / `mask_secrets_with`: an exception's own
-  attributes (its `__dict__`, e.g. `exc.headers` or `__notes__`) were
-  dropped from the masked mapping. They are now walked and included, like
-  the JS `maskError`'s own enumerable properties.
-- Build requirement raised from `hatchling>=1.25` to `hatchling>=1.27`:
-  1.25.0 cannot build this project (`license-files` must be a table), and
-  1.26.x builds a wheel whose metadata omits the `MIT` license expression.
-
 ## [0.1.0] - 2026-09-22
-
 Initial release.
 
 ### Added
@@ -188,3 +183,4 @@ Initial release.
   for the stdlib `logging` integration; `otel` extra:
   `opentelemetry-sdk>=1.16.0,<2`, verified by a real span passed through a
   real `TracerProvider` at both ends of the range.
+

@@ -19,7 +19,7 @@ tarball (`files` in `package.json`), so a consumer can read it from
 `node_modules` without leaving their editor.
 
 ## [Unreleased]
-
+## [0.1.2] - 2026-09-28
 ### Added
 
 - `pii` on `createRedactingSpanProcessor`, with the
@@ -31,29 +31,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   core that reports no activation) and no selector, input or core message
   in the error — rather than return a processor that scans with PII
   silently off.
-
-### Fixed
-
-- An application that had already run `initialize({ pii })` could not build
-  this processor: the factory's own argument-free `initialize()` is a
-  different selection to the core's one-shot cell and rejected with
-  `PII_ACTIVATION_CONFLICT`. That conflict now counts as success, since it
-  means the core is already loaded under the application's own selection.
-  Every other initialization failure still rejects exactly as before.
-
-### Documented
-
-- Activating PII is not the same as masking every PII value: under the
-  core's default policy `High`-confidence PII redacts while `Medium` and
-  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
-  lower-confidence PII still reaches the exporter as plaintext unless the
-  caller supplies a `policy` that maps those findings to `redact`. The
-  outcome counters make it visible: a span with a non-zero
-  `values.findings` and `values.redacted` still at zero is this case.
-
-## [0.1.2] - 2026-09-27
-
-### Added
 
 - `onOutcome`, on both `createRedactingSpanProcessor` and
   `RedactingSpanProcessorWith`: one input-free summary per **span**
@@ -73,6 +50,13 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ### Fixed
 
+- An application that had already run `initialize({ pii })` could not build
+  this processor: the factory's own argument-free `initialize()` is a
+  different selection to the core's one-shot cell and rejected with
+  `PII_ACTIVATION_CONFLICT`. That conflict now counts as success, since it
+  means the core is already loaded under the application's own selection.
+  Every other initialization failure still rejects exactly as before.
+
 - A span's **attribute** values are now counted by the processor's own
   masker. They were redacted correctly, but went through the module-level
   `redactAttributesWith`, so a processor reporting outcomes would have
@@ -88,6 +72,16 @@ tarball (`files` in `package.json`), so a consumer can read it from
   `next.onEnd` rather than through the observer. Redaction and export were
   never affected — only the reported numbers.
 
+### Documented
+
+- Activating PII is not the same as masking every PII value: under the
+  core's default policy `High`-confidence PII redacts while `Medium` and
+  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
+  lower-confidence PII still reaches the exporter as plaintext unless the
+  caller supplies a `policy` that maps those findings to `redact`. The
+  outcome counters make it visible: a span with a non-zero
+  `values.findings` and `values.redacted` still at zero is this case.
+
 ### Changed
 
 - `@redact-secret/adapter` range raised from `^0.1.1` to `^0.1.3`, the
@@ -97,7 +91,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   published-sibling combination job.
 
 ## [0.1.1] - 2026-09-25
-
 ### Changed
 
 - `@redact-secret/adapter` range raised from `^0.1.0` to `^0.1.1`, the
@@ -137,7 +130,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   non-string element made the whole array pass through unmasked.
 
 ## [0.1.0] - 2026-09-22
-
 Initial release.
 
 ### Added
@@ -151,3 +143,4 @@ Initial release.
   `@opentelemetry/sdk-trace-base ^2.0.0`, verified by a real span passed
   through `onEnd` at both ends of the range, asserting the mutation actually
   took effect on the real span object.
+

@@ -18,7 +18,7 @@ tarball (`files` in `package.json`), so a consumer can read it from
 `node_modules` without leaving their editor.
 
 ## [Unreleased]
-
+## [0.1.3] - 2026-09-28
 ### Fixed
 
 - `createMaskSecrets` now runs the shared `activateCore` step and accepts
@@ -63,30 +63,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   the identity is one process-wide fact rather than something to repeat per
   log record or per span.
 
-### Changed
-
-- No change to the declared `@redact-secret/core` range, which stays
-  `^0.1.0-beta.6`. `initialize`'s optional argument and the optional
-  `piiActivation` are described by this package's own
-  `InitializableCore`, never read from the core's types, and
-  `piiActivation` is feature-detected at runtime, so a core at the floor
-  keeps working whenever `pii` is omitted.
-
-### Documented
-
-- Activation is not masking: under the core's default policy PII types are
-  confidence-gated, so a `High`-confidence finding redacts while `Medium`
-  and `Low` resolve to `warn` — and `maskLeafOutcomeWith` substitutes only
-  on `block`, so a `warn` leaves the text alone. Lower-confidence PII
-  therefore still reaches a destination as plaintext unless the caller
-  supplies a `policy` that maps those findings to `redact`. Nothing here
-  synthesizes one. The counters already make it observable, since
-  `findings` and `redacted` are counted apart.
-
-## [0.1.3] - 2026-09-27
-
-### Added
-
 - The shared outcome contract the host adapters report through
   (redact-secret/redact-secret-adapters#45): `createOutcomeCounter`,
   `toValueCounts`, `addCounts`, `countLeaf`, `notify`, and the
@@ -109,8 +85,27 @@ tarball (`files` in `package.json`), so a consumer can read it from
   `maxDepth` or a leaf budget counts as `limited`, and a cycle or an
   unreadable getter/`toJSON()` as `failed`.
 
-## [0.1.2] - 2026-09-25
+### Changed
 
+- No change to the declared `@redact-secret/core` range, which stays
+  `^0.1.0-beta.6`. `initialize`'s optional argument and the optional
+  `piiActivation` are described by this package's own
+  `InitializableCore`, never read from the core's types, and
+  `piiActivation` is feature-detected at runtime, so a core at the floor
+  keeps working whenever `pii` is omitted.
+
+### Documented
+
+- Activation is not masking: under the core's default policy PII types are
+  confidence-gated, so a `High`-confidence finding redacts while `Medium`
+  and `Low` resolve to `warn` — and `maskLeafOutcomeWith` substitutes only
+  on `block`, so a `warn` leaves the text alone. Lower-confidence PII
+  therefore still reaches a destination as plaintext unless the caller
+  supplies a `policy` that maps those findings to `redact`. Nothing here
+  synthesizes one. The counters already make it observable, since
+  `findings` and `redacted` are counted apart.
+
+## [0.1.2] - 2026-09-25
 ### Added
 
 - `walkStrict` hands each string leaf's visitor a second argument, `key`:
@@ -120,7 +115,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   its key-aware `sanitizeValue`.
 
 ## [0.1.1] - 2026-09-25
-
 ### Added
 
 - `walkStrict(value, limits, visitors)`, the all-or-nothing variant of the
@@ -159,7 +153,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   size check.
 
 ## [0.1.0] - 2026-09-22
-
 Initial release.
 
 ### Added
@@ -172,3 +165,4 @@ Initial release.
 - Declared range: `@redact-secret/core ^0.1.0-beta.6`, as an **optional**
   peer dependency — `scanAndRedact` is injected, so this package works
   without the core installed.
+
