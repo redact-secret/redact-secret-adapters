@@ -3,10 +3,15 @@
  * runs (redact-secret/redact-secret-adapters#51).
  *
  * The core is injected here, as everywhere else in this package, so these run
- * without the native artifact — which matters twice over, because
- * `0.1.0-beta.10` is not on the registry yet and because the behaviour under
- * test is a *lifecycle* one: a real core's selection cell is one-shot per
+ * without the native artifact. That also suits the behaviour under test,
+ * which is a *lifecycle* one: a real core's selection cell is one-shot per
  * process, so a suite could exercise exactly one ordering against it.
+ *
+ * Injection alone is not enough, though — it cannot tell whether a live
+ * factory still routes through `activateCore` at all, which is how
+ * `createMaskSecrets` kept a bare `initialize()` through #51. A real core,
+ * one ordering per spawned process, covers that in
+ * `activation-live.test.ts`.
  *
  * No selector string here is a credential and none of them is real; they are
  * the core's own documented activation-identity shape.

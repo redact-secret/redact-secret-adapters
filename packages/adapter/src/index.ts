@@ -8,7 +8,7 @@ export {
   PII_ACTIVATION_CONFLICT,
   readPiiActivation,
 } from "./activation.js";
-export { createMaskSecrets } from "./create-mask-secrets.js";
+export { type CreateMaskSecretsOptions, createMaskSecrets } from "./create-mask-secrets.js";
 export {
   BLOCK_MARKER,
   CYCLE_MARKER,

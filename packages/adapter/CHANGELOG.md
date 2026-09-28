@@ -19,8 +19,27 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Fixed
+
+- `createMaskSecrets` now runs the shared `activateCore` step and accepts
+  `pii`, like every other live factory
+  (redact-secret/redact-secret-adapters#57). It was the one entry point
+  #51 left on a bare `initialize()`, so this package's own documented
+  Langfuse path still failed with `PII_ACTIVATION_CONFLICT` when the
+  application activated PII first. Its options type is
+  `CreateMaskSecretsOptions`; a caller that passes no `pii` sees no change.
+
 ### Added
 
+- `packages/adapter/test/activation-live.test.ts`: activation through all
+  five live factories against the **real installed core**, one ordering per
+  spawned `node` process. Every other activation test injects or mocks the
+  core — necessarily, since a real core's selection cell is one-shot per
+  process — which is why nothing caught the `createMaskSecrets` gap above.
+  Recorded in `compatibility.json` under `qualifiedBy` for each package it
+  drives, so both declared core endpoints exercise it. The PII cases skip on
+  a core older than `0.1.0-beta.10`, which has no PII API; the
+  ordering-independent cases run at both ends.
 - `activateCore(core, { pii })`: the one core-activation step every live
   factory in this repository runs
   (redact-secret/redact-secret-adapters#51), plus `activePiiActivation`,
