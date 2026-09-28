@@ -8,6 +8,40 @@ It replaces ``exc_info`` with sanitized traceback text and also scans cached
 Attach the filter to each emitting handler. Ancestor logger filters do not
 run for propagated child records; mutations to a record are shared by its
 handlers. Custom formatters must not add unscanned fields afterward.
+
+**If you want PII, enable it before the first record.** Credential detection
+needs no init step -- the native extension loads on ``import redact_secret``,
+unlike the JS package's mandatory ``await initialize()``. PII detection is
+opt-in, process-wide and one-shot, and the application turns it on with
+``redact_secret.initialize(pii=[...])``::
+
+    import logging
+    import redact_secret
+    from redact_secret_adapters.logging_filter import RedactSecretFilter
+
+    redact_secret.initialize(pii=["pii:global"])  # first, before any logging
+
+    handler = logging.StreamHandler()
+    handler.addFilter(RedactSecretFilter())
+    logging.getLogger().addHandler(handler)
+
+The order matters and is easy to get wrong, because handlers are usually
+attached at import time and a module imported earlier can log before the
+line that enables PII has run. Python's binding raises no conflict for a late
+call -- it locks nothing that ``active_pii_selection()`` reads -- so there is
+no error to catch, only a **silent window** in which records are scanned with
+PII off and report nothing. This filter cannot close it: it never learns when
+the process decided to enable PII. ``python/tests/test_pii_activation.py``
+pins the window as a known limitation rather than hiding it.
+
+Activating PII is also not the same as masking every PII value. Under the
+core's default policy PII types are confidence-gated: ``High`` redacts, while
+``Medium`` and ``Low`` resolve to ``warn``, and a ``warn`` finding leaves the
+text alone (see ``mask_leaf.py``), so lower-confidence PII still reaches the
+handler as plaintext. Pass your own ``policy`` mapping those findings to
+``redact`` if you need them masked. The outcome counters make it observable:
+such a record counts ``scanned`` with a non-zero ``findings`` and no
+``redacted``.
 """
 
 from __future__ import annotations

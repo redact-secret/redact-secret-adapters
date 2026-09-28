@@ -47,8 +47,33 @@ def mask_secrets(*, data: Any, **_kwargs: Any) -> Any:
         langfuse = Langfuse(mask=mask_secrets)
 
     ``redact_secret`` is imported here, on first use, and nowhere else in
-    this module. There is no init step for the Python bindings, unlike the
-    JS package's ``await initialize()``.
+    this module.
+
+    **PII activation is a placement decision.** Credential detection needs
+    no init step -- the native extension loads on ``import redact_secret``,
+    unlike the JS package's mandatory ``await initialize()``. But PII
+    detection is opt-in, process-wide and one-shot, and turning it on is an
+    explicit call:
+
+        import redact_secret
+
+        redact_secret.initialize(pii=["pii:global"])  # before the first scan
+        langfuse = Langfuse(mask=mask_secrets)
+
+    Python's binding raises no conflict for a late call -- ``initialize``
+    locks nothing that ``active_pii_selection()`` reads, so there is no
+    error to catch. What there is instead is a **silent window**: every
+    value masked before that call is scanned with PII off and reports
+    nothing at all, with no warning. This wrapper cannot close the window,
+    because it never sees when the process decided to enable PII; the
+    application does. ``python/tests/test_pii_activation.py`` pins the
+    window as a known limitation rather than hiding it.
+
+    Activating PII is also not the same as masking every PII value: under
+    the core's default policy ``High``-confidence PII redacts while
+    ``Medium`` and ``Low`` resolve to ``warn``, and a ``warn`` finding
+    leaves the text alone (see ``mask_leaf.py``). Pass your own ``policy``
+    if you need those masked.
     """
     import redact_secret
 
