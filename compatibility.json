@@ -20,7 +20,8 @@
         "packages/adapter/test/live.test.ts",
         "packages/adapter/test/mask-secrets.test.ts",
         "packages/adapter/test/bounded-traversal.test.ts",
-        "packages/adapter/test/outcome.test.ts"
+        "packages/adapter/test/outcome.test.ts",
+        "packages/adapter/test/vault-token.test.ts"
       ]
     },
     {
@@ -54,7 +55,8 @@
         "packages/adapter-pino/test/pino-lifecycle.test.ts",
         "packages/adapter-pino/test/live.test.ts",
         "packages/adapter-pino/test/hooks.test.ts",
-        "packages/adapter-pino/test/outcome.test.ts"
+        "packages/adapter-pino/test/outcome.test.ts",
+        "packages/adapter-pino/test/vault-token.test.ts"
       ]
     },
     {
@@ -86,7 +88,8 @@
       "qualifiedBy": [
         "packages/adapter-otel/test/otel-host.test.ts",
         "packages/adapter-otel/test/otel-lifecycle.test.ts",
-        "packages/adapter-otel/test/outcome.test.ts"
+        "packages/adapter-otel/test/outcome.test.ts",
+        "packages/adapter-otel/test/vault-token.test.ts"
       ]
     },
     {
@@ -115,7 +118,8 @@
         "packages/adapter-ai-context/test/e2e.test.ts",
         "packages/adapter-ai-context/test/boundary.test.ts",
         "packages/adapter-ai-context/test/live-init-failure.test.ts",
-        "packages/adapter-ai-context/test/defaults.test.ts"
+        "packages/adapter-ai-context/test/defaults.test.ts",
+        "packages/adapter-ai-context/test/vault-token.test.ts"
       ]
     },
     {
@@ -166,7 +170,8 @@
         "packages/adapter-mcp/test/e2e.test.ts",
         "packages/adapter-mcp/test/boundary.test.ts",
         "packages/adapter-mcp/test/live-init-failure.test.ts",
-        "packages/adapter-mcp/test/defaults.test.ts"
+        "packages/adapter-mcp/test/defaults.test.ts",
+        "packages/adapter-mcp/test/vault-token.test.ts"
       ]
     },
     {
