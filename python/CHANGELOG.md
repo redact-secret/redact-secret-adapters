@@ -20,6 +20,39 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+### Fixed
+
+- The "there is no init step for the Python bindings" claim in
+  `mask_secrets.py` and `otel.py` was wrong as of `redact-secret`
+  `0.1.0b10` (redact-secret/redact-secret-adapters#51). It holds for
+  credential detection, where the extension still loads on
+  `import redact_secret`, but **PII detection is an explicit, process-wide,
+  one-shot activation**: `redact_secret.initialize(pii=[...])`, whose first
+  selection wins and whose later, different selection raises
+  `PiiActivationConflictError`. Corrected there and in
+  `logging_filter.py`.
+
+### Documented
+
+- The placement rule, and the window it leaves open. Handlers are attached
+  and tracer providers built at import time, so a module imported earlier
+  can emit records *before* the line that enables PII has run. Those
+  records are scanned with PII off and report nothing — no exception, no
+  warning, and no counter that tells them apart from a record that
+  genuinely held nothing. These adapters cannot close that window, because
+  the process owns the activation, so it is pinned as a **known
+  limitation** in `python/tests/test_pii_activation.py` rather than hidden;
+  the same file pins the documented order working, and the one-shot
+  conflict, each in its own interpreter.
+- Activating PII is not the same as masking every PII value: under the
+  core's default policy `High`-confidence PII redacts while `Medium` and
+  `Low` resolve to `warn`, and a `warn` finding leaves the text alone (see
+  `mask_leaf.py`), so lower-confidence PII still reaches a handler or an
+  exporter as plaintext unless the caller supplies a `policy` that maps
+  those findings to `redact`. These adapters decide nothing about policy
+  and synthesize none. The counters make it observable, since `findings`
+  and `redacted` are counted apart.
+
 ### Added
 
 - `redact_secret_adapters.outcome`: the same input-free outcome contract as

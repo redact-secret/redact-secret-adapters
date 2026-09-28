@@ -150,6 +150,42 @@ from redact_secret_adapters.mask_secrets import mask_secrets
 langfuse = Langfuse(mask=mask_secrets)
 ```
 
+## PII detection is opt-in
+
+Credential detection needs no init step — the native extension loads on
+`import redact_secret`, unlike the JS package's mandatory `await initialize()`.
+**PII detection does.** It is opt-in, process-wide and one-shot, and the
+application turns it on:
+
+```python
+import redact_secret
+
+redact_secret.initialize(pii=["pii:global"])  # before the first record or span
+```
+
+**Placement is the whole rule.** Handlers are attached and tracer providers
+built at import time, so a module imported earlier can emit *before* the line
+above runs. Those records are scanned with PII off and report nothing — no
+exception, no warning, and no counter that tells them apart from a record that
+genuinely held nothing. These adapters cannot close that window, because the
+process, not the filter, owns the activation; it is pinned as a known
+limitation in `python/tests/test_pii_activation.py` rather than hidden. Enable
+PII first, then attach handlers and build providers.
+
+The selection is one-shot: a later *different* one raises
+`redact_secret.PiiActivationConflictError`, and an empty selection is a
+different selection, not a neutral one.
+
+**Activation is not masking.** Under the core's default policy, PII types are
+confidence-gated rather than always redacted: a `High`-confidence finding
+redacts, while `Medium` and `Low` resolve to `warn` — and a `warn` finding
+leaves the text alone. Enabling PII therefore still lets lower-confidence PII
+reach a handler or an exporter as plaintext. Pass your own `policy` mapping
+those findings to `redact` if you need them masked; these adapters decide
+nothing about policy. The counters make it observable: a record whose
+`values.findings` is non-zero while `values.redacted` stays at zero is exactly
+this case.
+
 ## Fail-closed markers
 
 | Marker | When |

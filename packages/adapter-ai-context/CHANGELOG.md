@@ -15,6 +15,45 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+### Added
+
+- `pii` on `createAiContextBoundary`, carried by
+  `AiContextBoundaryOptionsWithDefaults`
+  (redact-secret/redact-secret-adapters#51). It activates core PII
+  selectors for the whole process through `@redact-secret/adapter`'s
+  `activateCore`. The factory's contract of never rejecting is unchanged:
+  a selection that cannot be shown to be active is an initialization
+  failure like any other, so every operation fails closed as `blocked` /
+  `core_error` with no `code`, rather than quietly building context with
+  PII off. `pii` is read by property, so an activation inherited through a
+  prototype survives, the same rule `withDefaultLimits` follows.
+
+### Fixed
+
+- An application that had already run `initialize({ pii })` got a boundary
+  that blocked everything: the factory's own argument-free `initialize()`
+  is a different selection to the core's one-shot cell and rejected with
+  `PII_ACTIVATION_CONFLICT`, which this package maps to a fail-closed
+  `blocked` / `core_error` — a silently blocked boundary rather than a
+  visible error. That conflict now counts as success, since it means the
+  core is already loaded under the application's own selection. Every
+  other initialization failure still fails closed exactly as before.
+
+### Changed
+
+- The declared `@redact-secret/adapter` range rises to `^0.1.3`, the
+  version that carries `activateCore`. The declared
+  `@redact-secret/core` range is unchanged at `^0.1.0-beta.6`.
+
+### Documented
+
+- Activating PII is not the same as masking every PII value: under the
+  core's default policy `High`-confidence PII redacts while `Medium` and
+  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
+  an `ok` outcome can carry findings whose text was not changed and
+  lower-confidence PII reaches the model as plaintext. Supply your own
+  `policy` mapping those findings to `redact` if you need them masked.
+
 ## [0.1.0-alpha.2] - 2026-09-27
 
 ### Added

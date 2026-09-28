@@ -109,6 +109,40 @@ Two things to know:
   key and its JSON punctuation. With the default 64 KiB that is noise; with a
   small override it is what binds first.
 
+### PII detection is opt-in
+
+**Unreleased.** The core detects credentials out of the box; PII detection is a
+separate activation, and it is process-wide and one-shot — the first selection
+wins, and a later *different* one fails with `PII_ACTIVATION_CONFLICT`.
+
+Either order works. Activate it yourself before building the boundary, or pass
+it here:
+
+```js
+const boundary = await createAiContextBoundary({ pii: ["pii:global"] });
+```
+
+With `pii` omitted, an activation the application already made is accepted
+rather than fought over, so building the boundary after
+`initialize({ pii })` no longer fails. With `pii` given, the factory reads the
+core's `piiActivation()` afterwards and refuses when the active selection is
+not the one you asked for. **This factory still never rejects**: that refusal
+is an initialization failure like any other, so every operation fails closed as
+`blocked` / `core_error` — with no `code`, because the refusal carries none
+from the core's fixed registry — instead of quietly building context with PII
+off. Omitting `pii` needs no newer core: the declared `@redact-secret/core`
+range is unchanged.
+
+**Activation is not masking.** Under the core's default policy, PII types are
+confidence-gated rather than always redacted: a `High`-confidence finding
+redacts, while `Medium` and `Low` resolve to `warn` — and a `warn` finding
+leaves the text alone. An `ok` outcome can therefore carry findings whose text
+was not changed, and lower-confidence PII reaches the model as plaintext. Pass
+your own `policy` mapping those findings to `redact` if you need them masked;
+this package decides nothing about policy. It is visible in the outcome: an
+`ok` whose `findings` is non-empty but whose `value` equals the input is
+exactly this case.
+
 ## Operations
 
 | Operation | Input | Core path |

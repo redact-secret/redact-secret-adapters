@@ -263,6 +263,66 @@ Bounds (`DEFAULT_LIMITS`, overridable per call):
 
 Elements and keys beyond a limit are dropped, not passed through.
 
+## PII detection is opt-in
+
+The core detects credentials out of the box. **PII detection is a separate,
+explicit activation**, and it is process-wide and one-shot: the first selection
+wins, and a later *different* one fails with `PII_ACTIVATION_CONFLICT`. An
+empty selection is a different selection, not a neutral one.
+
+Either order works. Activate it yourself and the factories accept it:
+
+```js
+import { initialize } from "@redact-secret/core";
+
+await initialize({ pii: ["pii:global"] }); // the application's own choice
+const logger = pino({ hooks: await createRedactingHooks() }); // accepted, not fought over
+```
+
+Or let the factory activate it, which is the order to prefer when the adapter
+is the first thing in the process to touch the core:
+
+```js
+const logger = pino({ hooks: await createRedactingHooks({ pii: ["pii:global"] }) });
+```
+
+`pii` is accepted by `createRedactingHooks`, `createRedactingLogMethod`,
+`createRedactingStreamWrite`, `createRedactingSpanProcessor`,
+`createAiContextBoundary` and `createMcpBoundary`. When you pass it, the
+factory reads the core's `piiActivation()` afterwards and **refuses** if the
+active selection is not the one you asked for, rather than running with PII
+silently off — as a rejection in `adapter-pino` and `adapter-otel`, and as the
+usual fail-closed `blocked` / `core_error` in `adapter-ai-context` and
+`adapter-mcp`, which never reject. The refusal carries a fixed code
+(`PII_ACTIVATION_NOT_ACTIVE`, or `PII_ACTIVATION_UNSUPPORTED` against a core
+too old to report an activation) and never echoes a selector, the input, or the
+core's own message. Omitting `pii` needs no newer core: the declared
+`@redact-secret/core` range is unchanged.
+
+In Python there is no init step for credentials — the extension loads on
+`import redact_secret` — but PII is the same explicit call, and **placement is
+the whole rule**:
+
+```python
+import redact_secret
+redact_secret.initialize(pii=["pii:global"])  # before the first record or span
+```
+
+Handlers attach and tracer providers are built at import time, so a module
+imported earlier can emit before that line runs. Those records are scanned with
+PII off and report nothing, with no error. The adapters cannot close that
+window — the process owns the activation — so it is pinned as a known
+limitation in `python/tests/test_pii_activation.py` rather than hidden.
+
+**Activation is not masking.** Under the core's default policy, PII types are
+confidence-gated rather than always redacted: a `High`-confidence finding
+redacts, while `Medium` and `Low` resolve to `warn` — and a `warn` finding
+leaves the text alone. So enabling PII still lets lower-confidence PII reach a
+log line, a span or an AI context as plaintext. Supply your own `policy`
+mapping those findings to `redact` if you need them masked; this repository
+decides nothing about policy. The counters below make it observable: a value
+with a non-zero `findings` that is not counted in `redacted` is exactly this.
+
 ## Counting what happened
 
 Every host adapter can report one **input-free** summary per unit of work — one

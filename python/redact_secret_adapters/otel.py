@@ -304,9 +304,26 @@ def create_redacting_span_processor(
     on_outcome: Optional[Callable[[SpanOutcome], None]] = None,
 ) -> RedactingSpanProcessorWith:
     """The live wrapper: wraps `next_processor` with the real
-    `redact_secret.scan_and_redact`. There is no init step for the Python
-    bindings (the native extension loads on `import redact_secret`), unlike
-    the JS package's `await initialize()`."""
+    `redact_secret.scan_and_redact`.
+
+    Credential detection needs no init step -- the native extension loads on
+    `import redact_secret`, unlike the JS package's mandatory
+    `await initialize()`. **PII detection does**: it is opt-in, process-wide
+    and one-shot, and the application turns it on with
+    `redact_secret.initialize(pii=[...])` **before the first span ends**.
+
+    Placement is easy to get wrong here, because a tracer provider is
+    usually built at import time and can export a span before the line that
+    enables PII has run. Python's binding raises no conflict for a late call,
+    so there is no error to catch -- only a silent window in which spans are
+    scanned with PII off and report nothing. Enable PII first, then build
+    the provider. See `python/tests/test_pii_activation.py`, which pins the
+    window as a known limitation.
+
+    Activating PII is not the same as masking every PII value either: under
+    the core's default policy `High`-confidence PII redacts while `Medium`
+    and `Low` resolve to `warn`, and a `warn` finding leaves the text alone.
+    Pass your own `policy` if you need those masked."""
     import redact_secret
 
     return RedactingSpanProcessorWith(

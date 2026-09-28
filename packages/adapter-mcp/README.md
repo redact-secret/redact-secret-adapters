@@ -93,6 +93,34 @@ so you do not have to invent them, and every one of them still fails an
 oversized result closed as `blocked` / `limit_exceeded`. `createMcpBoundaryWith`,
 over a boundary you built yourself, is unchanged.
 
+### PII detection is opt-in
+
+**Unreleased.** `createMcpBoundary` takes `pii` and forwards it to
+[`createAiContextBoundary`](../adapter-ai-context#pii-detection-is-opt-in), the
+way it forwards the limits:
+
+```js
+const mcp = await createMcpBoundary({ pii: ["pii:global"] });
+```
+
+PII detection in the core is opt-in, process-wide and one-shot — the first
+selection wins, and a later *different* one fails with
+`PII_ACTIVATION_CONFLICT`. With `pii` omitted, an activation the application
+already made is accepted rather than fought over, so building the boundary
+after `initialize({ pii })` no longer fails. With `pii` given, a selection that
+is not the one actually active fails every operation closed as `blocked` /
+`core_error` — this factory still never rejects — instead of quietly
+sanitizing with PII off. Omitting `pii` needs no newer core: the declared
+`@redact-secret/core` range is unchanged.
+
+**Activation is not masking.** Under the core's default policy, PII types are
+confidence-gated rather than always redacted: a `High`-confidence finding
+redacts, while `Medium` and `Low` resolve to `warn`, and a `warn` finding
+leaves the text alone. An `ok` outcome can therefore carry findings whose text
+was not changed, and lower-confidence PII reaches the model as plaintext. Pass
+your own `policy` mapping those findings to `redact` if you need them masked;
+this package decides nothing about policy.
+
 ## Where to put it
 
 **The authoritative boundary is the MCP host**: the process that receives a

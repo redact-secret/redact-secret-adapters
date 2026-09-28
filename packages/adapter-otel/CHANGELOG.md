@@ -20,6 +20,37 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Added
+
+- `pii` on `createRedactingSpanProcessor`, with the
+  `CreateRedactingSpanProcessorOptions` type
+  (redact-secret/redact-secret-adapters#51). It activates core PII
+  selectors for the whole process through `@redact-secret/adapter`'s
+  `activateCore`, and the factory rejects — with a fixed code
+  (`PII_ACTIVATION_NOT_ACTIVE`, or `PII_ACTIVATION_UNSUPPORTED` against a
+  core that reports no activation) and no selector, input or core message
+  in the error — rather than return a processor that scans with PII
+  silently off.
+
+### Fixed
+
+- An application that had already run `initialize({ pii })` could not build
+  this processor: the factory's own argument-free `initialize()` is a
+  different selection to the core's one-shot cell and rejected with
+  `PII_ACTIVATION_CONFLICT`. That conflict now counts as success, since it
+  means the core is already loaded under the application's own selection.
+  Every other initialization failure still rejects exactly as before.
+
+### Documented
+
+- Activating PII is not the same as masking every PII value: under the
+  core's default policy `High`-confidence PII redacts while `Medium` and
+  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
+  lower-confidence PII still reaches the exporter as plaintext unless the
+  caller supplies a `policy` that maps those findings to `redact`. The
+  outcome counters make it visible: a span with a non-zero
+  `values.findings` and `values.redacted` still at zero is this case.
+
 ## [0.1.2] - 2026-09-27
 
 ### Added

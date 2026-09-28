@@ -19,6 +19,51 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Added
+
+- `activateCore(core, { pii })`: the one core-activation step every live
+  factory in this repository runs
+  (redact-secret/redact-secret-adapters#51), plus `activePiiActivation`,
+  `readPiiActivation`, `activationReflects`, `isPiiActivationConflict`,
+  `PII_ACTIVATION_CONFLICT`, `CoreActivationError` and the `CoreActivation`
+  / `InitializableCore` types. PII detection in the core is opt-in,
+  process-wide and one-shot, so it layers three rules: without `pii`,
+  `initialize()` as before but a `PII_ACTIVATION_CONFLICT` counts as
+  success, because it means the application already activated its own
+  selection; with `pii`, `initialize({ pii })`, so the adapter-first order
+  works; and with `pii`, a check of `piiActivation()` afterwards that
+  refuses when the active identity does not reflect the request, which is
+  what closes the silent-PII-off window. Both refusals are a
+  `CoreActivationError` with a fixed code (`PII_ACTIVATION_UNSUPPORTED`,
+  `PII_ACTIVATION_NOT_ACTIVE`) and a fixed message: no selector, no input,
+  no field path, no core exception text.
+- `activePiiActivation()`: the identity the last successful activation
+  observed, or `undefined`. Deliberately **not** a counter field — an
+  `OutcomeCounter` is six non-negative integers and nothing else — and
+  deliberately a pull accessor, since the core's selection is one-shot and
+  the identity is one process-wide fact rather than something to repeat per
+  log record or per span.
+
+### Changed
+
+- No change to the declared `@redact-secret/core` range, which stays
+  `^0.1.0-beta.6`. `initialize`'s optional argument and the optional
+  `piiActivation` are described by this package's own
+  `InitializableCore`, never read from the core's types, and
+  `piiActivation` is feature-detected at runtime, so a core at the floor
+  keeps working whenever `pii` is omitted.
+
+### Documented
+
+- Activation is not masking: under the core's default policy PII types are
+  confidence-gated, so a `High`-confidence finding redacts while `Medium`
+  and `Low` resolve to `warn` — and `maskLeafOutcomeWith` substitutes only
+  on `block`, so a `warn` leaves the text alone. Lower-confidence PII
+  therefore still reaches a destination as plaintext unless the caller
+  supplies a `policy` that maps those findings to `redact`. Nothing here
+  synthesizes one. The counters already make it observable, since
+  `findings` and `redacted` are counted apart.
+
 ## [0.1.3] - 2026-09-27
 
 ### Added

@@ -40,12 +40,18 @@ test("the built output imports only the shared adapter statically, and the core 
   }
 });
 
-test("the only core members read are initialize, scanAndRedact and createIncrementalSanitizer", () => {
+test("the only core members read are scanAndRedact, createIncrementalSanitizer, and the shared activation step", () => {
   const index = builtSources().find(([name]) => name === "index.js")?.[1] ?? "";
   expect(index).toMatch(/import\(["']@redact-secret\/core["']\)/);
   const boundary = builtSources().find(([name]) => name === "boundary.js")?.[1] ?? "";
   const coreMembers = new Set([...boundary.matchAll(/\bcore\.(\w+)/g)].map((m) => m[1]));
   expect([...coreMembers].sort()).toEqual(["createIncrementalSanitizer", "scanAndRedact"]);
+  // The lifecycle members — `initialize` and the optional `piiActivation` —
+  // are read by `@redact-secret/adapter`'s `activateCore`, which this file
+  // hands the loaded module to (redact-secret/redact-secret-adapters#51). It
+  // reads nothing of the module itself, so one place owns the whole
+  // process-wide activation rule.
+  expect(index).toMatch(/activateCore\(loaded,/);
   const loadedMembers = new Set([...index.matchAll(/\bloaded\.(\w+)/g)].map((m) => m[1]));
-  expect([...loadedMembers].sort()).toEqual(["initialize"]);
+  expect([...loadedMembers].sort()).toEqual([]);
 });
