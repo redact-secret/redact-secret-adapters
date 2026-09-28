@@ -39,10 +39,10 @@
   },
   "peerDependencies": {
     "@opentelemetry/sdk-trace-base": "^2.0.0",
-    "@redact-secret/core": "^0.1.0-beta.6"
+    "@redact-secret/core": "^0.1.0-beta.8"
   },
   "devDependencies": {
     "@opentelemetry/sdk-trace-base": "^2.0.0",
-    "@redact-secret/core": "^0.1.0-beta.6"
+    "@redact-secret/core": "^0.1.0-beta.8"
   }
 }

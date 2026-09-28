@@ -41,7 +41,7 @@
     "@modelcontextprotocol/client": ">=2.0.0 <=2.1.0",
     "@modelcontextprotocol/sdk": ">=1.13.0 <=1.30.1",
     "@modelcontextprotocol/server": ">=2.0.0 <=2.1.0",
-    "@redact-secret/core": "^0.1.0-beta.6"
+    "@redact-secret/core": "^0.1.0-beta.8"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/client": {
@@ -58,6 +58,6 @@
     "@modelcontextprotocol/client": ">=2.0.0 <=2.1.0",
     "@modelcontextprotocol/sdk": ">=1.13.0 <=1.30.1",
     "@modelcontextprotocol/server": ">=2.0.0 <=2.1.0",
-    "@redact-secret/core": "^0.1.0-beta.6"
+    "@redact-secret/core": "^0.1.0-beta.8"
   }
 }

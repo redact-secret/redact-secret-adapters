@@ -35,9 +35,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "@redact-secret/core": "^0.1.0-beta.6"
+    "@redact-secret/core": "^0.1.0-beta.8"
   },
   "devDependencies": {
-    "@redact-secret/core": "^0.1.0-beta.6"
+    "@redact-secret/core": "^0.1.0-beta.8"
   }
 }

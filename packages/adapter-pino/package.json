@@ -38,11 +38,11 @@
     "@redact-secret/adapter": "^0.1.3"
   },
   "peerDependencies": {
-    "@redact-secret/core": "^0.1.0-beta.6",
+    "@redact-secret/core": "^0.1.0-beta.8",
     "pino": "^10.0.0"
   },
   "devDependencies": {
-    "@redact-secret/core": "^0.1.0-beta.6",
+    "@redact-secret/core": "^0.1.0-beta.8",
     "pino": "^10.0.0",
     "quick-format-unescaped": "4.0.4"
   }
