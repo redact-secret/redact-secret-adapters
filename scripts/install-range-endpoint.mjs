@@ -13,7 +13,9 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+
+import { workspaceDirs } from "./workspace-dirs.mjs";
 
 const CORE = "@redact-secret/core";
 const end = process.argv[2];
@@ -30,7 +32,7 @@ function resolve(name, range) {
 }
 
 const packagesDir = new URL("../packages/", import.meta.url);
-for (const dir of readdirSync(packagesDir)) {
+for (const dir of workspaceDirs(packagesDir)) {
   const manifest = JSON.parse(readFileSync(new URL(`${dir}/package.json`, packagesDir), "utf-8"));
   const ranges = { ...manifest.peerDependencies };
   const coreRange = manifest.dependencies?.[CORE] ?? manifest.peerDependencies?.[CORE];
