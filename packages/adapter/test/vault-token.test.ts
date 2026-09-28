@@ -3,7 +3,7 @@
  * (redact-secret/redact-secret-adapters#52), on the **real installed core**
  * through the walk/mask path.
  *
- * The vault ships from the sibling `redact-secret-reversible` repository and
+ * The vault ships from the sibling `redact-secret-vault` repository and
  * is not a dependency here. It replaces a detected secret with a
  * `<rsv_…>` token on the way to a model and restores the original value
  * afterwards, so an adapter that rewrote a token to `<GENERIC_TOKEN_1>` would

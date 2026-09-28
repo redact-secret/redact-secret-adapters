@@ -5,7 +5,7 @@
  * context strings from the same file, so a case means the same thing in
  * either language.
  *
- * `@redact-secret/vault` lives in the sibling `redact-secret-reversible`
+ * `@redact-secret/vault` lives in the sibling `redact-secret-vault`
  * repository and is **not** a dependency of this one. Only the shape of its
  * token is reproduced here — a `<rsv_` prefix, 32 hex digits, a `>` — because
  * that shape is its published contract and an adapter that rewrote one would

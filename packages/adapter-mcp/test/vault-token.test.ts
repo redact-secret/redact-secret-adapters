@@ -8,7 +8,7 @@
  * host then logs, persists and puts into context would no longer match the
  * mapping the application still holds, and `restore()` would answer
  * `RESTORE_DENIED` with nothing to point at. `@redact-secret/vault` ships from
- * the sibling `redact-secret-reversible` repository and is **not** a
+ * the sibling `redact-secret-vault` repository and is **not** a
  * dependency of this one; only the shape of its token is reproduced here.
  *
  * The fixed texts this package emits are checked for the literal `rsv_` too,

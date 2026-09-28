@@ -360,17 +360,17 @@ holding the two languages together, so they are shared — one copy, read by bot
 - Fixtures and tests use unmistakably synthetic values only. A real credential
   never enters this repository, in any file, including documentation.
 
-## The reversible boundary
+## The vault boundary
 
 `@redact-secret/vault` is an opt-in, in-memory capture published by the sibling
-[`redact-secret-reversible`](https://github.com/redact-secret/redact-secret-reversible)
+[`redact-secret-vault`](https://github.com/redact-secret/redact-secret-vault)
 repository. It replaces a detected secret with a `<rsv_…>` token on the way to
 a model and restores the original value into an application-designated field on
 the way back. **This repository does not depend on it, and must not**: the core
 and the adapters stay one-way. What is written down here is only how the two
 sit next to each other.
 
-| Owned here | Owned by the reversible repository |
+| Owned here | Owned by the vault repository |
 | --- | --- |
 | Host integrations: pino, OpenTelemetry, Python `logging`, AI context, MCP | `capture()`, the token mapping, `restore()` |
 | Fail-closed masking and the four markers | Reversibility, and every decision about who may reverse |
@@ -410,7 +410,7 @@ so that is a test, not an assumption.
 ## Deliberate exclusions
 
 - **Restoration.** Reversibility, token mapping and `restore()` belong to
-  `@redact-secret/vault`; see [The reversible boundary](#the-reversible-boundary).
+  `@redact-secret/vault`; see [The vault boundary](#the-vault-boundary).
   No adapter here gains a dependency on it, or vault-aware behavior of its own.
 - **Stream adapters** (Node `Transform`, Web `TransformStream`) belong to
   `@redact-secret/core` and stay there. The word "adapter" in this repository
