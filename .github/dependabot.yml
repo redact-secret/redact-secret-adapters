@@ -30,6 +30,16 @@ updates:
           - minor
           - patch
 
+  # Pinned npm CLI used by the release workflows (see .github/npm-tools).
+  # Its bundled dependencies are scanned by Scorecard, so track new npm releases.
+  - package-ecosystem: npm
+    directory: /.github/npm-tools
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "chore(deps)"
+
   - package-ecosystem: pip
     directory: /python
     schedule:
