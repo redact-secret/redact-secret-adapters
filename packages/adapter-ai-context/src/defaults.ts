@@ -19,6 +19,8 @@
  * every chunk partition under them.
  */
 
+import type { CoreActivation } from "@redact-secret/adapter";
+
 import type { AiContextBoundaryOptions } from "./types.js";
 
 /**
@@ -59,12 +61,17 @@ export const AI_CONTEXT_DEFAULT_LIMITS: AiContextLimits = Object.freeze({
   traversalLimits: Object.freeze({ maxDepth: 16, maxNodes: 4_096 }),
 });
 
-/** {@link AiContextBoundaryOptions} with each limit set optional. */
+/**
+ * {@link AiContextBoundaryOptions} with each limit set optional, plus the live
+ * factory's {@link CoreActivation}. `pii` is read only by the live factory —
+ * `createAiContextBoundaryWith` takes a core that is already activated.
+ */
 export type AiContextBoundaryOptionsWithDefaults = Omit<
   AiContextBoundaryOptions,
   "wholeInputLimits" | "incrementalLimits" | "traversalLimits"
 > &
-  Partial<AiContextLimits>;
+  Partial<AiContextLimits> &
+  CoreActivation;
 
 const LIMIT_KEYS = ["wholeInputLimits", "incrementalLimits", "traversalLimits"] as const;
 

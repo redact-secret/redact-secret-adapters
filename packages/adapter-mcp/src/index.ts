@@ -23,6 +23,7 @@ import { createAiContextBoundary } from "@redact-secret/adapter-ai-context";
 import { createMcpBoundaryWith } from "./boundary.js";
 import type { CreateMcpBoundaryOptionsWithDefaults, McpBoundary } from "./types.js";
 
+export type { CoreActivation } from "@redact-secret/adapter-ai-context";
 export {
   createMcpBoundaryWith,
   MCP_AUDIT_FIELDS,
@@ -80,6 +81,12 @@ export type {
  * `0.1.0-alpha.2` had to, behaves exactly as it did, and
  * `createMcpBoundaryWith` over an explicit boundary is unchanged.
  *
+ * `options.pii` is forwarded to the AI-context factory, which activates core
+ * PII selectors for the whole process. Omitted, an activation the application
+ * already made is accepted rather than fought over. Given, a selection that is
+ * not the one actually active fails the boundary closed, like any other
+ * initialization failure.
+ *
  * Like the AI-context live factory, it never rejects for an initialization
  * failure: every operation then fails closed as `blocked` / `core_error`,
  * which maps to the fixed blocked result. Rejects only for malformed
@@ -90,6 +97,9 @@ export async function createMcpBoundary(options: CreateMcpBoundaryOptionsWithDef
     throw new TypeError("createMcpBoundary: options are required");
   }
   const { binaryContent, onAudit, ...aiContextOptions } = options;
-  const boundary = await createAiContextBoundary(aiContextOptions);
+  // Read by property so an activation inherited through a prototype is
+  // forwarded too; the rest spread above copies own enumerable keys only.
+  const { pii } = options;
+  const boundary = await createAiContextBoundary(pii === undefined ? aiContextOptions : { ...aiContextOptions, pii });
   return createMcpBoundaryWith(boundary, { binaryContent, onAudit });
 }
