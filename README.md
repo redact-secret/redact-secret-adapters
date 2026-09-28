@@ -80,12 +80,12 @@ floor, and CI runs the real-host tests at both. Passing `pii` to a factory
 needs beta.10; everything else works at the floor. See
 [Supported host versions](#supported-host-versions).
 
-`@redact-secret/vault`, from the sibling reversible repository, pins the core
+`@redact-secret/vault`, from the sibling vault repository, pins the core
 to `0.1.0-beta.9` **exactly**. An application that installs it alongside these
 adapters and moves to beta.10 therefore hits a peer conflict — not because
 either range is wrong, but because the pins have not yet met. Nothing here
 depends on the vault and an adapter release does not wait on it; see
-[Composing with the reversible vault](#composing-with-the-reversible-vault).
+[Composing with the vault](#composing-with-the-vault).
 
 Every package declares a compatibility range against `@redact-secret/core` /
 `redact-secret` and is tested against the host versions it claims. Each host
@@ -443,7 +443,7 @@ two that do run against a real core, one ordering per spawned process
 | Core between the two endpoints, e.g. `0.1.0-beta.8` | Installs; inside the declared range but not an endpoint CI runs. Not claimed. |
 | Core below `0.1.0-beta.6` | Refused at install (`ERESOLVE`, or pip). |
 | A factory's `pii` option on a core below `0.1.0-beta.10` | Refused at runtime with a fixed code. Omitting `pii` works at the floor. |
-| `@redact-secret/vault` with core `0.1.0-beta.10` | Peer conflict: the vault pins `0.1.0-beta.9` exactly. Its own bump is tracked in the reversible repository. |
+| `@redact-secret/vault` with core `0.1.0-beta.10` | Peer conflict: the vault pins `0.1.0-beta.9` exactly. Its own bump is tracked in the vault repository. |
 | Any version in the "Declared on `develop`" column | Not published. Nothing installs it until the train is cut. |
 
 An unqualified host is either refused at install time or listed as
@@ -504,10 +504,10 @@ The core is released in lockstep across Rust, npm, PyPI and the CLI. These
 packages are not part of that lockstep: a new pino release moves
 `adapter-pino` and nothing else.
 
-## Composing with the reversible vault
+## Composing with the vault
 
 `@redact-secret/vault`, from the sibling
-[`redact-secret-reversible`](https://github.com/redact-secret/redact-secret-reversible)
+[`redact-secret-vault`](https://github.com/redact-secret/redact-secret-vault)
 repository, is opt-in, in-memory capture: it replaces a detected secret with a
 `<rsv_…>` token on the way to a model and restores the original value into a
 field the application designates. **Nothing here depends on it**, and the two
@@ -527,7 +527,7 @@ compose in one order:
 Two paths deliberately do not preserve a token — a leaf past `maxStringLength`,
 and a core failure — because both replace the whole leaf with a marker. Both are
 pinned as tests, in both languages, along with the pass-through itself:
-[ARCHITECTURE.md § The reversible boundary](./ARCHITECTURE.md#the-reversible-boundary).
+[ARCHITECTURE.md § The vault boundary](./ARCHITECTURE.md#the-vault-boundary).
 
 ## What this repository does not contain
 

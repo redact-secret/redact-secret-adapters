@@ -2,7 +2,7 @@
 (redact-secret/redact-secret-adapters#52), mirroring
 ``packages/adapter/test/vault-token.test.ts``.
 
-The vault ships from the sibling ``redact-secret-reversible`` repository and
+The vault ships from the sibling ``redact-secret-vault`` repository and
 is **not** a dependency of this one. It replaces a detected secret with a
 ``<rsv_…>`` token on the way to a model and restores the original value
 afterwards, so an adapter that rewrote a token would not leak anything -- it

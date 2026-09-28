@@ -12,7 +12,7 @@
  * application's `restore()` would answer `RESTORE_DENIED` and the value would
  * be gone, with no error raised anywhere near here.
  *
- * `@redact-secret/vault` ships from the sibling `redact-secret-reversible`
+ * `@redact-secret/vault` ships from the sibling `redact-secret-vault`
  * repository and is **not** a dependency of this one. Only the shape of its
  * token is reproduced, from the shared fixture, and asserted to survive.
  *
