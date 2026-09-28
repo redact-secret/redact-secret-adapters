@@ -61,7 +61,24 @@ def _core_available() -> bool:
     return True
 
 
-@unittest.skipUnless(_core_available(), "redact_secret is not installed")
+def _pii_api_available() -> bool:
+    """Whether the installed core exposes the opt-in PII activation API.
+
+    PII arrived in `redact-secret` 0.1.0b10, and this package's declared
+    range still starts at 0.1.0b6 -- deliberately, since an adapter that
+    passes no selectors needs nothing newer. CI installs both ends of that
+    range, so at the lowest end `initialize` and `pii_activation` simply do
+    not exist and every case below has no behaviour to pin. Skipping is the
+    honest outcome: the floor is supported, not merely tolerated.
+    """
+    if not _core_available():
+        return False
+    import redact_secret
+
+    return all(hasattr(redact_secret, name) for name in ("initialize", "pii_activation"))
+
+
+@unittest.skipUnless(_pii_api_available(), "the installed redact_secret has no PII activation API")
 class PiiActivationPlacementTest(unittest.TestCase):
     """The documented rule: enable PII before the first scan."""
 
