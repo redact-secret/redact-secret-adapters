@@ -445,4 +445,5 @@ python/
   redact_secret_adapters/                               shared + logging + otel extra
 fixtures/                                               cross-language contract, shared
   core/                                                 core-owned contract files, vendored at a pinned core commit
+site-feed/v1/                                           generated adapter release feed + its schema (RELEASING.md)
 ```
