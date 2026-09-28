@@ -211,7 +211,8 @@
         "python/tests/test_live.py",
         "python/tests/test_logging_placement.py",
         "python/tests/test_outcome.py",
-        "python/tests/test_otel_outcome.py"
+        "python/tests/test_otel_outcome.py",
+        "python/tests/test_vault_token.py"
       ]
     }
   ],
