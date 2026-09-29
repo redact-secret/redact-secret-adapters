@@ -63,12 +63,12 @@ train. A version in the second column exists only here until that train is cut.
 
 | Package | Registry | Host | Published — installable now | Declared on `develop` |
 | --- | --- | --- | --- | --- |
-| `@redact-secret/adapter` | npm | — (shared base) | `0.1.2`, beta | `0.1.3` |
-| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.1`, beta | `0.1.2` |
-| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.1`, beta | `0.1.2` |
-| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.0`, beta | `0.1.1` |
-| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha.1`, prerelease (dist-tag `alpha`) | `0.1.0-alpha.2` |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha.1`, prerelease (dist-tag `alpha`) | `0.1.0-alpha.2` |
+| `@redact-secret/adapter` | npm | — (shared base) | `0.1.3`, beta | `0.1.3` |
+| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
+| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.2`, beta | `0.1.2` |
+| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.1`, beta | `0.1.1` |
+| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0` |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0` |
 
 A prerelease publishes under the npm dist-tag `alpha`, never `latest`, so it is
 opt-in by tag or exact version. pip skips a pre-release unless asked for one.
@@ -234,9 +234,8 @@ longer have to invent them before the first call, and any set can still be
 passed explicitly. There is no unbounded mode. Non-JSON values, binary content
 and encoded text are **blocked, not decoded** — convert them yourself, so what
 is scanned is exactly what you send. Published as the prerelease
-`0.1.0-alpha.1` (`npm install @redact-secret/adapter-ai-context@alpha`);
-`createAiContextBoundary()` with no limits needs `0.1.0-alpha.2`
-(**Unreleased**). See the
+`0.1.0-alpha.2` (`npm install @redact-secret/adapter-ai-context@alpha`);
+`createAiContextBoundary()` with no limits needs `0.1.0-alpha.2`. See the
 [package README](./packages/adapter-ai-context#readme).
 
 ### MCP (prerelease)
@@ -261,8 +260,8 @@ original position instead. A content type no qualified protocol revision
 defines also blocks, and a cancelled call is `aborted` with nothing to deliver.
 It names every security non-goal in its
 [package README](./packages/adapter-mcp#readme). Published as the prerelease
-`0.1.0-alpha.1` (`npm install @redact-secret/adapter-mcp@alpha`);
-`createMcpBoundary()` with no limits needs `0.1.0-alpha.2` (**Unreleased**).
+`0.1.0-alpha.2` (`npm install @redact-secret/adapter-mcp@alpha`);
+`createMcpBoundary()` with no limits needs `0.1.0-alpha.2`.
 
 ### Masking callbacks (Langfuse and similar)
 

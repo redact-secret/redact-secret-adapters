@@ -14,7 +14,11 @@ dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
 not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-09-29
 ### Changed
+- First stable release: published under the npm dist-tag `latest`. The code is
+  that of `0.1.0-alpha.2` plus the scan reuse below.
 - `sanitizeValue` and `buildContext` scan each distinct text once per call
   (texts up to 1,024 code units), reusing the result for repeats such as a
   content envelope's `type` / `text` keys. Output, findings, `onFinding`
