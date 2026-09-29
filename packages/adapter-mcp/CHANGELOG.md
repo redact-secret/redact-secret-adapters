@@ -14,8 +14,10 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
-## [0.1.0-alpha.3] - 2026-09-29
+## [0.1.0] - 2026-09-29
 ### Changed
+- First stable release: published under the npm dist-tag `latest`. The code is
+  that of `0.1.0-alpha.2` plus the scan reuse below.
 - A tool result's repeated envelope strings reach the core once per crossing:
   the value scan reuses identical texts, and the key-context check skips a
   serialized part that already scanned with no findings. Outputs, findings and

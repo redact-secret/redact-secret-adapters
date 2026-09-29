@@ -67,8 +67,8 @@ train. A version in the second column exists only here until that train is cut.
 | `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
 | `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.2`, beta | `0.1.2` |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.1`, beta | `0.1.1` |
-| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0-alpha.3` |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0-alpha.3` |
+| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0` |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0` |
 
 A prerelease publishes under the npm dist-tag `alpha`, never `latest`, so it is
 opt-in by tag or exact version. pip skips a pre-release unless asked for one.
