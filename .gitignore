@@ -35,3 +35,4 @@ python/dist/
 # Stryker
 .stryker-tmp/
 reports/
+out/

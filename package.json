@@ -32,6 +32,7 @@
     "compat:check": "node scripts/check-compatibility-record.mjs",
     "overhead": "node scripts/measure-overhead.mjs",
     "footprint": "node scripts/measure-footprint.mjs",
+    "bench:docker": "node scripts/bench-docker.mjs",
     "feed:generate": "node scripts/generate-site-feed.mjs",
     "feed:check": "node scripts/generate-site-feed.mjs --check"
   },

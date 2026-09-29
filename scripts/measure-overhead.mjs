@@ -126,7 +126,10 @@ function gitState() {
     const dirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf-8" }).trim() !== "";
     return { commit, dirty };
   } catch {
-    return { commit: null, dirty: null };
+    // No checkout (the bench container): the runner passes the source commit in.
+    const commit = process.env.REDACT_SECRET_BENCH_COMMIT || null;
+    const dirty = process.env.REDACT_SECRET_BENCH_DIRTY;
+    return { commit, dirty: dirty === "true" ? true : dirty === "false" ? false : null };
   }
 }
 

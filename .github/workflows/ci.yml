@@ -288,6 +288,28 @@ jobs:
               }
             }'
 
+  bench-image:
+    # docker/bench.Dockerfile builds and runs the harness against the
+    # published previous release (#97), in --quick mode on two profiles:
+    # proves the image still works. Its numbers are meaningless and not kept.
+    name: Bench image smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node scripts/bench-docker.mjs --quick --out out/overhead-js.json -- --profile log-flat,mask-payload
+      - name: Check the output came from the image and carries the baseline
+        run: |
+          node -e '
+            const out = JSON.parse(require("fs").readFileSync("out/overhead-js.json", "utf-8"));
+            if (out.schema !== "redact-secret-adapters/overhead-v2") throw new Error("schema");
+            if (!/^sha256:/.test(out.environment.containerImage ?? "")) throw new Error("containerImage");
+            if (out.source.commit === null) throw new Error("source.commit");
+            if (out.baseline === null || !out.results.every((r) => r.baseline !== undefined)) throw new Error("baseline");'
+
   ci-passed:
     # The single required status check for develop, release and main, so
     # branch rulesets don't have to list (and track renames of) every
@@ -305,6 +327,7 @@ jobs:
       - python-range-endpoints
       - lint
       - overhead-harness
+      - bench-image
     runs-on: ubuntu-latest
     permissions: {}
     steps:

@@ -510,6 +510,15 @@ node scripts/install-overhead-baseline.mjs /tmp/overhead-baseline
 node scripts/measure-overhead.mjs --baseline /tmp/overhead-baseline --out overhead-js.json
 ```
 
+`npm run bench:docker` does the same inside
+[`docker/bench.Dockerfile`](./docker/bench.Dockerfile): Node, the OS
+libraries, the core's native addon and the previous release are pinned in the
+image, the container has no network, and the image id and source commit are
+recorded in the output (`npm run bench:docker -- --cpuset 2,3` also pins
+CPUs). The image fixes the software, not the hardware, so compare runs from
+different machines only by their same-session `change`, never by absolute
+microseconds, and never run it under emulation.
+
 One-off costs are measured apart from per-event ones:
 `scripts/measure-footprint.mjs` (`npm run footprint`) records each npm
 package's packed and unpacked size, and its initialization time in a fresh
