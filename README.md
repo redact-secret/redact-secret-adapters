@@ -500,6 +500,16 @@ npm run build && node scripts/measure-overhead.mjs --out overhead-js.json
 pip install -e "./python[otel]" && python scripts/measure-overhead.py --out overhead-python.json
 ```
 
+To compare against the previous release, install it into a prefix and pass
+`--baseline`. The JavaScript harness then interleaves the previous release's
+modes with the current build's in one session, and records the change for
+every result (a record, not a verdict):
+
+```bash
+node scripts/install-overhead-baseline.mjs /tmp/overhead-baseline
+node scripts/measure-overhead.mjs --baseline /tmp/overhead-baseline --out overhead-js.json
+```
+
 One-off costs are measured apart from per-event ones:
 `scripts/measure-footprint.mjs` (`npm run footprint`) records each npm
 package's packed and unpacked size, and its initialization time in a fresh
