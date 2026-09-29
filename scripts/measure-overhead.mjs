@@ -41,9 +41,9 @@ import { runInNewContext } from "node:vm";
 
 import { buildEvents, loadProfiles, workloadDigest } from "./overhead-workloads.mjs";
 
-const HOSTS = ["pino", "pino-streamwrite", "otel-js", "mask-js", "ai-context-js"];
+const HOSTS = ["pino", "pino-streamwrite", "otel-js", "mask-js", "ai-context-js", "mcp-js", "mcp-stream-js"];
 // Hosts whose host mode is the empty call: a ratio over it means nothing.
-const HOSTLESS = new Set(["mask-js", "ai-context-js"]);
+const HOSTLESS = new Set(["mask-js", "ai-context-js", "mcp-js", "mcp-stream-js"]);
 const MODES = ["host", "adapter-identity", "adapter-core", "core-direct"];
 
 function parseArgs(argv) {
@@ -151,12 +151,13 @@ v8.setFlagsFromString("--expose-gc");
 const collectGarbage = runInNewContext("gc");
 
 /** Bytes allocated while `work` runs: heap growth plus what every collection during it reclaimed. */
-function measureAllocation(work) {
+async function measureAllocation(work) {
   collectGarbage();
   const profiler = new v8.GCProfiler();
   profiler.start();
   const before = v8.getHeapStatistics().used_heap_size;
-  work();
+  const pending = work();
+  if (pending !== undefined) await pending;
   const after = v8.getHeapStatistics().used_heap_size;
   const { statistics } = profiler.stop();
   let reclaimed = 0;
@@ -170,7 +171,14 @@ function measureAllocation(work) {
 
 const identityScanner = (text) => ({ text, findings: [] });
 
-async function hostRunners(host) {
+/**
+ * For each host, `make(scanner)` returns a runner for one event. A host whose
+ * runners are async sets `make.async`; every pass then awaits each event, and
+ * only for that host, so the synchronous hosts are timed exactly as before. A
+ * host whose core-direct is not "scan each recorded leaf" sets
+ * `make.coreDirect(event)`.
+ */
+async function hostRunners(host, core) {
   if (host === "pino" || host === "pino-streamwrite") {
     const pino = (await import("pino")).default;
     const { createRedactingLogMethodWith, createRedactingStreamWriteWith } = await import(
@@ -227,25 +235,85 @@ async function hostRunners(host) {
       };
     };
   }
+  if (host === "mcp-js") {
+    const { createAiContextBoundaryWith } = await import("@redact-secret/adapter-ai-context");
+    const { createMcpBoundaryWith } = await import("@redact-secret/adapter-mcp");
+    const { AI_CONTEXT_LIMITS, mcpToolResult } = await import("./overhead-workloads.mjs");
+    const unusedSession = () => {
+      throw new Error("overhead harness: mcp-js measures no incremental session");
+    };
+    // Whole-input: one tool result per event, through the MCP boundary's result handling.
+    return (scanner) => {
+      if (scanner === undefined) return () => undefined;
+      const mcp = createMcpBoundaryWith(
+        createAiContextBoundaryWith(
+          { scanAndRedact: scanner, createIncrementalSanitizer: unusedSession },
+          AI_CONTEXT_LIMITS,
+        ),
+      );
+      return (event) => {
+        const outcome = mcp.sanitizeToolResult(mcpToolResult(event));
+        if (outcome.outcome !== "ok") throw new Error(`overhead harness: mcp-js ${outcome.outcome}`);
+      };
+    };
+  }
+  if (host === "mcp-stream-js") {
+    const { createAiContextBoundaryWith } = await import("@redact-secret/adapter-ai-context");
+    const { createMcpBoundaryWith } = await import("@redact-secret/adapter-mcp");
+    const { AI_CONTEXT_LIMITS, mcpChunks } = await import("./overhead-workloads.mjs");
+    const unusedScan = () => {
+      throw new Error("overhead harness: mcp-stream-js measures no whole-input scan");
+    };
+    // The core's incremental session for the real core; otherwise a session
+    // that hands each chunk to the scanner (identity, or the leaf recorder).
+    const sessionFor = (scanner) =>
+      scanner === core.scanAndRedact
+        ? core.createIncrementalSanitizer
+        : () => ({ append: (chunk) => scanner(chunk), finalize: () => ({ text: "", findings: [] }), abort() {} });
+    const make = (scanner) => {
+      if (scanner === undefined) return async () => undefined;
+      const mcp = createMcpBoundaryWith(
+        createAiContextBoundaryWith(
+          { scanAndRedact: unusedScan, createIncrementalSanitizer: sessionFor(scanner) },
+          AI_CONTEXT_LIMITS,
+        ),
+      );
+      return async (event) => {
+        const outcome = await mcp.sanitizeStreamedToolResult(mcpChunks(event));
+        if (outcome.outcome !== "ok") throw new Error(`overhead harness: mcp-stream-js ${outcome.outcome}`);
+      };
+    };
+    make.async = true;
+    // The core's own incremental session over the same chunks, not whole-input scans of them.
+    make.coreDirect = (event) => {
+      const session = core.createIncrementalSanitizer({ limits: AI_CONTEXT_LIMITS.incrementalLimits });
+      for (const chunk of mcpChunks(event)) session.append(chunk);
+      session.finalize();
+    };
+    return make;
+  }
   throw new Error(`unknown host: ${host}`);
 }
 
 async function measurePair(host, profile, events, core, options) {
-  const make = await hostRunners(host);
+  const make = await hostRunners(host, core);
+  const isAsync = make.async === true;
   // The leaves the adapter hands the core, per event, recorded once.
-  const leaves = events.map((event) => {
+  const leaves = [];
+  for (const event of events) {
     const recorded = [];
-    make((text) => {
+    await make((text) => {
       recorded.push(text);
       return identityScanner(text);
     })(event);
-    return recorded;
-  });
+    leaves.push(recorded);
+  }
   const runners = {
     host: make(undefined),
     "adapter-identity": make(identityScanner),
     "adapter-core": make(core.scanAndRedact),
     "core-direct": (() => {
+      if (make.coreDirect !== undefined) return make.coreDirect;
       let cursor = 0;
       return () => {
         for (const text of leaves[cursor]) core.scanAndRedact(text);
@@ -254,17 +322,23 @@ async function measurePair(host, profile, events, core, options) {
     })(),
   };
   // core-direct keeps its own cursor so it walks the same event order as the others.
-  const run = (mode, count) => {
-    const runner = runners[mode];
-    for (let k = 0; k < count; k += 1) runner(events[k % events.length]);
-  };
-  for (const mode of MODES) run(mode, options.warmup);
+  const run = isAsync
+    ? async (mode, count) => {
+        const runner = runners[mode];
+        for (let k = 0; k < count; k += 1) await runner(events[k % events.length]);
+      }
+    : (mode, count) => {
+        const runner = runners[mode];
+        for (let k = 0; k < count; k += 1) runner(events[k % events.length]);
+      };
+  for (const mode of MODES) await run(mode, options.warmup);
   const samples = Object.fromEntries(MODES.map((mode) => [mode, []]));
   for (let rep = 0; rep < options.repetitions; rep += 1) {
     for (let m = 0; m < MODES.length; m += 1) {
       const mode = MODES[(m + rep) % MODES.length];
       const started = process.hrtime.bigint();
-      run(mode, options.events);
+      if (isAsync) await run(mode, options.events);
+      else run(mode, options.events);
       samples[mode].push(Number(process.hrtime.bigint() - started) / 1000 / options.events);
     }
   }
@@ -276,7 +350,8 @@ async function measurePair(host, profile, events, core, options) {
       for (let k = 0; k < options.events; k += 1) {
         const event = events[k % events.length];
         const started = process.hrtime.bigint();
-        runner(event);
+        if (isAsync) await runner(event);
+        else runner(event);
         latencies[mode].push(Number(process.hrtime.bigint() - started) / 1000);
       }
     }
@@ -285,7 +360,7 @@ async function measurePair(host, profile, events, core, options) {
   for (let rep = 0; rep < options.repetitions; rep += 1) {
     for (let m = 0; m < MODES.length; m += 1) {
       const mode = MODES[(m + rep) % MODES.length];
-      allocations[mode].push(measureAllocation(() => run(mode, options.events)));
+      allocations[mode].push(await measureAllocation(() => run(mode, options.events)));
     }
   }
   const modes = Object.fromEntries(
@@ -375,6 +450,7 @@ async function main() {
           "@redact-secret/adapter-pino",
           "@redact-secret/adapter-otel",
           "@redact-secret/adapter-ai-context",
+          "@redact-secret/adapter-mcp",
           "pino",
           "@opentelemetry/sdk-trace-base",
         ].map((name) => [name, versionOf(name)]),
@@ -402,6 +478,7 @@ async function main() {
       "memory counts the V8 heap only: native allocations inside the core are not included.",
       "derived values are differences of medians, not medians of differences, and can be negative within noise.",
       "The OpenTelemetry exporter is a no-op, so export cost is excluded; pino writes to a no-op destination, so I/O cost is excluded.",
+      "mcp-js and mcp-stream-js have no host around them either: mcp-js measures sanitizeToolResult over one tool result per payload event, mcp-stream-js sanitizeStreamedToolResult over one chunk per message and tool result, awaited per event.",
       "ai-context-js has no host around it: its host mode is the empty call, and it measures buildContext over whole-input scans only, not a stream.",
       "This output carries no threshold and no verdict.",
     ],
