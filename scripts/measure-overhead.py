@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from overhead_environment import cpu_environment  # noqa: E402
 from overhead_workloads import build_events, load_profiles, workload_digest  # noqa: E402
 
 HOSTS = ("python-logging", "otel-python", "mask-python")
@@ -433,19 +434,6 @@ def _version(name: str) -> Optional[str]:
         return None
 
 
-def _cpu_model() -> Optional[str]:
-    try:
-        if sys.platform == "darwin":
-            return subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip()
-        with open("/proc/cpuinfo", encoding="utf-8") as cpuinfo:
-            for line in cpuinfo:
-                if line.startswith("model name"):
-                    return line.split(":", 1)[1].strip()
-    except (OSError, subprocess.CalledProcessError):
-        pass
-    return platform.processor() or None
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", default="-")
@@ -503,8 +491,9 @@ def main() -> None:
         "environment": {
             "os": f"{platform.system().lower()}-{platform.release()}",
             "platform": sys.platform,
-            "arch": platform.machine(),
-            "cpuModel": _cpu_model(),
+            # arch is normalized (arm64/x64) with archRaw beside it; cpuModel is the
+            # host's when the container wrapper passed it, with the visible one recorded (#108).
+            **cpu_environment(),
             "logicalCpus": os.cpu_count(),
             "runtime": f"{sys.implementation.name}-{platform.python_version()}",
             # Set by the container wrapper; None for a run outside one.

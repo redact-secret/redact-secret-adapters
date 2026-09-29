@@ -314,6 +314,11 @@ jobs:
               if (out.schema !== "redact-secret-adapters/overhead-v2") throw new Error(`${file}: schema`);
               if (!/^sha256:/.test(out.environment.containerImage ?? "")) throw new Error(`${file}: containerImage`);
               if (out.source.commit === null) throw new Error(`${file}: source.commit`);
+              // #108: a container cannot see the host CPU; without the host model every machine shares one profile id.
+              const env = out.environment;
+              if (!env.cpuModel || /^unknown/i.test(env.cpuModel)) throw new Error(`${file}: cpuModel is ${env.cpuModel}`);
+              if (env.cpuModelSource !== "host-env") throw new Error(`${file}: cpuModelSource is ${env.cpuModelSource}`);
+              if (env.arch !== "arm64" && env.arch !== "x64") throw new Error(`${file}: arch is not normalized: ${env.arch}`);
               if (out.baseline === null || !out.results.every((r) => r.baseline !== undefined)) throw new Error(`${file}: baseline`);
             }'
 
