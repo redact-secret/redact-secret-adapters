@@ -67,8 +67,8 @@ train. A version in the second column exists only here until that train is cut.
 | `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
 | `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.2`, beta | `0.1.2` |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.1`, beta | `0.1.1` |
-| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0`, beta | `0.1.1` |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0`, beta | `0.1.1` |
+| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.1`, beta | `0.1.1` |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.1`, beta | `0.1.1` |
 
 A prerelease publishes under the npm dist-tag `alpha`, never `latest`, so it is
 opt-in by tag or exact version. pip skips a pre-release unless asked for one.
@@ -81,26 +81,31 @@ the published column above shipped in the trains after it. The
 [`0.1.0` README](https://github.com/redact-secret/redact-secret-adapters/blob/2368d8c99f6b10e18874df0bcfec1818afd588ec/README.md)
 describes exactly what that release contains.
 
-**Not in any published package yet**, and so not installable until the next
-train: the opt-in [`pii` activation option](#pii-detection-is-opt-in) on every
-live factory, `adapter-pino`'s `createRedactingHooks`, the outcome counters
-under [Counting what happened](#counting-what-happened), and the Python
-package's corrected activation guidance.
+The opt-in [`pii` activation option](#pii-detection-is-opt-in) on every live
+factory, `adapter-pino`'s `createRedactingHooks`, the outcome counters under
+[Counting what happened](#counting-what-happened), and the Python package's
+corrected activation guidance shipped in train
+[`2026.09.29`](https://github.com/redact-secret/redact-secret-adapters/releases/tag/train/2026.09.29)
+(`adapter` `0.1.3`, `adapter-pino` and `adapter-otel` `0.1.2`,
+`redact-secret-adapters` `0.1.1`) and, for the two AI packages, in their
+`0.1.0` stable release.
 
 ### Core versions
 
 Every package declares `@redact-secret/core` / `redact-secret`
 `0.1.0-beta.6` or later, and none of that changes here. Core
-`0.1.0-beta.10` — the release that adds opt-in PII detection — is the newest,
-and is what the quick starts below are verified against; `0.1.0-beta.6` is the
-floor, and CI runs the real-host tests at both. Passing `pii` to a factory
-needs beta.10; everything else works at the floor. See
+`0.1.0-beta.11` / `0.1.0b11` is the newest, and is what the quick starts below
+are verified against; `0.1.0-beta.6` is the floor, and CI runs the real-host
+tests at both. Passing `pii` to a factory needs `0.1.0-beta.10` or later, the
+release that added opt-in PII detection; everything else works at the floor.
+From beta.11 the core loads its PII runtime only when `initialize({ pii })`
+names a selector, which needs nothing from the adapters. See
 [Supported host versions](#supported-host-versions).
 
-`@redact-secret/vault`, from the sibling vault repository, pins the core
-to `0.1.0-beta.9` **exactly**. An application that installs it alongside these
-adapters and moves to beta.10 therefore hits a peer conflict — not because
-either range is wrong, but because the pins have not yet met. Nothing here
+`@redact-secret/vault` `0.1.0-beta.1`, from the sibling vault repository, pins
+the core to `0.1.0-beta.10` **exactly**. An application that installs it
+alongside these adapters and moves to beta.11 therefore hits a peer conflict —
+not because either range is wrong, but because the pins have not yet met. Nothing here
 depends on the vault and an adapter release does not wait on it; see
 [Composing with the vault](#composing-with-the-vault).
 
@@ -149,7 +154,7 @@ each line's strings are scanned twice.
 
 Pass your own hooks to compose with them rather than replace them —
 `createRedactingHooks({ hooks: myHooks })`; redaction runs last, closest to
-the bytes. `createRedactingHooks` needs `adapter-pino 0.1.2` (**Unreleased**);
+the bytes. `createRedactingHooks` needs `adapter-pino 0.1.2`;
 `0.1.1` exports `createRedactingLogMethod` and `createRedactingStreamWrite`
 separately, and `0.1.0` has no `streamWrite` hook at all. Full ordering rules,
 the executable example, and what stays outside the boundary: the
@@ -169,7 +174,7 @@ const provider = new NodeTracerProvider({
 Every string and string-array attribute on a span and its events is redacted
 before the span reaches the next processor. Since `0.1.1` the span
 name, event names, the status message and link attributes are redacted too
-(**Unreleased** in the Python package). Attribute names are not
+(in the Python package since `0.1.1`). Attribute names are not
 allowlisted, so OpenInference (`llm.input_messages`, `input.value`, …) and GenAI
 semantic-convention attributes (`gen_ai.prompt`, …) are covered without
 hardcoding either convention.
@@ -405,7 +410,7 @@ not a sampling decision.
 An observer runs after the value is masked and cannot change it; anything it
 throws is swallowed and never read; and it is re-entrancy-guarded, so an
 observer that logs through the logger it observes does not recurse.
-**Unreleased** in the Python package. Details:
+In the Python package since `0.1.1`. Details:
 [`@redact-secret/adapter`](./packages/adapter#outcome-counters).
 
 ## Supported host versions
@@ -432,8 +437,9 @@ disagree.
 A declared range and a qualified endpoint are different claims. The range says
 what installs; `endpoints` names the two versions CI actually installs and runs
 the real-host tests against, and the semver expression between them is **not**
-evidence that every version inside it was tested. As of 2026-09-28 the core
-endpoints are `0.1.0-beta.6` and `0.1.0-beta.10`. A newer core does not narrow
+evidence that every version inside it was tested. As of 2026-09-29 the core
+endpoints are `0.1.0-beta.6` and `0.1.0-beta.11` (`0.1.0b6` and `0.1.0b11` on
+PyPI). A newer core does not narrow
 the floor: a range is raised only when a package needs an API a lower core
 lacks, which the `published-combination` job enforces. A core version that is
 announced but not yet on the registry qualifies nothing —
@@ -454,10 +460,10 @@ two that do run against a real core, one ordering per spawned process
 
 | Combination | Status |
 | --- | --- |
-| Core between the two endpoints, e.g. `0.1.0-beta.8` | Installs; inside the declared range but not an endpoint CI runs. Not claimed. |
+| Core between the two endpoints, e.g. `0.1.0-beta.8` or `0.1.0-beta.10` | Installs; inside the declared range but not an endpoint CI runs. Not claimed. |
 | Core below `0.1.0-beta.6` | Refused at install (`ERESOLVE`, or pip). |
 | A factory's `pii` option on a core below `0.1.0-beta.10` | Refused at runtime with a fixed code. Omitting `pii` works at the floor. |
-| `@redact-secret/vault` with core `0.1.0-beta.10` | Peer conflict: the vault pins `0.1.0-beta.9` exactly. Its own bump is tracked in the vault repository. |
+| `@redact-secret/vault` `0.1.0-beta.1` with core `0.1.0-beta.11` | Peer conflict: the vault pins `0.1.0-beta.10` exactly. Its own bump is tracked in the vault repository. |
 | Any version in the "Declared on `develop`" column | Not published. Nothing installs it until the train is cut. |
 
 An unqualified host is either refused at install time or listed as
