@@ -16,6 +16,8 @@ const HARNESS_HOSTS = new Set([
   "otel-js",
   "mask-js",
   "ai-context-js",
+  "mcp-js",
+  "mcp-stream-js",
   "python-logging",
   "otel-python",
   "mask-python",
