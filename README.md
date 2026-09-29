@@ -1,5 +1,22 @@
 # Redact Secret adapters
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15002/badge)](https://www.bestpractices.dev/projects/15002)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-adapters/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-adapters)
+[![CI](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/codeql.yml/badge.svg?branch=develop)](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/github/license/redact-secret/redact-secret-adapters)](./LICENSE)
+
+**Python(PyPI)**
+[![PyPI: redact-secret-adapters](https://img.shields.io/pypi/v/redact-secret-adapters?label=redact-secret-adapters)](https://pypi.org/project/redact-secret-adapters/)
+
+**JavaScript(npm)**
+[![npm: @redact-secret/adapter](https://img.shields.io/npm/v/@redact-secret/adapter?label=%40redact-secret%2Fadapter)](https://www.npmjs.com/package/@redact-secret/adapter)
+[![npm: @redact-secret/adapter-pino](https://img.shields.io/npm/v/@redact-secret/adapter-pino?label=%40redact-secret%2Fadapter-pino)](https://www.npmjs.com/package/@redact-secret/adapter-pino)
+[![npm: @redact-secret/adapter-otel](https://img.shields.io/npm/v/@redact-secret/adapter-otel?label=%40redact-secret%2Fadapter-otel)](https://www.npmjs.com/package/@redact-secret/adapter-otel)
+[![npm: @redact-secret/adapter-ai-context](https://img.shields.io/npm/v/@redact-secret/adapter-ai-context?label=%40redact-secret%2Fadapter-ai-context&registry_uri=https%3A%2F%2Fregistry.npmjs.org)](https://www.npmjs.com/package/@redact-secret/adapter-ai-context)
+[![npm: @redact-secret/adapter-mcp](https://img.shields.io/npm/v/@redact-secret/adapter-mcp?label=%40redact-secret%2Fadapter-mcp&registry_uri=https%3A%2F%2Fregistry.npmjs.org)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
+
+
 Host integrations for [Redact Secret](https://github.com/redact-secret/redact-secret):
 installable packages that wire a logging, tracing, or AI-context host into the
 deterministic core, so a secret never reaches a log line, a span attribute, an
