@@ -66,11 +66,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm
@@ -84,7 +84,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
@@ -111,11 +116,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm
@@ -129,7 +134,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
@@ -154,11 +164,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm
@@ -172,7 +182,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
@@ -199,11 +214,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm
@@ -217,7 +232,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
@@ -244,11 +264,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm
@@ -262,7 +282,12 @@ jobs:
         # Pinned, not @latest: this job holds id-token: write, so whatever
         # npm resolves here runs with a token that can publish. Bump it
         # deliberately, together with release-rehearsal.yml.
-        run: npm install -g npm@11.19.1
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Publish
         # --tag from the plan: `latest` for a release, the prerelease's name
@@ -300,7 +325,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -308,7 +333,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - run: python -m pip install build==1.6.1 twine==7.0.0
+      - run: python -m pip install --require-hashes -r .github/requirements/python-build.txt
       - run: python -m build ./python
       - run: twine check python/dist/*
 
@@ -358,7 +383,7 @@ jobs:
       MCP_VERSION: ${{ needs.rehearsal.outputs.adapter_mcp_version }}
       PYTHON_VERSION: ${{ needs.rehearsal.outputs.python_version }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: true
@@ -383,7 +408,7 @@ jobs:
           echo "train=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           echo "Train: ${BASH_REMATCH[1]}"
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
 

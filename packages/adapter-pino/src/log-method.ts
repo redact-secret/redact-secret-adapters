@@ -63,7 +63,10 @@ function redactArgs(scanAndRedact: ScanAndRedact, args: unknown[], prefix: unkno
   const prefixed = typeof prefix === "string" && prefix !== "" && typeof joined[msgIndex] === "string";
   if (prefixed) joined[msgIndex] = `${prefix}${joined[msgIndex]}`;
   const redacted = maskLogValueWith(scanAndRedact, joined, options);
-  if (!Array.isArray(redacted)) return [ERROR_MARKER];
+  if (!Array.isArray(redacted)) {
+    if (options.counter !== undefined) options.counter.failed += 1;
+    return [ERROR_MARKER];
+  }
   if (prefixed) {
     const message = redacted[msgIndex];
     // A redaction that reached into the prefix (or a marker) is kept whole;
@@ -119,6 +122,7 @@ export function createRedactingLogMethodWith(
       redacted = redactArgs(scanAndRedact, Array.from(args), this?.msgPrefix, options);
     } catch {
       // e.g. formatting `%d` with a Symbol: log the marker, never the raw arguments.
+      if (options.counter !== undefined) options.counter.failed += 1;
       redacted = [ERROR_MARKER];
     }
     method.apply(this, redacted as Parameters<LogFn>);

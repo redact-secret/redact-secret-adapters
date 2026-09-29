@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "redact-secret-adapters"
-version = "0.1.0"
+version = "0.1.1"
 description = "Host integrations for Redact Secret: stdlib logging and OpenTelemetry adapters over the deterministic core."
 readme = "README.md"
 license = "MIT"

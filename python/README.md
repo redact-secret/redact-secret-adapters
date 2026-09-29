@@ -27,11 +27,120 @@ masked, and a dict/list/tuple extra is walked and replaced by a masked copy.
 If the message cannot be formatted (a bad `%` format, a raising `__str__`), it
 becomes `[REDACTED:ERROR]` rather than raising into the logging call.
 
-Attach it to each emitting **handler**: ancestor logger filters do not run for
-propagated child records.
-
 `RedactSecretFilter(scan_and_redact, ...)` accepts an injected scanner; with no
 argument it uses `redact_secret.scan_and_redact`.
+
+### Where to attach it
+
+A `logging.Filter` runs **only where it is attached**. In an application with
+more than one handler, placement is the security decision, not the filter. The
+supported setup is one line per emitting handler:
+
+```python
+import logging
+from redact_secret_adapters.logging_filter import RedactSecretFilter
+
+console = logging.StreamHandler()
+audit = logging.FileHandler("audit.log")
+
+redact = RedactSecretFilter()  # no per-record state: one instance can be shared
+for handler in (console, audit):
+    handler.addFilter(redact)  # every emitting handler, not the logger
+    logging.getLogger().addHandler(handler)
+```
+
+This is not global automatic protection. A handler added anywhere else — by a
+library, by `logging.basicConfig`, by a child logger of your own — is
+unprotected until it, too, carries the filter.
+
+| Placement | Covers | Leaves unprotected |
+| --- | --- | --- |
+| Every emitting **handler** (supported) | that handler, and any handler that runs after it on the same record | a handler attached later without the filter |
+| A **handler** on an ancestor logger | records that propagate to it, including from child loggers | a handler the child carries itself |
+| A **logger** | records logged directly on that logger | records **propagated** from child loggers — `Logger.filter` never runs for an ancestor |
+| The `QueueListener`'s sink handler | the final destination | the record while it sits on the queue, and anywhere a `QueueHandler` subclass sends it (a socket, a `multiprocessing` queue) |
+
+Handlers run in the order they were added and the filter mutates the record in
+place, so a filtered handler also protects every handler after it — and an
+**unfiltered handler that runs before it emits plaintext**. Do not rely on
+order: filter each one.
+
+For a `QueueHandler`/`QueueListener` pair, attach the filter to the
+**`QueueHandler`**. It runs in the emitting thread, so only masked records
+cross the queue:
+
+```python
+handler = logging.handlers.QueueHandler(records)
+handler.addFilter(RedactSecretFilter())
+listener = logging.handlers.QueueListener(records, logging.StreamHandler())
+```
+
+`python/tests/test_logging_placement.py` asserts each supported placement and,
+as synthetic negative controls, that plaintext really does escape each wrong
+one.
+
+The filter changes nothing else about your configuration: each handler keeps
+its own formatter, named `extra_fields` still render, exception logging still
+works, and a record with no finding is formatted byte-for-byte as it would be
+without the filter. Masking an already-masked record again is a no-op, so two
+filtered handlers on one record are safe. What the filter does **not** cover:
+record attributes you did not name in `extra_fields`, and anything a custom
+formatter adds after it runs.
+
+## Counting what happened
+
+**Unreleased.** `on_outcome` reports one summary per unit — one `logging`
+record, one span. It is observational: increment your own counters from it.
+Nothing here creates a logger, a handler, an exporter or a network client.
+
+```python
+from redact_secret_adapters.logging_filter import RedactSecretFilter
+
+
+def observe(outcome):  # LogRecordOutcome(level=..., values=ValueCounts(...))
+    metrics.increment("log.records", level=outcome.level)
+    metrics.increment("log.redacted_values", outcome.values.redacted)
+
+
+handler.addFilter(RedactSecretFilter(on_outcome=observe))
+```
+
+```python
+from redact_secret_adapters.otel import create_redacting_span_processor
+
+
+def observe(outcome):  # SpanOutcome(values=ValueCounts(...), dropped=False)
+    if outcome.dropped:
+        metrics.increment("span.dropped_unredactable")
+
+
+provider.add_span_processor(create_redacting_span_processor(next_processor, on_outcome=observe))
+```
+
+A `ValueCounts` is six non-negative integers and nothing else — there is no
+field for a value, a record attribute, a key, an offset or an exception
+message:
+
+| Count | Means |
+| --- | --- |
+| `scanned` | Leaves handed to the core. A leaf a bound refused before the core saw it is not one of these |
+| `findings` | Findings the core reported, summed. **Not** distinct credentials: one credential in five leaves is five findings |
+| `redacted` | Leaves whose text the core changed. Lower than `findings` when an action leaves text alone (a `warn`) |
+| `blocked` | Leaves replaced whole by `BLOCK_MARKER` |
+| `limited` | Values replaced by `LIMIT_MARKER`; never scanned |
+| `failed` | Values replaced by `ERROR_MARKER`, plus the `CYCLE_MARKER` case |
+
+The units follow placement: a record through **two** filtered handlers is two
+passes and reports twice, which is what a per-handler count means — the second
+pass finds nothing left to redact. `SpanOutcome.dropped` is this processor's
+own decision (a masked value would not write back); it is **not** a claim that
+an exporter succeeded, nor that a span was sampled out.
+
+Both observers run after the record or span is fully masked, so neither can
+turn a protected one into an unprotected one, and anything they raise is
+swallowed, never read, and never re-raised. The re-entrancy guard is
+thread-local: an observer that logs or traces does not recurse, and one thread
+never suppresses another's outcome.
 
 ## Masking callbacks (Langfuse and similar)
 
@@ -40,6 +149,42 @@ from redact_secret_adapters.mask_secrets import mask_secrets
 
 langfuse = Langfuse(mask=mask_secrets)
 ```
+
+## PII detection is opt-in
+
+Credential detection needs no init step — the native extension loads on
+`import redact_secret`, unlike the JS package's mandatory `await initialize()`.
+**PII detection does.** It is opt-in, process-wide and one-shot, and the
+application turns it on:
+
+```python
+import redact_secret
+
+redact_secret.initialize(pii=["pii:global"])  # before the first record or span
+```
+
+**Placement is the whole rule.** Handlers are attached and tracer providers
+built at import time, so a module imported earlier can emit *before* the line
+above runs. Those records are scanned with PII off and report nothing — no
+exception, no warning, and no counter that tells them apart from a record that
+genuinely held nothing. These adapters cannot close that window, because the
+process, not the filter, owns the activation; it is pinned as a known
+limitation in `python/tests/test_pii_activation.py` rather than hidden. Enable
+PII first, then attach handlers and build providers.
+
+The selection is one-shot: a later *different* one raises
+`redact_secret.PiiActivationConflictError`, and an empty selection is a
+different selection, not a neutral one.
+
+**Activation is not masking.** Under the core's default policy, PII types are
+confidence-gated rather than always redacted: a `High`-confidence finding
+redacts, while `Medium` and `Low` resolve to `warn` — and a `warn` finding
+leaves the text alone. Enabling PII therefore still lets lower-confidence PII
+reach a handler or an exporter as plaintext. Pass your own `policy` mapping
+those findings to `redact` if you need them masked; these adapters decide
+nothing about policy. The counters make it observable: a record whose
+`values.findings` is non-zero while `values.redacted` stays at zero is exactly
+this case.
 
 ## Fail-closed markers
 
