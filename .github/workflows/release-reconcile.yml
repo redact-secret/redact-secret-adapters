@@ -81,6 +81,30 @@ jobs:
           persist-credentials: false
 
       - name: Open release -> main
+        env:
+          # A PR opened with GITHUB_TOKEN fires no `pull_request` event: GitHub
+          # records the CI and Branch guard runs but refuses to execute them,
+          # so they end as a startup failure with zero jobs and main's required
+          # contexts stay `expected` forever. The runs dispatched below report
+          # the same contexts and go green, but they land in another check
+          # suite and don't satisfy the ruleset — which has no bypass actors,
+          # so `--admin` can't force it either. Reopening the PR as a user
+          # fires a real event and builds a check suite that counts.
+          PR_BODY: |
+            Brings main up to release after this train published. Merge with a merge commit.
+
+            **If the merge is blocked by `N of N required status checks are expected`,**
+            close and reopen this PR from your own account:
+
+            ```
+            gh pr close <n> && gh pr reopen <n>
+            ```
+
+            This PR was opened with `GITHUB_TOKEN`, which fires no `pull_request` event, so
+            CI and Branch guard never ran in this PR's own check suite and the required
+            contexts stay `expected`. The dispatched runs on the head ref go green but land
+            in another check suite; main's ruleset has no bypass actors, so `--admin` won't
+            force it. Reopening as a user fires a real event and the checks then count.
         run: |
           set -euo pipefail
           if git merge-base --is-ancestor origin/release origin/main; then
@@ -99,8 +123,10 @@ jobs:
           if [ -z "$(gh pr list --base main --head release --state open --json number --jq '.[].number')" ]; then
             gh pr create --base main --head release \
               --title "Release train $TRAIN -> main" \
-              --body "Brings main up to release after train \`$TRAIN\` published. Merge with a merge commit."
+              --body "$PR_BODY"
           fi
+          # Green on the head ref regardless of the ruleset — the rehearsal
+          # signal an operator reads before merging.
           gh workflow run ci.yml --ref release
           gh workflow run branch-guard.yml --ref release -f base=main
 
