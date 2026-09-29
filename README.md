@@ -63,7 +63,7 @@ train. A version in the second column exists only here until that train is cut.
 
 | Package | Registry | Host | Published — installable now | Declared on `develop` |
 | --- | --- | --- | --- | --- |
-| `@redact-secret/adapter` | npm | — (shared base) | `0.1.3`, beta | `0.1.3` |
+| `@redact-secret/adapter` | npm | — (shared base) | `0.1.3`, beta | `0.1.4` |
 | `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
 | `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.2`, beta | `0.1.2` |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.1`, beta | `0.1.1` |

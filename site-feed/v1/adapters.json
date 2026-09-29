@@ -17,10 +17,10 @@
       "id": "adapter",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter@0.1.3",
+      "gitTag": "adapter@0.1.4",
       "sourcePath": "packages/adapter",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter",
       "runtime": {
