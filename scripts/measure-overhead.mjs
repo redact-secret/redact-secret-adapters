@@ -298,6 +298,8 @@ async function hostRunners(host, core) {
 async function measurePair(host, profile, events, core, options) {
   const make = await hostRunners(host, core);
   const isAsync = make.async === true;
+  // A heavy profile caps its own batch so a full run stays bounded; --quick still wins when smaller.
+  const perRepetition = Math.min(options.events, profile.maxEventsPerRepetition ?? Number.POSITIVE_INFINITY);
   // The leaves the adapter hands the core, per event, recorded once.
   const leaves = [];
   for (const event of events) {
@@ -337,9 +339,9 @@ async function measurePair(host, profile, events, core, options) {
     for (let m = 0; m < MODES.length; m += 1) {
       const mode = MODES[(m + rep) % MODES.length];
       const started = process.hrtime.bigint();
-      if (isAsync) await run(mode, options.events);
-      else run(mode, options.events);
-      samples[mode].push(Number(process.hrtime.bigint() - started) / 1000 / options.events);
+      if (isAsync) await run(mode, perRepetition);
+      else run(mode, perRepetition);
+      samples[mode].push(Number(process.hrtime.bigint() - started) / 1000 / perRepetition);
     }
   }
   const latencies = Object.fromEntries(MODES.map((mode) => [mode, []]));
@@ -347,7 +349,7 @@ async function measurePair(host, profile, events, core, options) {
     for (let m = 0; m < MODES.length; m += 1) {
       const mode = MODES[(m + rep) % MODES.length];
       const runner = runners[mode];
-      for (let k = 0; k < options.events; k += 1) {
+      for (let k = 0; k < perRepetition; k += 1) {
         const event = events[k % events.length];
         const started = process.hrtime.bigint();
         if (isAsync) await runner(event);
@@ -360,7 +362,7 @@ async function measurePair(host, profile, events, core, options) {
   for (let rep = 0; rep < options.repetitions; rep += 1) {
     for (let m = 0; m < MODES.length; m += 1) {
       const mode = MODES[(m + rep) % MODES.length];
-      allocations[mode].push(await measureAllocation(() => run(mode, options.events)));
+      allocations[mode].push(await measureAllocation(() => run(mode, perRepetition)));
     }
   }
   const modes = Object.fromEntries(
@@ -369,7 +371,7 @@ async function measurePair(host, profile, events, core, options) {
       {
         ...summarize(samples[mode]),
         latency: summarizeLatency(latencies[mode]),
-        memory: summarizeMemory(allocations[mode], options.events),
+        memory: summarizeMemory(allocations[mode], perRepetition),
       },
     ]),
   );
@@ -381,6 +383,7 @@ async function measurePair(host, profile, events, core, options) {
   return {
     host,
     profileId: profile.id,
+    eventsPerRepetition: perRepetition,
     scannerCallsPerEvent: round(scannerCalls),
     scannedCodeUnitsPerEvent: round(leafChars),
     modes,
