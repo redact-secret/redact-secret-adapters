@@ -199,6 +199,8 @@ def _measure_memory(work: Callable[[], None]) -> dict[str, float]:
 
 def measure_pair(host: str, profile: dict[str, Any], events: list, core: Callable[..., Any], args) -> dict[str, Any]:
     make = RUNNERS[host]
+    # A heavy profile caps its own batch so a full run stays bounded; --quick still wins when smaller.
+    per_repetition = min(args.events, profile.get("maxEventsPerRepetition", args.events))
     leaves: list[list[str]] = []
     for event in events:
         recorded: list[str] = []
@@ -236,15 +238,15 @@ def measure_pair(host: str, profile: dict[str, Any], events: list, core: Callabl
         for m in range(len(MODES)):
             mode = MODES[(m + rep) % len(MODES)]
             started = time.perf_counter_ns()
-            run(mode, args.events)
-            samples[mode].append((time.perf_counter_ns() - started) / 1000 / args.events)
+            run(mode, per_repetition)
+            samples[mode].append((time.perf_counter_ns() - started) / 1000 / per_repetition)
 
     latencies: dict[str, list[float]] = {mode: [] for mode in MODES}
     for rep in range(args.repetitions):
         for m in range(len(MODES)):
             mode = MODES[(m + rep) % len(MODES)]
             runner = runners[mode]
-            for k in range(args.events):
+            for k in range(per_repetition):
                 event = events[k % len(events)]
                 started = time.perf_counter_ns()
                 runner(event)
@@ -254,13 +256,13 @@ def measure_pair(host: str, profile: dict[str, Any], events: list, core: Callabl
     for rep in range(args.repetitions):
         for m in range(len(MODES)):
             mode = MODES[(m + rep) % len(MODES)]
-            memory[mode].append(_measure_memory(lambda mode=mode: run(mode, args.events)))
+            memory[mode].append(_measure_memory(lambda mode=mode: run(mode, per_repetition)))
 
     modes = {
         mode: {
             **_summarize(samples[mode]),
             "latency": _summarize_latency(latencies[mode]),
-            "memory": _summarize_memory(memory[mode], args.events),
+            "memory": _summarize_memory(memory[mode], per_repetition),
         }
         for mode in MODES
     }
@@ -269,6 +271,7 @@ def measure_pair(host: str, profile: dict[str, Any], events: list, core: Callabl
     return {
         "host": host,
         "profileId": profile["id"],
+        "eventsPerRepetition": per_repetition,
         "scannerCallsPerEvent": round(sum(map(len, leaves)) / len(leaves), 3),
         "scannedCodeUnitsPerEvent": round(sum(sum(len(t) for t in leaf) for leaf in leaves) / len(leaves), 3),
         "modes": modes,

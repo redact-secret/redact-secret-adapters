@@ -17,7 +17,7 @@
     "lima"
   ],
   "distinctEvents": 64,
-  "workloadDigest": "0a00b415c375082d45b261b8c6e3a126fa3ea7fca74d31525fef2fd12273b243",
+  "workloadDigest": "eb6d5683f1a798e4d0161d1c8d2a7c721b243cd87ddfac64422c3268bbb69236",
   "profiles": [
     {
       "id": "log-flat",
@@ -68,6 +68,93 @@
       "hosts": ["mask-js", "mask-python", "ai-context-js", "mcp-js", "mcp-stream-js"],
       "description": "A masking-callback, AI-context or MCP tool-result payload: eight chat messages and two tool calls with arguments and results.",
       "params": { "messages": 8, "toolCalls": 2, "stringWords": 40, "secretEvery": 8 }
+    },
+    {
+      "id": "log-scale-4x",
+      "shape": "log-event",
+      "hosts": ["pino", "python-logging"],
+      "description": "Scaling series: log-flat with 4x the fields (32), for a super-linear traversal cost.",
+      "params": {
+        "messageArgs": 2,
+        "fields": 32,
+        "nestedDepth": 0,
+        "arrayLength": 0,
+        "stringWords": 6,
+        "secretEvery": 8
+      }
+    },
+    {
+      "id": "log-scale-16x",
+      "maxEventsPerRepetition": 100,
+      "shape": "log-event",
+      "hosts": ["pino", "python-logging"],
+      "description": "Scaling series: log-flat with 16x the fields (128), for a super-linear traversal cost.",
+      "params": {
+        "messageArgs": 2,
+        "fields": 128,
+        "nestedDepth": 0,
+        "arrayLength": 0,
+        "stringWords": 6,
+        "secretEvery": 8
+      }
+    },
+    {
+      "id": "limit-depth-over",
+      "shape": "log-event",
+      "hosts": ["mask-js", "mask-python"],
+      "description": "Past DEFAULT_LIMITS.maxDepth (8): a 16-level nested field, cut to the limit marker. The fail-closed path must stay cheap.",
+      "params": {
+        "messageArgs": 0,
+        "fields": 8,
+        "nestedDepth": 16,
+        "arrayLength": 0,
+        "stringWords": 6,
+        "secretEvery": 8
+      }
+    },
+    {
+      "id": "limit-keys-over",
+      "maxEventsPerRepetition": 100,
+      "shape": "log-event",
+      "hosts": ["mask-js", "mask-python"],
+      "description": "Past DEFAULT_LIMITS.maxObjectKeys (200): 250 one-word fields, the rest dropped.",
+      "params": {
+        "messageArgs": 0,
+        "fields": 250,
+        "nestedDepth": 0,
+        "arrayLength": 0,
+        "stringWords": 1,
+        "secretEvery": 8
+      }
+    },
+    {
+      "id": "limit-array-over",
+      "maxEventsPerRepetition": 40,
+      "shape": "log-event",
+      "hosts": ["mask-js", "mask-python"],
+      "description": "Past DEFAULT_LIMITS.maxArrayLength (1000): a 1500-element array of one-word strings, the rest dropped.",
+      "params": {
+        "messageArgs": 0,
+        "fields": 8,
+        "nestedDepth": 0,
+        "arrayLength": 1500,
+        "stringWords": 1,
+        "secretEvery": 8
+      }
+    },
+    {
+      "id": "limit-string-over",
+      "shape": "log-event",
+      "hosts": ["mask-js", "mask-python"],
+      "description": "Past DEFAULT_LIMITS.maxStringLength (200000): a message and one field of about 220000 code units each, replaced by the limit marker without reaching the core.",
+      "params": {
+        "messageArgs": 0,
+        "fields": 1,
+        "nestedDepth": 0,
+        "arrayLength": 0,
+        "stringWords": 34000,
+        "secretEvery": 8
+      }
     }
   ]
 }
