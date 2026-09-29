@@ -151,6 +151,15 @@ function readResult(result: unknown): { text: string; findings: SafeFinding[] } 
   return { text, findings: findings.map((finding: SafeFinding) => safeFinding(finding)) };
 }
 
+/** Per-crossing scan results by exact input text; never shared between operations. */
+type ScanCache = Map<string, { text: string; findings: SafeFinding[] }>;
+
+/**
+ * Texts longer than this are always rescanned: repeated envelope strings
+ * are short, and a long leaf would double its memory for no gain.
+ */
+const MAX_MEMOIZED_LENGTH = 1024;
+
 function hasAction(findings: readonly SafeFinding[], ...actions: string[]): boolean {
   return findings.some((finding) => actions.includes(finding.action));
 }
@@ -204,16 +213,34 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     }
   }
 
-  /** One whole-input scan. */
-  function scanText(text: unknown): { text: string; findings: SafeFinding[] } | { failure: BlockedOutcome } {
+  /**
+   * One whole-input scan. With a `cache`, a text already scanned within the
+   * same crossing reuses that result: `scanAndRedact(text, options)` is a
+   * pure function of its text and this boundary's fixed options (placeholder
+   * numbering restarts on every call), so the reuse is byte-identical.
+   * Only successes of short texts are kept; a failure ends the operation.
+   * Callers still map and emit findings once per occurrence.
+   */
+  function scanText(
+    text: unknown,
+    cache?: ScanCache,
+  ): { text: string; findings: SafeFinding[] } | { failure: BlockedOutcome } {
     if (typeof text !== "string") return { failure: blocked("unsupported_value") };
+    const cacheable = cache !== undefined && text.length <= MAX_MEMOIZED_LENGTH;
+    if (cacheable) {
+      const hit = cache.get(text);
+      if (hit !== undefined) return hit;
+    }
     let result: unknown;
     try {
       result = core.scanAndRedact(text, wholeInputOptions);
     } catch (error) {
       return { failure: failureFrom(error) };
     }
-    return readResult(result) ?? { failure: blocked("core_error") };
+    const read = readResult(result);
+    if (read === undefined) return { failure: blocked("core_error") };
+    if (cacheable) cache.set(text, read);
+    return read;
   }
 
   /**
@@ -227,12 +254,12 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
    * blocks, or when the leaf alone reported nothing. Two results are never
    * merged.
    */
-  function scanLeaf(text: string, key: string | undefined): ReturnType<typeof scanText> {
-    const alone = scanText(text);
+  function scanLeaf(text: string, key: string | undefined, cache?: ScanCache): ReturnType<typeof scanText> {
+    const alone = scanText(text, cache);
     if ("failure" in alone || key === undefined || hasAction(alone.findings, "redact", "block")) return alone;
     const prefix = `{"${key}":"`;
     const suffix = '"}';
-    const view = scanText(prefix + text + suffix);
+    const view = scanText(prefix + text + suffix, cache);
     if ("failure" in view) return view;
     const leafEnd = prefix.length + text.length;
     const findings: SafeFinding[] = [];
@@ -260,8 +287,17 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
   }
 
   function sanitizeText(text: string, { boundary = DEFAULT_BOUNDARY, signal }: OperationOptions = {}) {
+    return sanitizeTextIn(text, boundary, signal);
+  }
+
+  function sanitizeTextIn(
+    text: string,
+    boundary: BoundaryLabel,
+    signal: CancellationSignal | undefined,
+    cache?: ScanCache,
+  ) {
     if (isAborted(signal)) return ABORTED;
-    const scanned = scanText(text);
+    const scanned = scanText(text, cache);
     if ("failure" in scanned) return scanned.failure;
     emit(scanned.findings, boundary);
     if (hasAction(scanned.findings, "block")) return blocked("policy");
@@ -273,11 +309,20 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     value: unknown,
     { boundary = DEFAULT_BOUNDARY, signal }: OperationOptions = {},
   ): AiContextOutcome<JsonValue> {
+    return sanitizeValueIn(value, boundary, signal, new Map());
+  }
+
+  function sanitizeValueIn(
+    value: unknown,
+    boundary: BoundaryLabel,
+    signal: CancellationSignal | undefined,
+    cache: ScanCache,
+  ): AiContextOutcome<JsonValue> {
     if (isAborted(signal)) return ABORTED;
     const findings: SafeFinding[] = [];
     const walked = walkStrict<BlockedOutcome>(value, traversalLimits, {
       string(text, key): StrictVisit<BlockedOutcome> {
-        const scanned = scanLeaf(text, key);
+        const scanned = scanLeaf(text, key, cache);
         if ("failure" in scanned) return { ok: false, failure: scanned.failure };
         emit(scanned.findings, boundary);
         findings.push(...scanned.findings);
@@ -287,7 +332,7 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
       key(key) {
         // A key cannot be rewritten without changing the value's shape, so a
         // key finding that would be redacted or blocked blocks the value.
-        const scanned = scanText(key);
+        const scanned = scanText(key, cache);
         if ("failure" in scanned) return { ok: false, failure: scanned.failure };
         emit(scanned.findings, boundary);
         if (hasAction(scanned.findings, "block", "redact")) return { ok: false, failure: blocked("policy") };
@@ -313,6 +358,8 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     if (!Array.isArray(parts)) return blocked("unsupported_value");
     const messages: ContextMessage[] = [];
     const findings: SafeFinding[] = [];
+    // One crossing: identical texts across all parts are scanned once.
+    const cache: ScanCache = new Map();
     for (const part of parts as readonly unknown[]) {
       let role: unknown;
       let boundary: BoundaryLabel;
@@ -332,8 +379,8 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
       // string and is never scanned.
       if (typeof role !== "string") return blocked("unsupported_value");
       const outcome = isText
-        ? sanitizeText(content as string, { boundary, signal })
-        : sanitizeValue(content, { boundary, signal });
+        ? sanitizeTextIn(content as string, boundary, signal, cache)
+        : sanitizeValueIn(content, boundary, signal, cache);
       if (outcome.outcome !== "ok") return outcome;
       findings.push(...outcome.findings);
       messages.push(Object.freeze({ role, content: outcome.value }));
