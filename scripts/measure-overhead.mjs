@@ -7,6 +7,8 @@
  *   npm run build
  *   node scripts/measure-overhead.mjs --out overhead-js.json
  *   node scripts/measure-overhead.mjs --quick --out -        # CI smoke: shape only, numbers meaningless
+ *   node scripts/install-overhead-baseline.mjs /tmp/baseline
+ *   node scripts/measure-overhead.mjs --baseline /tmp/baseline --out overhead-js.json   # previous release vs current, same session
  *
  * Package size and initialization time are measured separately, by
  * `scripts/measure-footprint.mjs`: both are one-off costs, not per event.
@@ -36,6 +38,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import v8 from "node:v8";
 import { runInNewContext } from "node:vm";
 
@@ -45,6 +49,15 @@ const HOSTS = ["pino", "pino-streamwrite", "otel-js", "mask-js", "ai-context-js"
 // Hosts whose host mode is the empty call: a ratio over it means nothing.
 const HOSTLESS = new Set(["mask-js", "ai-context-js", "mcp-js", "mcp-stream-js"]);
 const MODES = ["host", "adapter-identity", "adapter-core", "core-direct"];
+// Under --baseline, the previous release's modes: the host alone is shared with the current build.
+const BASELINE_MODES = ["adapter-identity", "adapter-core", "core-direct"];
+const ADAPTER_PACKAGES = [
+  "@redact-secret/adapter",
+  "@redact-secret/adapter-pino",
+  "@redact-secret/adapter-otel",
+  "@redact-secret/adapter-ai-context",
+  "@redact-secret/adapter-mcp",
+];
 
 function parseArgs(argv) {
   const options = { out: "-", repetitions: 15, events: 400, warmup: 200, hosts: HOSTS, profiles: undefined };
@@ -55,6 +68,7 @@ function parseArgs(argv) {
     "--warmup": (value) => (options.warmup = Number(value)),
     "--host": (value) => (options.hosts = value.split(",")),
     "--profile": (value) => (options.profiles = value.split(",")),
+    "--baseline": (value) => (options.baseline = value),
   };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
@@ -73,6 +87,28 @@ function parseArgs(argv) {
     }
   }
   return options;
+}
+
+/**
+ * Imports adapter packages from a previous release installed under `prefix`
+ * (`prefix/node_modules/@redact-secret/adapter*`, e.g. by
+ * scripts/install-overhead-baseline.mjs), by each package's own `exports`.
+ */
+function baselineFrom(prefix) {
+  const root = pathToFileURL(`${resolve(prefix)}/`);
+  const manifest = (name) => {
+    const file = new URL(`node_modules/${name}/package.json`, root);
+    return existsSync(file) ? JSON.parse(readFileSync(file, "utf-8")) : null;
+  };
+  return {
+    packages: Object.fromEntries(ADAPTER_PACKAGES.map((name) => [name, manifest(name)?.version ?? null])),
+    load: async (name) => {
+      const found = manifest(name);
+      if (found === null) throw new Error(`${name} is not installed in the baseline`);
+      const entry = found.exports?.["."]?.import ?? found.exports?.["."]?.default ?? found.main ?? "index.js";
+      return import(new URL(`node_modules/${name}/${entry.replace(/^\.\//, "")}`, root).href);
+    },
+  };
 }
 
 /** The installed version of `name`, read from the nearest `node_modules` (ESM-only `exports` hide package.json). */
@@ -176,14 +212,13 @@ const identityScanner = (text) => ({ text, findings: [] });
  * runners are async sets `make.async`; every pass then awaits each event, and
  * only for that host, so the synchronous hosts are timed exactly as before. A
  * host whose core-direct is not "scan each recorded leaf" sets
- * `make.coreDirect(event)`.
+ * `make.coreDirect(event)`. `load` imports an adapter package: the current
+ * build, or a previous release under --baseline; hosts always come from here.
  */
-async function hostRunners(host, core) {
+async function hostRunners(host, core, load) {
   if (host === "pino" || host === "pino-streamwrite") {
     const pino = (await import("pino")).default;
-    const { createRedactingLogMethodWith, createRedactingStreamWriteWith } = await import(
-      "@redact-secret/adapter-pino"
-    );
+    const { createRedactingLogMethodWith, createRedactingStreamWriteWith } = await load("@redact-secret/adapter-pino");
     const destination = { write() {} };
     const make = (scanner) => {
       const hooks = scanner === undefined ? {} : { logMethod: createRedactingLogMethodWith(scanner) };
@@ -196,7 +231,7 @@ async function hostRunners(host, core) {
   }
   if (host === "otel-js") {
     const { BasicTracerProvider, SimpleSpanProcessor } = await import("@opentelemetry/sdk-trace-base");
-    const { RedactingSpanProcessorWith } = await import("@redact-secret/adapter-otel");
+    const { RedactingSpanProcessorWith } = await load("@redact-secret/adapter-otel");
     const exporter = { export: (_spans, done) => done({ code: 0 }), shutdown: () => Promise.resolve() };
     return (scanner) => {
       const simple = new SimpleSpanProcessor(exporter);
@@ -211,12 +246,12 @@ async function hostRunners(host, core) {
     };
   }
   if (host === "mask-js") {
-    const { maskSecretsWith } = await import("@redact-secret/adapter");
+    const { maskSecretsWith } = await load("@redact-secret/adapter");
     // There is no host around a masking callback: the baseline is the empty call.
     return (scanner) => (scanner === undefined ? () => undefined : (event) => maskSecretsWith(scanner, event));
   }
   if (host === "ai-context-js") {
-    const { createAiContextBoundaryWith } = await import("@redact-secret/adapter-ai-context");
+    const { createAiContextBoundaryWith } = await load("@redact-secret/adapter-ai-context");
     const { AI_CONTEXT_LIMITS, contextParts } = await import("./overhead-workloads.mjs");
     // The streaming path is not exercised: this profile is whole-input
     // context construction, the boundary every agent turn crosses.
@@ -236,8 +271,8 @@ async function hostRunners(host, core) {
     };
   }
   if (host === "mcp-js") {
-    const { createAiContextBoundaryWith } = await import("@redact-secret/adapter-ai-context");
-    const { createMcpBoundaryWith } = await import("@redact-secret/adapter-mcp");
+    const { createAiContextBoundaryWith } = await load("@redact-secret/adapter-ai-context");
+    const { createMcpBoundaryWith } = await load("@redact-secret/adapter-mcp");
     const { AI_CONTEXT_LIMITS, mcpToolResult } = await import("./overhead-workloads.mjs");
     const unusedSession = () => {
       throw new Error("overhead harness: mcp-js measures no incremental session");
@@ -258,8 +293,8 @@ async function hostRunners(host, core) {
     };
   }
   if (host === "mcp-stream-js") {
-    const { createAiContextBoundaryWith } = await import("@redact-secret/adapter-ai-context");
-    const { createMcpBoundaryWith } = await import("@redact-secret/adapter-mcp");
+    const { createAiContextBoundaryWith } = await load("@redact-secret/adapter-ai-context");
+    const { createMcpBoundaryWith } = await load("@redact-secret/adapter-mcp");
     const { AI_CONTEXT_LIMITS, mcpChunks } = await import("./overhead-workloads.mjs");
     const unusedScan = () => {
       throw new Error("overhead harness: mcp-stream-js measures no whole-input scan");
@@ -295,12 +330,10 @@ async function hostRunners(host, core) {
   throw new Error(`unknown host: ${host}`);
 }
 
-async function measurePair(host, profile, events, core, options) {
-  const make = await hostRunners(host, core);
-  const isAsync = make.async === true;
-  // A heavy profile caps its own batch so a full run stays bounded; --quick still wins when smaller.
-  const perRepetition = Math.min(options.events, profile.maxEventsPerRepetition ?? Number.POSITIVE_INFINITY);
-  // The leaves the adapter hands the core, per event, recorded once.
+/** The four mode runners for one build of the adapters, and the leaves its core-direct scans. */
+async function buildRunners(make, events, core) {
+  // The leaves the adapter hands the core, per event, recorded once. This also
+  // runs every event through the build once, so a build that cannot run fails here.
   const leaves = [];
   for (const event of events) {
     const recorded = [];
@@ -314,6 +347,7 @@ async function measurePair(host, profile, events, core, options) {
     host: make(undefined),
     "adapter-identity": make(identityScanner),
     "adapter-core": make(core.scanAndRedact),
+    // core-direct keeps its own cursor so it walks the same event order as the others.
     "core-direct": (() => {
       if (make.coreDirect !== undefined) return make.coreDirect;
       let cursor = 0;
@@ -323,7 +357,92 @@ async function measurePair(host, profile, events, core, options) {
       };
     })(),
   };
-  // core-direct keeps its own cursor so it walks the same event order as the others.
+  const round = (x) => Math.round(x * 1000) / 1000;
+  return {
+    runners,
+    scannerCallsPerEvent: round(leaves.reduce((s, l) => s + l.length, 0) / leaves.length),
+    scannedCodeUnitsPerEvent: round(
+      leaves.reduce((s, l) => s + l.reduce((t, x) => t + x.length, 0), 0) / leaves.length,
+    ),
+  };
+}
+
+/** The derived costs from one build's per-mode summaries. */
+function derive(host, modes) {
+  const median = (mode) => modes[mode].median;
+  const round = (x) => Math.round(x * 1000) / 1000;
+  const overhead = median("adapter-core") - median("host");
+  return {
+    unit: "microseconds-per-event",
+    basis: "difference of per-mode medians",
+    traversal: round(median("adapter-identity") - median("host")),
+    coreScan: median("core-direct"),
+    adapterOverhead: round(overhead),
+    unattributed: round(median("adapter-core") - median("adapter-identity") - median("core-direct")),
+    traversalAllocatedBytes: round(
+      modes["adapter-identity"].memory.allocatedBytesPerEvent - modes.host.memory.allocatedBytesPerEvent,
+    ),
+    // adapterOverhead as a fraction of the host's own time; comparable across machines where µs are not.
+    adapterOverheadRatio: HOSTLESS.has(host) || !(modes.host.median > 0) ? null : round(overhead / modes.host.median),
+  };
+}
+
+/** The values compared between the baseline and the current build, by name. */
+const COMPARED = {
+  traversal: (r) => r.derived.traversal,
+  adapterOverhead: (r) => r.derived.adapterOverhead,
+  adapterOverheadRatio: (r) => r.derived.adapterOverheadRatio,
+  coreScan: (r) => r.derived.coreScan,
+  traversalAllocatedBytes: (r) => r.derived.traversalAllocatedBytes,
+  adapterCoreLatencyP95: (r) => r.modes["adapter-core"].latency.p95,
+  adapterCoreLatencyP99: (r) => r.modes["adapter-core"].latency.p99,
+  adapterCoreAllocatedBytesPerEvent: (r) => r.modes["adapter-core"].memory.allocatedBytesPerEvent,
+  scannerCallsPerEvent: (r) => r.scannerCallsPerEvent,
+};
+
+/** Baseline → current for every compared value: a record, not a verdict. */
+function compare(baseline, current) {
+  const round = (x) => Math.round(x * 1000) / 1000;
+  return Object.fromEntries(
+    Object.entries(COMPARED).map(([name, read]) => {
+      const before = read(baseline);
+      const after = read(current);
+      const usable = typeof before === "number" && typeof after === "number";
+      return [
+        name,
+        {
+          baseline: before ?? null,
+          current: after ?? null,
+          difference: usable ? round(after - before) : null,
+          relative: usable && before !== 0 ? round((after - before) / Math.abs(before)) : null,
+        },
+      ];
+    }),
+  );
+}
+
+async function measurePair(host, profile, events, core, options, baseline) {
+  const make = await hostRunners(host, core, (name) => import(name));
+  const isAsync = make.async === true;
+  // A heavy profile caps its own batch so a full run stays bounded; --quick still wins when smaller.
+  const perRepetition = Math.min(options.events, profile.maxEventsPerRepetition ?? Number.POSITIVE_INFINITY);
+  const current = await buildRunners(make, events, core);
+  const runners = { ...current.runners };
+  let order = MODES;
+  let previous;
+  let unavailable = null;
+  if (baseline !== undefined) {
+    try {
+      previous = await buildRunners(await hostRunners(host, core, baseline.load), events, core);
+    } catch (error) {
+      unavailable = { comparable: false, reason: `the baseline cannot run ${host}: ${error?.message ?? error}` };
+    }
+    if (previous !== undefined) {
+      // The host alone is the same for both builds, so it is timed once.
+      for (const mode of BASELINE_MODES) runners[`baseline:${mode}`] = previous.runners[mode];
+      order = [...MODES, ...BASELINE_MODES.map((mode) => `baseline:${mode}`)];
+    }
+  }
   const run = isAsync
     ? async (mode, count) => {
         const runner = runners[mode];
@@ -333,21 +452,21 @@ async function measurePair(host, profile, events, core, options) {
         const runner = runners[mode];
         for (let k = 0; k < count; k += 1) runner(events[k % events.length]);
       };
-  for (const mode of MODES) await run(mode, options.warmup);
-  const samples = Object.fromEntries(MODES.map((mode) => [mode, []]));
+  for (const mode of order) await run(mode, options.warmup);
+  const samples = Object.fromEntries(order.map((mode) => [mode, []]));
   for (let rep = 0; rep < options.repetitions; rep += 1) {
-    for (let m = 0; m < MODES.length; m += 1) {
-      const mode = MODES[(m + rep) % MODES.length];
+    for (let m = 0; m < order.length; m += 1) {
+      const mode = order[(m + rep) % order.length];
       const started = process.hrtime.bigint();
       if (isAsync) await run(mode, perRepetition);
       else run(mode, perRepetition);
       samples[mode].push(Number(process.hrtime.bigint() - started) / 1000 / perRepetition);
     }
   }
-  const latencies = Object.fromEntries(MODES.map((mode) => [mode, []]));
+  const latencies = Object.fromEntries(order.map((mode) => [mode, []]));
   for (let rep = 0; rep < options.repetitions; rep += 1) {
-    for (let m = 0; m < MODES.length; m += 1) {
-      const mode = MODES[(m + rep) % MODES.length];
+    for (let m = 0; m < order.length; m += 1) {
+      const mode = order[(m + rep) % order.length];
       const runner = runners[mode];
       for (let k = 0; k < perRepetition; k += 1) {
         const event = events[k % events.length];
@@ -358,50 +477,43 @@ async function measurePair(host, profile, events, core, options) {
       }
     }
   }
-  const allocations = Object.fromEntries(MODES.map((mode) => [mode, []]));
+  const allocations = Object.fromEntries(order.map((mode) => [mode, []]));
   for (let rep = 0; rep < options.repetitions; rep += 1) {
-    for (let m = 0; m < MODES.length; m += 1) {
-      const mode = MODES[(m + rep) % MODES.length];
+    for (let m = 0; m < order.length; m += 1) {
+      const mode = order[(m + rep) % order.length];
       allocations[mode].push(await measureAllocation(() => run(mode, perRepetition)));
     }
   }
-  const modes = Object.fromEntries(
-    MODES.map((mode) => [
-      mode,
-      {
-        ...summarize(samples[mode]),
-        latency: summarizeLatency(latencies[mode]),
-        memory: summarizeMemory(allocations[mode], perRepetition),
-      },
-    ]),
-  );
-  const median = (mode) => modes[mode].median;
-  const round = (x) => Math.round(x * 1000) / 1000;
-  const derivedOverhead = median("adapter-core") - median("host");
-  const scannerCalls = leaves.reduce((s, l) => s + l.length, 0) / leaves.length;
-  const leafChars = leaves.reduce((s, l) => s + l.reduce((t, x) => t + x.length, 0), 0) / leaves.length;
-  return {
+  const summary = (key) => ({
+    ...summarize(samples[key]),
+    latency: summarizeLatency(latencies[key]),
+    memory: summarizeMemory(allocations[key], perRepetition),
+  });
+  const modes = Object.fromEntries(MODES.map((mode) => [mode, summary(mode)]));
+  const result = {
     host,
     profileId: profile.id,
     eventsPerRepetition: perRepetition,
-    scannerCallsPerEvent: round(scannerCalls),
-    scannedCodeUnitsPerEvent: round(leafChars),
+    scannerCallsPerEvent: current.scannerCallsPerEvent,
+    scannedCodeUnitsPerEvent: current.scannedCodeUnitsPerEvent,
     modes,
-    derived: {
-      unit: "microseconds-per-event",
-      basis: "difference of per-mode medians",
-      traversal: round(median("adapter-identity") - median("host")),
-      coreScan: median("core-direct"),
-      adapterOverhead: round(median("adapter-core") - median("host")),
-      unattributed: round(median("adapter-core") - median("adapter-identity") - median("core-direct")),
-      traversalAllocatedBytes: round(
-        modes["adapter-identity"].memory.allocatedBytesPerEvent - modes.host.memory.allocatedBytesPerEvent,
-      ),
-      // adapterOverhead as a fraction of the host's own time; comparable across machines where µs are not.
-      adapterOverheadRatio:
-        HOSTLESS.has(host) || !(modes.host.median > 0) ? null : round(derivedOverhead / modes.host.median),
-    },
+    derived: derive(host, modes),
   };
+  if (previous !== undefined) {
+    const baselineModes = Object.fromEntries(BASELINE_MODES.map((mode) => [mode, summary(`baseline:${mode}`)]));
+    const measured = {
+      comparable: true,
+      scannerCallsPerEvent: previous.scannerCallsPerEvent,
+      scannedCodeUnitsPerEvent: previous.scannedCodeUnitsPerEvent,
+      modes: baselineModes,
+      derived: derive(host, { host: modes.host, ...baselineModes }),
+    };
+    result.baseline = measured;
+    result.change = compare(measured, result);
+  } else if (unavailable !== null) {
+    result.baseline = unavailable;
+  }
+  return result;
 }
 
 async function main() {
@@ -410,17 +522,24 @@ async function main() {
   const document = loadProfiles();
   const core = await import("@redact-secret/core");
   await core.initialize();
+  const baseline = options.baseline === undefined ? undefined : baselineFrom(options.baseline);
   const results = [];
   for (const profile of document.profiles) {
     if (options.profiles !== undefined && !options.profiles.includes(profile.id)) continue;
     const events = buildEvents(document, profile);
     for (const host of profile.hosts.filter((h) => options.hosts.includes(h) && HOSTS.includes(h))) {
-      const result = await measurePair(host, profile, events, core, options);
+      const result = await measurePair(host, profile, events, core, options, baseline);
       results.push(result);
       const d = result.derived;
       console.error(
         `${host}/${profile.id}: host ${result.modes.host.median}µs, traversal ${d.traversal}µs, core ${d.coreScan}µs, overhead ${d.adapterOverhead}µs per event`,
       );
+      if (result.change !== undefined) {
+        const t = result.change.traversal;
+        console.error(`  baseline traversal ${t.baseline}µs -> ${t.current}µs`);
+      } else if (result.baseline !== undefined) {
+        console.error(`  baseline not comparable: ${result.baseline.reason}`);
+      }
     }
   }
   const cpus = os.cpus();
@@ -471,8 +590,16 @@ async function main() {
       passes: ["batch", "latency", "memory"],
       processes: 1,
     },
-    // Set when a previous release is measured in the same session; null otherwise.
-    baseline: null,
+    // The previous release measured in this same session under --baseline; null otherwise.
+    baseline:
+      baseline === undefined
+        ? null
+        : {
+            packages: baseline.packages,
+            order:
+              "the previous release's adapter-identity, adapter-core and core-direct interleaved with the current modes; host is shared",
+            change: "per result: baseline to current, differences of medians; a record, not a verdict",
+          },
     results,
     limitations: [
       "Host-dependent: these numbers describe this machine and runtime only.",
