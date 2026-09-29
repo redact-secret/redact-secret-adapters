@@ -18,6 +18,15 @@ tarball (`files` in `package.json`), so a consumer can read it from
 `node_modules` without leaving their editor.
 
 ## [Unreleased]
+
+## [0.1.4] - 2026-09-29
+
+### Changed
+
+- The `PII_ACTIVATION_CONFLICT` documentation in `activation.ts` now shows the
+  `pii-context/v2` vocabulary that core `0.1.0-beta.11` reports. Documentation
+  only; no behaviour change.
+
 ## [0.1.3] - 2026-09-28
 ### Fixed
 
