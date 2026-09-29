@@ -151,6 +151,21 @@ the MCP SDK lines, `opentelemetry-sdk`.
   Otherwise re-run **Release reconcile** on `develop` with the train name.
   It is idempotent: it skips PRs that are already open and branches that
   already contain `release`.
+- **The `release` -> `main` PR won't merge**, reporting `N of N required
+  status checks are expected` while `Branch guard` and `CI passed` are green
+  on its head: close and reopen it from your own account.
+
+  ```
+  gh pr close <n> && gh pr reopen <n>
+  ```
+
+  Reconcile opens that PR with `GITHUB_TOKEN`, which fires no `pull_request`
+  event, so GitHub records the CI and Branch guard runs but never executes
+  them — they end as a startup failure with zero jobs and the required
+  contexts stay `expected`. The runs reconcile dispatches onto the head ref
+  do go green, but they land in another check suite and don't satisfy the
+  ruleset; `main`'s ruleset has no bypass actors, so `--admin` won't force it
+  either. Reopening as a user fires a real event, and the checks then count.
 
 A dry run of the whole release (no publish, no tags) is **Release** with
 `dry_run` on, from any branch. On a branch with nothing bumped it runs CI
