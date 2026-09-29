@@ -53,7 +53,7 @@ updates:
           - minor
           - patch
 
-  # The pinned base of docker/bench.Dockerfile, the overhead-harness image.
+  # The pinned bases of docker/bench*.Dockerfile, the overhead-harness images.
   - package-ecosystem: docker
     directory: /docker
     schedule:

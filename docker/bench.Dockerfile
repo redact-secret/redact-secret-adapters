@@ -1,3 +1,6 @@
+# check=skip=SecretsUsedInArgOrEnv
+# (REDACT_SECRET_BENCH_* carry the source commit and image id, never a secret; the
+# check matches the "SECRET" in the project name.)
 # The adapter-overhead harness in a pinned environment (#97). Build and run it
 # with `npm run bench:docker`, which also records this image's id in the output.
 #

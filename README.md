@@ -501,17 +501,20 @@ pip install -e "./python[otel]" && python scripts/measure-overhead.py --out over
 ```
 
 To compare against the previous release, install it into a prefix and pass
-`--baseline`. The JavaScript harness then interleaves the previous release's
+`--baseline`. Each harness then interleaves the previous release's
 modes with the current build's in one session, and records the change for
 every result (a record, not a verdict):
 
 ```bash
 node scripts/install-overhead-baseline.mjs /tmp/overhead-baseline
 node scripts/measure-overhead.mjs --baseline /tmp/overhead-baseline --out overhead-js.json
+python scripts/install-overhead-baseline.py /tmp/overhead-baseline-python
+python scripts/measure-overhead.py --baseline /tmp/overhead-baseline-python --out overhead-python.json
 ```
 
-`npm run bench:docker` does the same inside
-[`docker/bench.Dockerfile`](./docker/bench.Dockerfile): Node, the OS
+`npm run bench:docker` (`-- --python` for the Python harness) does the same
+inside [`docker/bench.Dockerfile`](./docker/bench.Dockerfile) or
+[`docker/bench-python.Dockerfile`](./docker/bench-python.Dockerfile): the runtime, the OS
 libraries, the core's native addon and the previous release are pinned in the
 image, the container has no network, and the image id and source commit are
 recorded in the output (`npm run bench:docker -- --cpuset 2,3` also pins
