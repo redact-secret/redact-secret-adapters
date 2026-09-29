@@ -14,6 +14,11 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-29
+### Fixed
+- The package README no longer calls the package a prerelease or tells the
+  reader to install `@alpha`; `0.1.0` is stable and published as `latest`.
+
 ## [0.1.0] - 2026-09-29
 ### Changed
 - First stable release: published under the npm dist-tag `latest`. The code is
