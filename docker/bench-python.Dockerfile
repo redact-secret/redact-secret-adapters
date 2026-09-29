@@ -25,6 +25,9 @@ COPY fixtures ./fixtures
 ARG BASELINE_VERSION=""
 RUN python scripts/install-overhead-baseline.py /opt/baseline $BASELINE_VERSION
 
+# A separate copy of this build, for an A/A run (`bench:docker -- --python --aa`).
+RUN python -m pip install --quiet --no-deps --no-build-isolation --target /opt/self ./python
+
 ARG SOURCE_COMMIT=""
 ARG SOURCE_DIRTY=""
 ENV REDACT_SECRET_BENCH_COMMIT=$SOURCE_COMMIT \
