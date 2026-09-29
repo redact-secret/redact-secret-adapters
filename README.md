@@ -46,8 +46,8 @@ hosts actually move at.
 | Python **`logging`** records | `pip install redact-secret redact-secret-adapters` | released | `handler.addFilter(...)` on **every emitting handler** | record attributes not named in `extra_fields`; handlers without the filter |
 | **OpenTelemetry Python** spans | `pip install redact-secret "redact-secret-adapters[otel]"` | released | wraps the next span processor | as OpenTelemetry JS, plus: a span whose private fields will not take the write is **dropped**, not exported |
 | A host that hands you a value to **mask** (Langfuse and similar) | `npm i @redact-secret/core @redact-secret/adapter` / `pip install redact-secret redact-secret-adapters` | released | the host's `mask` callback | whatever the host does not route through that callback |
-| **AI context** — user input, tool results, a built context, streamed text | `npm i @redact-secret/core @redact-secret/adapter-ai-context@alpha` | **prerelease** (dist-tag `alpha`) | your own code, where the context is built | binary/non-JSON values and encoded text (refused, not decoded); model *output* |
-| **MCP** `tools/call` and `resources/read` results | `npm i @redact-secret/core @redact-secret/adapter-mcp@alpha` | **prerelease** (dist-tag `alpha`) | around your `callTool` / tool handler | MCP methods other than those two; binary payloads (blocked by default) |
+| **AI context** — user input, tool results, a built context, streamed text | `npm i @redact-secret/core @redact-secret/adapter-ai-context` | released | your own code, where the context is built | binary/non-JSON values and encoded text (refused, not decoded); model *output* |
+| **MCP** `tools/call` and `resources/read` results | `npm i @redact-secret/core @redact-secret/adapter-mcp` | released | around your `callTool` / tool handler | MCP methods other than those two; binary payloads (blocked by default) |
 
 Statuses are not gradations of care — a prerelease publishes under the npm
 dist-tag `alpha`, not `latest`, so it is opt-in by tag or exact version until
@@ -67,8 +67,8 @@ train. A version in the second column exists only here until that train is cut.
 | `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
 | `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.2`, beta | `0.1.2` |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.1`, beta | `0.1.1` |
-| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0` |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0` |
+| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0`, beta | `0.1.0` |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0`, beta | `0.1.0` |
 
 A prerelease publishes under the npm dist-tag `alpha`, never `latest`, so it is
 opt-in by tag or exact version. pip skips a pre-release unless asked for one.
@@ -233,9 +233,8 @@ The bounds are always in force; `AI_CONTEXT_DEFAULT_LIMITS` only means you no
 longer have to invent them before the first call, and any set can still be
 passed explicitly. There is no unbounded mode. Non-JSON values, binary content
 and encoded text are **blocked, not decoded** — convert them yourself, so what
-is scanned is exactly what you send. Published as the prerelease
-`0.1.0-alpha.2` (`npm install @redact-secret/adapter-ai-context@alpha`);
-`createAiContextBoundary()` with no limits needs `0.1.0-alpha.2`. See the
+is scanned is exactly what you send. Published as `0.1.0` (`npm install @redact-secret/adapter-ai-context`);
+`createAiContextBoundary()` with no limits needs `0.1.0-alpha.2` or later. See the
 [package README](./packages/adapter-ai-context#readme).
 
 ### MCP (prerelease)
@@ -259,9 +258,8 @@ default; `binaryContent: "pass"` lets a string payload through unscanned at its
 original position instead. A content type no qualified protocol revision
 defines also blocks, and a cancelled call is `aborted` with nothing to deliver.
 It names every security non-goal in its
-[package README](./packages/adapter-mcp#readme). Published as the prerelease
-`0.1.0-alpha.2` (`npm install @redact-secret/adapter-mcp@alpha`);
-`createMcpBoundary()` with no limits needs `0.1.0-alpha.2`.
+[package README](./packages/adapter-mcp#readme). Published as `0.1.0` (`npm install @redact-secret/adapter-mcp`);
+`createMcpBoundary()` with no limits needs `0.1.0-alpha.2` or later.
 
 ### Masking callbacks (Langfuse and similar)
 
