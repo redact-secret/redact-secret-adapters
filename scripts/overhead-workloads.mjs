@@ -136,3 +136,23 @@ export function contextParts(event) {
     ...event.toolCalls.map((call) => ({ role: "tool", boundary: "tool-result", value: call })),
   ];
 }
+
+/**
+ * A `payload` event as one MCP tool result: each chat message and each tool
+ * call's result as a text block, and the calls themselves as structured
+ * content, so the synthetic token (in a message) reaches the boundary.
+ */
+export function mcpToolResult(event) {
+  return {
+    content: [...event.messages.map((m) => m.content), ...event.toolCalls.map((c) => c.result)].map((text) => ({
+      type: "text",
+      text,
+    })),
+    structuredContent: { calls: event.toolCalls.map((c) => ({ name: c.name, arguments: c.arguments })) },
+  };
+}
+
+/** A `payload` event as the chunks of one streamed MCP tool result: one chunk per message and per tool result. */
+export function mcpChunks(event) {
+  return [...event.messages.map((m) => m.content), ...event.toolCalls.map((c) => c.result)].map((text) => `${text}\n`);
+}

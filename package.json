@@ -32,11 +32,15 @@
     "compat:check": "node scripts/check-compatibility-record.mjs",
     "overhead": "node scripts/measure-overhead.mjs",
     "footprint": "node scripts/measure-footprint.mjs",
+    "bench:docker": "node scripts/bench-docker.mjs",
     "feed:generate": "node scripts/generate-site-feed.mjs",
     "feed:check": "node scripts/generate-site-feed.mjs --check"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/typescript-checker": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "@types/node": "^20.19.0",
     "ajv": "^8.20.0",
     "fast-check": "4.10.2",

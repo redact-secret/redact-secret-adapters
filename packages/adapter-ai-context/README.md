@@ -148,7 +148,7 @@ exactly this case.
 | Operation | Input | Core path |
 | --- | --- | --- |
 | `sanitizeText(text, { boundary, signal })` | one string | one whole-input `scanAndRedact` |
-| `sanitizeValue(value, { boundary, signal })` | a bounded JSON-shaped value | one whole-input scan per string leaf **and per object key**, plus one key-context scan for a leaf under an object key that its own scan does not redact |
+| `sanitizeValue(value, { boundary, signal })` | a bounded JSON-shaped value | one whole-input scan per string leaf **and per object key**, plus one key-context scan for a leaf under an object key that its own scan does not redact; a text already scanned in the same call (up to 1,024 code units) reuses that result, and `onFinding` still fires per occurrence |
 | `sanitizeToolResult(result, { signal })` | a tool's result, before it joins context | `sanitizeText` for a string, `sanitizeValue` otherwise, labelled `tool-result` |
 | `buildContext(parts, { signal })` | ordered `{ role, text }` / `{ role, value }` parts, each with an optional `boundary` | the above per part; returns `[{ role, content }]` |
 | `openStream({ boundary, signal })` | chunks of one logical text: `append`, then `finalize`, or `abort` | one incremental session, staged |

@@ -225,13 +225,13 @@ jobs:
       - run: python -m pip install --require-hashes -r .github/requirements/python-lint.txt
       - run: ruff check python
       - run: ruff format --check python
-      - run: ruff check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py
-      - run: ruff format --check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py
+      - run: ruff check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py scripts/install-overhead-baseline.py
+      - run: ruff format --check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py scripts/install-overhead-baseline.py
 
   overhead-harness:
     # The adapter-overhead harnesses (#11) and the footprint harness (package
     # size and initialization time, #12) in --quick mode: proves they still
-    # run against the current packages and emit the overhead-v1 shape
+    # run against the current packages and emit the overhead-v2 shape
     # redact-secret-benchmarks reads. The numbers from this job are
     # meaningless (three tiny repetitions on a shared runner) and are not
     # kept; measurement and judgement belong to redact-secret-benchmarks.
@@ -253,19 +253,34 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node scripts/measure-overhead.mjs --quick --out overhead-js.json
+      - run: node scripts/install-overhead-baseline.mjs "$RUNNER_TEMP/overhead-baseline"
+      - run: node scripts/measure-overhead.mjs --quick --profile log-flat,mask-payload --baseline "$RUNNER_TEMP/overhead-baseline" --out overhead-baseline-js.json
       - run: node scripts/measure-footprint.mjs --quick --out footprint-js.json
       - run: |
           python -m pip install --require-hashes -r .github/requirements/python-otel.txt
           python -m pip install --no-deps --no-build-isolation -e ./python
       - run: python scripts/measure-overhead.py --quick --out overhead-python.json
-      - name: Check the outputs carry the overhead-v1 and footprint-v1 shapes
+      - run: python scripts/install-overhead-baseline.py "$RUNNER_TEMP/overhead-baseline-python"
+      - run: python scripts/measure-overhead.py --quick --profile log-flat,mask-payload --baseline "$RUNNER_TEMP/overhead-baseline-python" --out overhead-baseline-python.json
+      - name: Check the outputs carry the overhead-v2 and footprint-v1 shapes
         run: |
           node -e '
             for (const file of ["overhead-js.json", "overhead-python.json"]) {
               const out = JSON.parse(require("fs").readFileSync(file, "utf-8"));
-              if (out.schema !== "redact-secret-adapters/overhead-v1" || out.results.length === 0) throw new Error(file);
+              if (out.schema !== "redact-secret-adapters/overhead-v2" || out.results.length === 0) throw new Error(file);
               for (const r of out.results) for (const m of ["host", "adapter-identity", "adapter-core", "core-direct"]) {
-                if (!(r.modes[m].samples.length > 0)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m}`);
+                const mode = r.modes[m];
+                if (!(mode.samples.length > 0)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m}`);
+                if (!(mode.latency.count > 0 && mode.latency.p99 >= mode.latency.median)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m} latency`);
+                if (!(mode.memory.gcCountPerEvent >= 0)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m} memory`);
+              }
+            }
+            for (const file of ["overhead-baseline-js.json", "overhead-baseline-python.json"]) {
+              const compared = JSON.parse(require("fs").readFileSync(file, "utf-8"));
+              if (compared.baseline === null || compared.results.length === 0) throw new Error(file);
+              for (const r of compared.results) {
+                if (r.baseline === undefined) throw new Error(`${file}: ${r.host}/${r.profileId} baseline`);
+                if (r.baseline.comparable && !(r.change.traversal.baseline !== undefined)) throw new Error(`${file}: ${r.host}/${r.profileId} change`);
               }
             }
             const footprint = JSON.parse(require("fs").readFileSync("footprint-js.json", "utf-8"));
@@ -275,6 +290,36 @@ jobs:
               for (const m of ["import", "core", "live-factory"]) {
                 if (!(r.initialization[m].samples.length > 0)) throw new Error(`footprint-js.json: ${r.package} ${m}`);
               }
+            }'
+
+  bench-image:
+    # docker/bench.Dockerfile builds and runs the harness against the
+    # published previous release (#97), in --quick mode on two profiles:
+    # proves the image still works. Its numbers are meaningless and not kept.
+    name: Bench image smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node scripts/bench-docker.mjs --quick --out out/overhead-js.json -- --profile log-flat,mask-payload
+      - run: node scripts/bench-docker.mjs --python --quick --out out/overhead-python.json -- --profile log-flat,mask-payload
+      - name: Check the outputs came from the images and carry the baseline
+        run: |
+          node -e '
+            for (const file of ["out/overhead-js.json", "out/overhead-python.json"]) {
+              const out = JSON.parse(require("fs").readFileSync(file, "utf-8"));
+              if (out.schema !== "redact-secret-adapters/overhead-v2") throw new Error(`${file}: schema`);
+              if (!/^sha256:/.test(out.environment.containerImage ?? "")) throw new Error(`${file}: containerImage`);
+              if (out.source.commit === null) throw new Error(`${file}: source.commit`);
+              // #108: a container cannot see the host CPU; without the host model every machine shares one profile id.
+              const env = out.environment;
+              if (!env.cpuModel || /^unknown/i.test(env.cpuModel)) throw new Error(`${file}: cpuModel is ${env.cpuModel}`);
+              if (env.cpuModelSource !== "host-env") throw new Error(`${file}: cpuModelSource is ${env.cpuModelSource}`);
+              if (env.arch !== "arm64" && env.arch !== "x64") throw new Error(`${file}: arch is not normalized: ${env.arch}`);
+              if (out.baseline === null || !out.results.every((r) => r.baseline !== undefined)) throw new Error(`${file}: baseline`);
             }'
 
   ci-passed:
@@ -294,6 +339,7 @@ jobs:
       - python-range-endpoints
       - lint
       - overhead-harness
+      - bench-image
     runs-on: ubuntu-latest
     permissions: {}
     steps:
