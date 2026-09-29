@@ -27,7 +27,7 @@ Find ways CI or release automation could be abused. Propose patches; apply only 
 | Credentials | `persist-credentials: false` on checkout unless a later step pushes (`sync-develop`, `cut-rc`, `release-reconcile`); no `NPM_TOKEN` or PyPI token secret anywhere, since OIDC is in use |
 | GITHUB_TOKEN-opened PRs | PRs opened by `cut-rc` and `release-reconcile` fire no `pull_request` event, so `branch-guard` runs by `workflow_dispatch`. Check the dispatch input cannot be used to skip the guard |
 | Rulesets | The live rulesets match `.github/rulesets/*.json` (`develop`, `main`, `release-candidates`, `release-tags`, `release`): no bypass actors, no force-push or deletion, required `CI passed` check. Read via `gh api repos/redact-secret/redact-secret-adapters/rulesets` and diff against the committed files |
-| Artifacts | Nothing secret-bearing uploaded; overhead and footprint outputs carry only the `overhead-v1` and `footprint-v1` shapes |
+| Artifacts | Nothing secret-bearing uploaded; overhead and footprint outputs carry only the `overhead-v2` and `footprint-v1` shapes |
 | Dependabot | `.github/dependabot.yml` covers github-actions, npm (root and `.github/npm-tools`), and pip |
 
 ## Output

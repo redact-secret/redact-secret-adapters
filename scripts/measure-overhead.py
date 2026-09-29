@@ -15,11 +15,18 @@ repetition:
     adapter-identity  host + adapter over a scanner that finds nothing: traversal and seam cost only
     adapter-core      host + adapter over the real ``redact_secret``
     core-direct       the real core called directly on exactly the leaves the adapter hands it
+
+Each mode is measured in three separate passes, so one kind of measurement
+never perturbs another: ``batch`` (wall time over a batch, the per-mode
+medians), ``latency`` (every event timed on its own, for the tail) and
+``memory`` (tracemalloc peak and garbage collections, after a forced
+collection; tracemalloc slows everything it traces, so it runs only here).
 """
 
 from __future__ import annotations
 
 import argparse
+import gc
 import importlib.metadata
 import json
 import logging
@@ -30,6 +37,7 @@ import statistics
 import subprocess
 import sys
 import time
+import tracemalloc
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -38,6 +46,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from overhead_workloads import build_events, load_profiles, workload_digest  # noqa: E402
 
 HOSTS = ("python-logging", "otel-python", "mask-python")
+# Hosts whose host mode is the empty call: a ratio over it means nothing.
+HOSTLESS = frozenset({"mask-python"})
 MODES = ("host", "adapter-identity", "adapter-core", "core-direct")
 
 
@@ -136,6 +146,57 @@ def _summarize(samples: list[float]) -> dict[str, Any]:
     }
 
 
+def _summarize_latency(samples: list[float]) -> dict[str, Any]:
+    """Summary of single-event latencies, pooled over every repetition."""
+    ordered = sorted(samples)
+    r = lambda x: round(x, 3)  # noqa: E731
+    return {
+        "unit": "microseconds",
+        "count": len(ordered),
+        "median": r(_percentile(ordered, 0.5)),
+        "p95": r(_percentile(ordered, 0.95)),
+        "p99": r(_percentile(ordered, 0.99)),
+        "maximum": r(ordered[-1]),
+    }
+
+
+def _summarize_memory(repetitions: list[dict[str, float]], events: int) -> dict[str, Any]:
+    """Median over repetitions of peak traced memory and collection cost."""
+    median = lambda key: _percentile(sorted(r[key] for r in repetitions), 0.5)  # noqa: E731
+    return {
+        "basis": "tracemalloc: peak traced bytes above the start of the batch; CPython exposes no allocation total",
+        "allocatedBytesPerEvent": None,
+        "peakBytes": median("peakBytes"),
+        "gcCountPerEvent": round(median("gcCount") / events, 3),
+        "gcPauseMicrosecondsPerEvent": round(median("gcPauseMicroseconds") / events, 3),
+    }
+
+
+def _measure_memory(work: Callable[[], None]) -> dict[str, float]:
+    """Peak traced bytes and collections while ``work`` runs, from a freshly collected heap."""
+    pauses: list[float] = []
+    started: list[int] = []
+
+    def on_gc(phase: str, _info: dict[str, Any]) -> None:
+        if phase == "start":
+            started.append(time.perf_counter_ns())
+        elif started:
+            pauses.append((time.perf_counter_ns() - started.pop()) / 1000)
+
+    gc.collect()
+    tracemalloc.start()
+    gc.callbacks.append(on_gc)
+    try:
+        tracemalloc.reset_peak()
+        base = tracemalloc.get_traced_memory()[0]
+        work()
+        peak = tracemalloc.get_traced_memory()[1] - base
+    finally:
+        gc.callbacks.remove(on_gc)
+        tracemalloc.stop()
+    return {"peakBytes": peak, "gcCount": len(pauses), "gcPauseMicroseconds": sum(pauses)}
+
+
 def measure_pair(host: str, profile: dict[str, Any], events: list, core: Callable[..., Any], args) -> dict[str, Any]:
     make = RUNNERS[host]
     leaves: list[list[str]] = []
@@ -178,8 +239,33 @@ def measure_pair(host: str, profile: dict[str, Any], events: list, core: Callabl
             run(mode, args.events)
             samples[mode].append((time.perf_counter_ns() - started) / 1000 / args.events)
 
-    modes = {mode: _summarize(samples[mode]) for mode in MODES}
+    latencies: dict[str, list[float]] = {mode: [] for mode in MODES}
+    for rep in range(args.repetitions):
+        for m in range(len(MODES)):
+            mode = MODES[(m + rep) % len(MODES)]
+            runner = runners[mode]
+            for k in range(args.events):
+                event = events[k % len(events)]
+                started = time.perf_counter_ns()
+                runner(event)
+                latencies[mode].append((time.perf_counter_ns() - started) / 1000)
+
+    memory: dict[str, list[dict[str, float]]] = {mode: [] for mode in MODES}
+    for rep in range(args.repetitions):
+        for m in range(len(MODES)):
+            mode = MODES[(m + rep) % len(MODES)]
+            memory[mode].append(_measure_memory(lambda mode=mode: run(mode, args.events)))
+
+    modes = {
+        mode: {
+            **_summarize(samples[mode]),
+            "latency": _summarize_latency(latencies[mode]),
+            "memory": _summarize_memory(memory[mode], args.events),
+        }
+        for mode in MODES
+    }
     median = lambda mode: modes[mode]["median"]  # noqa: E731
+    overhead = median("adapter-core") - median("host")
     return {
         "host": host,
         "profileId": profile["id"],
@@ -193,6 +279,12 @@ def measure_pair(host: str, profile: dict[str, Any], events: list, core: Callabl
             "coreScan": median("core-direct"),
             "adapterOverhead": round(median("adapter-core") - median("host"), 3),
             "unattributed": round(median("adapter-core") - median("adapter-identity") - median("core-direct"), 3),
+            # No allocation total in CPython; the JavaScript harness fills this.
+            "traversalAllocatedBytes": None,
+            # adapterOverhead as a fraction of the host's own time; comparable across machines where µs are not.
+            "adapterOverheadRatio": (
+                None if host in HOSTLESS or not median("host") > 0 else round(overhead / median("host"), 3)
+            ),
         },
     }
 
@@ -264,7 +356,7 @@ def main() -> None:
             )
 
     output = {
-        "schema": "redact-secret-adapters/overhead-v1",
+        "schema": "redact-secret-adapters/overhead-v2",
         "language": "python",
         "measuredAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "source": {"repository": "redact-secret/redact-secret-adapters", **_git_state()},
@@ -280,6 +372,8 @@ def main() -> None:
             "cpuModel": _cpu_model(),
             "logicalCpus": os.cpu_count(),
             "runtime": f"{sys.implementation.name}-{platform.python_version()}",
+            # Set by the container wrapper; None for a run outside one.
+            "containerImage": os.environ.get("REDACT_SECRET_BENCH_IMAGE") or None,
             # Other work on the machine is the main source of noise between runs.
             "loadAverage1m": {
                 "start": load_at_start,
@@ -298,13 +392,19 @@ def main() -> None:
             "order": "modes interleaved within each repetition, rotated by one position per repetition",
             "clock": "time.perf_counter_ns",
             "percentile": "nearest-rank",
+            "passes": ["batch", "latency", "memory"],
             "processes": 1,
         },
+        # Set when a previous release is measured in the same session; None otherwise.
+        "baseline": None,
         "results": results,
         "limitations": [
             "Host-dependent: these numbers describe this machine and runtime only.",
             "Per-event times are batch means over eventsPerRepetition events; "
             "the distribution is across repetitions, not across single events.",
+            "Single-event latencies include one clock read of overhead each; "
+            "memory repetitions start from a forced collection, which the batch and latency passes do not.",
+            "memory is tracemalloc's peak, not an allocation total, and excludes native allocations inside the core.",
             "derived values are differences of medians, not medians of differences, and can be negative within noise.",
             "The OpenTelemetry exporter is a no-op and the logging stream discards writes, "
             "so export and I/O cost are excluded.",

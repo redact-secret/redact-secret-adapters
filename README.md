@@ -485,8 +485,12 @@ tested, so it is not claimed.
 [`fixtures/overhead-profiles.json`](./fixtures/overhead-profiles.json). Each
 harness keeps four costs apart: the host alone, the adapter's own traversal
 (over a scanner that finds nothing), the core's scan of exactly the leaves the
-adapter hands it, and the host plus adapter plus the real core. Neither
-harness carries a threshold or a verdict. The numbers depend on the host, so
+adapter hands it, and the host plus adapter plus the real core. Each is
+measured in three separate passes: batch wall time, single-event latency
+(median, p95, p99, maximum), and memory (bytes allocated per event in
+JavaScript, tracemalloc's peak in Python, and garbage-collection count and
+pause). Neither harness carries a threshold or a verdict. The numbers depend on
+the host, so
 the baseline and any budget over it live in
 [redact-secret-benchmarks](https://github.com/redact-secret/redact-secret-benchmarks),
 not here.
