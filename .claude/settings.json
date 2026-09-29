@@ -5,11 +5,11 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-statusline.cjs\""
+    "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-statusline.cjs\"; if [ -f \"$f\" ]; then node \"$f\"; fi"
   },
   "subagentStatusLine": {
     "type": "command",
-    "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-statusline.cjs\""
+    "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-statusline.cjs\"; if [ -f \"$f\" ]; then node \"$f\"; fi"
   },
   "hooks": {
     "PostToolUse": [
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" post-edit",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\"; if [ -f \"$f\" ]; then node \"$f\" post-edit; fi",
             "timeout": 10000
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" tool-savings",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\"; if [ -f \"$f\" ]; then node \"$f\" tool-savings; fi",
             "timeout": 8000
           }
         ]
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" prompt",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\"; if [ -f \"$f\" ]; then node \"$f\" prompt; fi",
             "timeout": 15000
           }
         ]
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" session-start",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\"; if [ -f \"$f\" ]; then node \"$f\" session-start; fi",
             "timeout": 8000
           }
         ]
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" stop",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\"; if [ -f \"$f\" ]; then node \"$f\" stop; fi",
             "timeout": 8000
           }
         ]
