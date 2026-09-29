@@ -12,12 +12,10 @@ conformance fixture, vendored byte-for-byte at a pinned core commit
 ([`fixtures/core/pins.json`](../../fixtures/core/pins.json)), through this
 package's public API. It names no model vendor, agent framework, or transport.
 
-> **Prerelease.** `0.1.0-alpha` is published under the npm dist-tag `alpha`,
-> not `latest`, so install it by tag or exact version. The core is a required
-> peer:
+> **Install.** The core is a required peer:
 >
 > ```bash
-> npm install @redact-secret/adapter-ai-context@alpha @redact-secret/core
+> npm install @redact-secret/adapter-ai-context @redact-secret/core
 > ```
 
 ## Example

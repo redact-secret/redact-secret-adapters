@@ -21,13 +21,11 @@ endpoints of every supported line, over stdio and Streamable HTTP.
 It imports no MCP SDK at runtime or for types. A `CallToolResult` is a
 structural shape, as it is on the wire.
 
-> **Prerelease.** `0.1.0-alpha` is published under the npm dist-tag `alpha`,
-> not `latest`, so install it by tag or exact version. It pulls in
-> `@redact-secret/adapter-ai-context@^0.1.0-alpha`; the core is a required
-> peer, and the MCP SDK line you use is an optional one:
+> **Install.** It pulls in `@redact-secret/adapter-ai-context`; the core is a
+> required peer, and the MCP SDK line you use is an optional one:
 >
 > ```bash
-> npm install @redact-secret/adapter-mcp@alpha @redact-secret/core
+> npm install @redact-secret/adapter-mcp @redact-secret/core
 > ```
 
 ## Example
