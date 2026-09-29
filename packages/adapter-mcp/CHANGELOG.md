@@ -13,6 +13,12 @@ dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
 not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
+### Changed
+- A tool result's repeated envelope strings reach the core once per crossing:
+  the value scan reuses identical texts, and the key-context check skips a
+  serialized part that already scanned with no findings. Outputs, findings and
+  `onFinding` (once per occurrence) are unchanged (#107).
+
 ## [0.1.0-alpha.2] - 2026-09-28
 ### Added
 

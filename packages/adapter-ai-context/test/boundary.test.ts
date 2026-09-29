@@ -419,7 +419,8 @@ describe("sanitizeValue", () => {
     const { boundary, calls } = setup(); // maxNodes 16: the root array plus 15 items
     expect(boundary.sanitizeValue(Array.from({ length: 15 }, () => "x"))).toMatchObject({ outcome: "ok" });
     const before = calls.scans.length;
-    expect(boundary.sanitizeValue(Array.from({ length: 16 }, () => "x"))).toEqual({
+    // Distinct leaves: identical texts share one scan within a crossing (#107).
+    expect(boundary.sanitizeValue(Array.from({ length: 16 }, (_, i) => `x${i}`))).toEqual({
       outcome: "blocked",
       reason: "limit_exceeded",
     });
