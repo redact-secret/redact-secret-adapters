@@ -13,9 +13,62 @@ dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
 not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
+## [0.1.0-alpha.2] - 2026-09-28
+### Added
+
+- `pii` on `createMcpBoundary`, forwarded to `createAiContextBoundary` the
+  way the limits already are
+  (redact-secret/redact-secret-adapters#51). It activates core PII
+  selectors for the whole process. The factory's contract of never
+  rejecting is unchanged: a selection that cannot be shown to be active
+  fails every operation closed as `blocked` / `core_error`, which maps to
+  the fixed blocked result, rather than quietly sanitizing with PII off.
+
+- `createMcpBoundary(options?)` now fills in any of the three limit sets a
+  caller leaves out, from `@redact-secret/adapter-ai-context`'s
+  `AI_CONTEXT_DEFAULT_LIMITS` (redact-secret/redact-secret-adapters#46), so a
+  host can start with `await createMcpBoundary()` and a checked outcome.
+  `binaryContent` and `onAudit` compose with the defaults unchanged.
+- The `CreateMcpBoundaryOptionsWithDefaults` type.
+
+### Fixed
+
+- An application that had already run `initialize({ pii })` got a boundary
+  that blocked everything, because the AI-context factory's argument-free
+  `initialize()` rejected with `PII_ACTIVATION_CONFLICT` against the
+  core's one-shot selection cell and that mapped to a fail-closed
+  `blocked` / `core_error`. That conflict now counts as success. Every
+  other initialization failure still fails closed exactly as before.
+
+### Documented
+
+- Activating PII is not the same as masking every PII value: under the
+  core's default policy `High`-confidence PII redacts while `Medium` and
+  `Low` resolve to `warn`, and a `warn` finding leaves the text alone, so
+  an `ok` outcome can carry findings whose text was not changed. Supply
+  your own `policy` mapping those findings to `redact` if you need them
+  masked.
+
+### Changed
+
+- The README leads with the short call, moves the limits below it, and states
+  next to the example what refuses and why: a binary payload blocks by default
+  because it cannot be scanned (`binaryContent: "pass"` passes a string
+  payload unscanned at its original position), a content type no qualified
+  protocol revision defines blocks, and a cancelled call is `aborted` with
+  `toCallToolResult` returning `null`.
+- `@redact-secret/adapter-ai-context` range raised from `^0.1.0-alpha.1` to
+  `^0.1.0-alpha.2`, the version that carries the default limits this release
+  relies on. Backed by this package's tests and the published-sibling
+  combination job.
+
+Not changed: there is no unbounded mode, the bounds still fail an oversized
+result closed as `blocked` / `limit_exceeded`, and `createMcpBoundaryWith` over
+a boundary the host built itself is untouched. `test/defaults.test.ts` asserts
+the defaults, an override, the binary block, an unsupported content type, and
+an aborted call on the real core.
 
 ## [0.1.0-alpha.1] - 2026-09-25
-
 ### Added
 
 - **`resources/read`** (redact-secret/redact-secret#843,
@@ -61,7 +114,6 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   `packages/adapter-mcp/test/transport.test.ts`) at both SDK line endpoints.
 
 ## [0.1.0-alpha] - 2026-09-25
-
 First release, as a prerelease.
 
 ### Added
@@ -100,3 +152,4 @@ First release, as a prerelease.
   and 2.1.0 negotiate 2025-11-25.
 - Depends on `@redact-secret/adapter-ai-context ^0.1.0-alpha` (which pulls in
   `@redact-secret/adapter ^0.1.1`).
+

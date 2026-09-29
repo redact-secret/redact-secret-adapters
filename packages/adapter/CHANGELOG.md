@@ -18,9 +18,94 @@ tarball (`files` in `package.json`), so a consumer can read it from
 `node_modules` without leaving their editor.
 
 ## [Unreleased]
+## [0.1.3] - 2026-09-28
+### Fixed
+
+- `createMaskSecrets` now runs the shared `activateCore` step and accepts
+  `pii`, like every other live factory
+  (redact-secret/redact-secret-adapters#57). It was the one entry point
+  #51 left on a bare `initialize()`, so this package's own documented
+  Langfuse path still failed with `PII_ACTIVATION_CONFLICT` when the
+  application activated PII first. Its options type is
+  `CreateMaskSecretsOptions`; a caller that passes no `pii` sees no change.
+
+### Added
+
+- `packages/adapter/test/activation-live.test.ts`: activation through all
+  five live factories against the **real installed core**, one ordering per
+  spawned `node` process. Every other activation test injects or mocks the
+  core — necessarily, since a real core's selection cell is one-shot per
+  process — which is why nothing caught the `createMaskSecrets` gap above.
+  Recorded in `compatibility.json` under `qualifiedBy` for each package it
+  drives, so both declared core endpoints exercise it. The PII cases skip on
+  a core older than `0.1.0-beta.10`, which has no PII API; the
+  ordering-independent cases run at both ends.
+- `activateCore(core, { pii })`: the one core-activation step every live
+  factory in this repository runs
+  (redact-secret/redact-secret-adapters#51), plus `activePiiActivation`,
+  `readPiiActivation`, `activationReflects`, `isPiiActivationConflict`,
+  `PII_ACTIVATION_CONFLICT`, `CoreActivationError` and the `CoreActivation`
+  / `InitializableCore` types. PII detection in the core is opt-in,
+  process-wide and one-shot, so it layers three rules: without `pii`,
+  `initialize()` as before but a `PII_ACTIVATION_CONFLICT` counts as
+  success, because it means the application already activated its own
+  selection; with `pii`, `initialize({ pii })`, so the adapter-first order
+  works; and with `pii`, a check of `piiActivation()` afterwards that
+  refuses when the active identity does not reflect the request, which is
+  what closes the silent-PII-off window. Both refusals are a
+  `CoreActivationError` with a fixed code (`PII_ACTIVATION_UNSUPPORTED`,
+  `PII_ACTIVATION_NOT_ACTIVE`) and a fixed message: no selector, no input,
+  no field path, no core exception text.
+- `activePiiActivation()`: the identity the last successful activation
+  observed, or `undefined`. Deliberately **not** a counter field — an
+  `OutcomeCounter` is six non-negative integers and nothing else — and
+  deliberately a pull accessor, since the core's selection is one-shot and
+  the identity is one process-wide fact rather than something to repeat per
+  log record or per span.
+
+- The shared outcome contract the host adapters report through
+  (redact-secret/redact-secret-adapters#45): `createOutcomeCounter`,
+  `toValueCounts`, `addCounts`, `countLeaf`, `notify`, and the
+  `OutcomeCounter` / `ValueCounts` / `LeafOutcome` types. A counter is six
+  non-negative integers — `scanned`, `findings`, `redacted`, `blocked`,
+  `limited`, `failed` — and nothing else, so it is input-free by
+  construction: there is no field for a value, a masked value, a field path,
+  a key, an offset, a detector id or an error message. `findings` and
+  `redacted` are separate because a `warn` finding changes no text, and
+  neither is a count of distinct credentials.
+- `maskLeafOutcomeWith`, `maskLeafWith` plus what happened to that leaf.
+  `maskLeafWith` is now a one-line wrapper over it and returns exactly the
+  same string for every input.
+- `MaskOptions.counter`: an optional, caller-owned accumulator the walk adds
+  to while it masks. The walk only ever increments it, so a host adapter that
+  masks one unit in more than one pass (pino scans a record's arguments and
+  its finished line) can keep one accurate total per unit instead of double
+  counting. Omitted, nothing is counted and there is no new work.
+- The walk now attributes its container-level markers too: a value past
+  `maxDepth` or a leaf budget counts as `limited`, and a cycle or an
+  unreadable getter/`toJSON()` as `failed`.
+
+### Changed
+
+- No change to the declared `@redact-secret/core` range, which stays
+  `^0.1.0-beta.6`. `initialize`'s optional argument and the optional
+  `piiActivation` are described by this package's own
+  `InitializableCore`, never read from the core's types, and
+  `piiActivation` is feature-detected at runtime, so a core at the floor
+  keeps working whenever `pii` is omitted.
+
+### Documented
+
+- Activation is not masking: under the core's default policy PII types are
+  confidence-gated, so a `High`-confidence finding redacts while `Medium`
+  and `Low` resolve to `warn` — and `maskLeafOutcomeWith` substitutes only
+  on `block`, so a `warn` leaves the text alone. Lower-confidence PII
+  therefore still reaches a destination as plaintext unless the caller
+  supplies a `policy` that maps those findings to `redact`. Nothing here
+  synthesizes one. The counters already make it observable, since
+  `findings` and `redacted` are counted apart.
 
 ## [0.1.2] - 2026-09-25
-
 ### Added
 
 - `walkStrict` hands each string leaf's visitor a second argument, `key`:
@@ -30,7 +115,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   its key-aware `sanitizeValue`.
 
 ## [0.1.1] - 2026-09-25
-
 ### Added
 
 - `walkStrict(value, limits, visitors)`, the all-or-nothing variant of the
@@ -69,7 +153,6 @@ tarball (`files` in `package.json`), so a consumer can read it from
   size check.
 
 ## [0.1.0] - 2026-09-22
-
 Initial release.
 
 ### Added
@@ -82,3 +165,4 @@ Initial release.
 - Declared range: `@redact-secret/core ^0.1.0-beta.6`, as an **optional**
   peer dependency — `scanAndRedact` is injected, so this package works
   without the core installed.
+

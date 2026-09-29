@@ -48,6 +48,8 @@ maskLogValueWith(scanAndRedact, { err: new Error("also walks Errors") });
 | `maskLogValueWith(scan, data, { policy, limits })` | The same walk, under its logging-side name |
 | `createMaskSecrets({ policy, limits })` | Live wrapper over the real core |
 | `walkStrict(value, { maxDepth, maxNodes }, { string, key })` | The all-or-nothing walk (see below; since `0.1.1`) |
+| `maskLeafOutcomeWith(scan, text, opts)` / `countLeaf` / `createOutcomeCounter` / `toValueCounts` / `addCounts` / `notify` | The outcome contract (see below; since `0.1.3`) |
+| `activateCore(core, { pii })` / `activePiiActivation` / `readPiiActivation` / `CoreActivationError` | The core-activation step every live factory runs (see below; **Unreleased**) |
 | `ScanAndRedact` | The injected scanner's type |
 
 The walk returns a masked copy of everything JSON serialization would emit:
@@ -82,6 +84,82 @@ copy, or the first failure; no marker is ever substituted.
 
 A shared, acyclic reference is copied as many times as it is reached. A
 visitor that throws is a bug in the caller, and its exception propagates.
+
+## Core activation and PII
+
+**Unreleased.** `activateCore` is the one step every live factory in this
+repository runs before it hands out a masker, and the one place the PII
+activation rule lives.
+
+```js
+const core = await import("@redact-secret/core");
+await activateCore(core, { pii: ["pii:global"] }); // or activateCore(core) for no selection
+```
+
+PII detection in the core is opt-in, **process-wide and one-shot**: the first
+selection wins, and a later *different* one fails with
+`PII_ACTIVATION_CONFLICT`. An empty selection is a different selection, not a
+neutral one. So three rules, and nothing here decides policy:
+
+| Called as | Behaviour |
+| --- | --- |
+| `activateCore(core)` | `initialize()`, exactly as before — but a `PII_ACTIVATION_CONFLICT` counts as **success**, because it means the application already activated its own selection. Every other failure is rethrown unchanged |
+| `activateCore(core, { pii })` | `initialize({ pii })`, so the adapter-first order works and the selection is explicit |
+| `activateCore(core, { pii })` | then reads `piiActivation()` and **refuses** when the active identity does not reflect the request |
+
+`piiActivation()` is optional on the core binding, so it is feature-detected. A
+core without it keeps working when `pii` is omitted — the declared
+`@redact-secret/core` range does not move for this — and fails with
+`PII_ACTIVATION_UNSUPPORTED` when `pii` is passed, rather than silently doing
+nothing. Both refusals are a `CoreActivationError` with a fixed `code` and a
+fixed `message`: no selector, no input, no field path, no core exception text.
+
+`activePiiActivation()` returns the identity the last successful activation
+observed, or `undefined`. It is deliberately **not** a counter field — a
+counter is six non-negative integers and nothing else — and the selection is
+one-shot, so the identity is one process-wide fact read on demand rather than
+repeated per record or per span.
+
+**Activation is not masking.** Under the core's default policy, PII types are
+confidence-gated rather than always redacted: `High` redacts, `Medium` and
+`Low` resolve to `warn`, and a `warn` finding leaves the text alone (see the
+markers below). Lower-confidence PII therefore still reaches a destination as
+plaintext. Supply your own `policy` mapping those findings to `redact` if you
+need them masked; nothing here synthesizes one. The counters make it
+observable — see the next section.
+
+## Outcome counters
+
+Since `0.1.3`, the host adapters report what happened to a log record or a span
+through one shared, **input-free** contract. This package holds it; the host
+packages hand it to your callback (`adapter-pino`'s `onOutcome`,
+`adapter-otel`'s `onOutcome`). Nothing here creates a logger, an exporter or a
+network client — you increment your own metrics.
+
+A counter is six non-negative integers and nothing else. There is no field for
+a value, a masked value, a field path, a key, an offset, a detector id or an
+error message, so there is nothing to accidentally forward.
+
+| Count | Means |
+| --- | --- |
+| `scanned` | Leaves handed to the core. A leaf a bound refused before the core saw it is not one of these |
+| `findings` | Findings the core reported, summed. **Not** distinct credentials: one credential in five leaves is five findings |
+| `redacted` | Leaves whose text the core changed. Lower than `findings` when an action leaves text alone (a `warn`) — a leaf with findings and no redaction is how the PII `warn` gap above shows up |
+| `blocked` | Leaves replaced whole by `BLOCK_MARKER` |
+| `limited` | Values replaced by `LIMIT_MARKER` — past a walk budget or over `maxStringLength`. Never scanned |
+| `failed` | Values replaced by `ERROR_MARKER`, plus the `CYCLE_MARKER` case |
+
+Pass `{ counter }` in `MaskOptions` to have the walk add to one; the walk only
+ever increments, so a host adapter that masks a unit in more than one pass
+(pino scans a record's arguments *and* its finished line) keeps one accurate
+total per unit rather than double counting. `maskLeafWith` and the walkers
+return exactly what they always did.
+
+A host's own delivery outcome is a separate, named field on that host's outcome
+type, because only that adapter knows it: `adapter-pino`'s `lineReplaced`,
+`adapter-otel`'s `dropped`. **None of them means "delivered" or "exported"** —
+no adapter here learns whether a destination, a handler or an exporter
+succeeded, and none of them claims to.
 
 ## Fail-closed markers
 

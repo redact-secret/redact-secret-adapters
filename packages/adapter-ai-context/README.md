@@ -26,15 +26,8 @@ package's public API. It names no model vendor, agent framework, or transport.
 ```js
 import { createAiContextBoundary } from "@redact-secret/adapter-ai-context";
 
+// Conservative documented default limits. Override any of them below.
 const boundary = await createAiContextBoundary({
-  wholeInputLimits: { maxInputBytes: 65536, maxFindings: 256 },
-  incrementalLimits: {
-    maxInputCodeUnits: 1048576,
-    maxBufferedCodeUnits: 65536,
-    maxTokenCodeUnits: 8192,
-    maxMultilineCodeUnits: 32768,
-  },
-  traversalLimits: { maxDepth: 16, maxNodes: 4096 },
   onFinding: (finding, { boundary }) => console.error("finding", boundary, finding.type, finding.action),
 });
 
@@ -56,6 +49,99 @@ console.log(JSON.stringify(context.value));
 
 The clean-install smoke test (`npm run smoke-test`) runs this block verbatim
 from a throwaway project outside the repository.
+
+Not every value is supported, and refusing one is the point: a `Date`, a `Map`,
+a class instance, an `Error`, binary or base64 content, and encoded text are
+**blocked, not decoded or serialized** (`unsupported_value`), and an aborted
+signal ends the operation as `aborted`. Convert values to JSON shapes yourself,
+so what is scanned is exactly what you send. An `ok` outcome with no findings
+is **not** proof that no secret was present.
+
+### Limits
+
+```js
+// Every set is optional and defaults to AI_CONTEXT_DEFAULT_LIMITS; a set you
+// pass is used exactly as given, not merged field by field with the preset.
+const boundary = await createAiContextBoundary({
+  wholeInputLimits: { maxInputBytes: 65536, maxFindings: 256 },
+  incrementalLimits: {
+    maxInputCodeUnits: 1048576,
+    maxBufferedCodeUnits: 65536,
+    maxTokenCodeUnits: 8192,
+    maxMultilineCodeUnits: 32768,
+  },
+  traversalLimits: { maxDepth: 16, maxNodes: 4096 },
+});
+```
+
+Those values *are* `AI_CONTEXT_DEFAULT_LIMITS`, exported so you can read, log
+or extend them. They are conservative on purpose: the first failure a new
+integration meets should be a fixed `blocked` / `limit_exceeded` outcome on an
+oversized input, not an unbounded scan.
+
+| Limit | Default | Bounds |
+| --- | --- | --- |
+| `maxInputBytes` | 65536 | one whole-input scan |
+| `maxFindings` | 256 | findings collected for one scan |
+| `maxInputCodeUnits` | 1048576 | one streamed session, total |
+| `maxBufferedCodeUnits` | 65536 | what a session holds while a candidate is open |
+| `maxTokenCodeUnits` | 8192 | one candidate token |
+| `maxMultilineCodeUnits` | 32768 | one multi-line candidate |
+| `maxDepth` | 16 | nested containers, the root counting as 1 |
+| `maxNodes` | 4096 | values visited in one `sanitizeValue` |
+
+**There is no unbounded mode**, and limits are still mandatory — the preset
+names them so you do not have to invent them, and nothing switches them off.
+`createAiContextBoundaryWith`, the injected API, still requires all three sets
+explicitly; pass `withDefaultLimits()` to hand it the preset. `test/defaults.test.ts`
+asserts against the real core that each preset bound is enforced, that a
+streamed text agrees with `sanitizeText` at every chunk partition under it, and
+that an override replaces rather than widens.
+
+Two things to know:
+
+- **Omitted is defaulted; present is used as given.** A key that is present but
+  `undefined` — how `traversalLimits: config.limits` looks when `config` is
+  missing — is still a `TypeError`, not silently the preset. A set that *is*
+  given is used whole, never merged field by field with the preset.
+- `sanitizeValue` also scans a leaf inside its key-context view
+  `{"<key>":"<leaf>"}`, so a leaf's usable budget is `maxInputBytes` minus that
+  key and its JSON punctuation. With the default 64 KiB that is noise; with a
+  small override it is what binds first.
+
+### PII detection is opt-in
+
+**Unreleased.** The core detects credentials out of the box; PII detection is a
+separate activation, and it is process-wide and one-shot — the first selection
+wins, and a later *different* one fails with `PII_ACTIVATION_CONFLICT`.
+
+Either order works. Activate it yourself before building the boundary, or pass
+it here:
+
+```js
+const boundary = await createAiContextBoundary({ pii: ["pii:global"] });
+```
+
+With `pii` omitted, an activation the application already made is accepted
+rather than fought over, so building the boundary after
+`initialize({ pii })` no longer fails. With `pii` given, the factory reads the
+core's `piiActivation()` afterwards and refuses when the active selection is
+not the one you asked for. **This factory still never rejects**: that refusal
+is an initialization failure like any other, so every operation fails closed as
+`blocked` / `core_error` — with no `code`, because the refusal carries none
+from the core's fixed registry — instead of quietly building context with PII
+off. Omitting `pii` needs no newer core: the declared `@redact-secret/core`
+range is unchanged.
+
+**Activation is not masking.** Under the core's default policy, PII types are
+confidence-gated rather than always redacted: a `High`-confidence finding
+redacts, while `Medium` and `Low` resolve to `warn` — and a `warn` finding
+leaves the text alone. An `ok` outcome can therefore carry findings whose text
+was not changed, and lower-confidence PII reaches the model as plaintext. Pass
+your own `policy` mapping those findings to `redact` if you need them masked;
+this package decides nothing about policy. It is visible in the outcome: an
+`ok` whose `findings` is non-empty but whose `value` equals the input is
+exactly this case.
 
 ## Operations
 
@@ -148,7 +234,10 @@ Nothing else is emitted.
 ## Lifecycle rules
 
 - **Limits are mandatory.** `wholeInputLimits`, `incrementalLimits` and
-  `traversalLimits` must all be given. The core enforces the first two before
+  `traversalLimits` are all in force at all times. Since `0.1.0-alpha.2` the
+  live factory fills in any set you leave out from
+  `AI_CONTEXT_DEFAULT_LIMITS`; `createAiContextBoundaryWith` still requires
+  all three. The core enforces the first two before
   the detection work they exist to prevent; this package enforces traversal
   limits. Exceeding any limit fails the whole operation. Nothing is truncated
   or marked and passed on. A malformed limit set is a `TypeError` at

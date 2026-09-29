@@ -23,8 +23,9 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
+import { workspaceDirs } from "./workspace-dirs.mjs";
 
 const root = new URL("../", import.meta.url);
 
@@ -61,7 +62,7 @@ function parseArgs(argv) {
 }
 
 function workspaces() {
-  return readdirSync(new URL("packages/", root))
+  return workspaceDirs(new URL("packages/", root))
     .map((dir) => JSON.parse(readFileSync(new URL(`packages/${dir}/package.json`, root), "utf-8")).name)
     .sort();
 }

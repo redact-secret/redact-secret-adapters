@@ -36,15 +36,8 @@ structural shape, as it is on the wire.
 ```js
 import { createMcpBoundary, toCallToolResult } from "@redact-secret/adapter-mcp";
 
+// Conservative documented default limits. Override any of them below.
 const mcp = await createMcpBoundary({
-  wholeInputLimits: { maxInputBytes: 65536, maxFindings: 256 },
-  incrementalLimits: {
-    maxInputCodeUnits: 1048576,
-    maxBufferedCodeUnits: 65536,
-    maxTokenCodeUnits: 8192,
-    maxMultilineCodeUnits: 32768,
-  },
-  traversalLimits: { maxDepth: 16, maxNodes: 4096 },
   onFinding: (finding, { boundary }) => console.error("finding", boundary, finding.type, finding.action),
   onAudit: (record) => console.error("audit", JSON.stringify(record)),
 });
@@ -64,6 +57,69 @@ if (safe !== null) console.log(JSON.stringify(safe)); // log it, store it, put i
 
 The clean-install smoke test (`npm run smoke-test`) runs this block verbatim
 from a throwaway project outside the repository.
+
+Three things next to that example, because refusing is the point rather than a
+rough edge. A **binary payload** (`image`, `audio`, a base64 `blob`) cannot be
+scanned, so by default it blocks the whole result as `unsupported_value`; pass
+`binaryContent: "pass"` to let a string payload through **unscanned** at its
+original key position, with every other field of the block still scanned. A
+**content type or shape** no qualified protocol revision defines also blocks,
+so a later revision fails closed rather than passing something unscanned. A
+**cancelled** call is `aborted`, and `toCallToolResult` returns `null` for it —
+there is nothing safe to deliver. And an `ok` outcome with no findings is not
+proof the result held no secret.
+
+### Limits
+
+```js
+// Every set is optional and defaults to AI_CONTEXT_DEFAULT_LIMITS; a set you
+// pass is used exactly as given, not merged field by field with the preset.
+const mcp = await createMcpBoundary({
+  wholeInputLimits: { maxInputBytes: 65536, maxFindings: 256 },
+  incrementalLimits: {
+    maxInputCodeUnits: 1048576,
+    maxBufferedCodeUnits: 65536,
+    maxTokenCodeUnits: 8192,
+    maxMultilineCodeUnits: 32768,
+  },
+  traversalLimits: { maxDepth: 16, maxNodes: 4096 },
+});
+```
+
+Those values *are* `AI_CONTEXT_DEFAULT_LIMITS`, re-exported from
+[`@redact-secret/adapter-ai-context`](../adapter-ai-context#limits), which
+documents each one. **There is no unbounded mode**: the preset names the bounds
+so you do not have to invent them, and every one of them still fails an
+oversized result closed as `blocked` / `limit_exceeded`. `createMcpBoundaryWith`,
+over a boundary you built yourself, is unchanged.
+
+### PII detection is opt-in
+
+**Unreleased.** `createMcpBoundary` takes `pii` and forwards it to
+[`createAiContextBoundary`](../adapter-ai-context#pii-detection-is-opt-in), the
+way it forwards the limits:
+
+```js
+const mcp = await createMcpBoundary({ pii: ["pii:global"] });
+```
+
+PII detection in the core is opt-in, process-wide and one-shot — the first
+selection wins, and a later *different* one fails with
+`PII_ACTIVATION_CONFLICT`. With `pii` omitted, an activation the application
+already made is accepted rather than fought over, so building the boundary
+after `initialize({ pii })` no longer fails. With `pii` given, a selection that
+is not the one actually active fails every operation closed as `blocked` /
+`core_error` — this factory still never rejects — instead of quietly
+sanitizing with PII off. Omitting `pii` needs no newer core: the declared
+`@redact-secret/core` range is unchanged.
+
+**Activation is not masking.** Under the core's default policy, PII types are
+confidence-gated rather than always redacted: a `High`-confidence finding
+redacts, while `Medium` and `Low` resolve to `warn`, and a `warn` finding
+leaves the text alone. An `ok` outcome can therefore carry findings whose text
+was not changed, and lower-confidence PII reaches the model as plaintext. Pass
+your own `policy` mapping those findings to `redact` if you need them masked;
+this package decides nothing about policy.
 
 ## Where to put it
 

@@ -16,6 +16,13 @@ import { ERROR_MARKER, LIMIT_MARKER, maskLogValueWith } from "@redact-secret/ada
 /** The exact shape of pino's `hooks.streamWrite`. */
 export type RedactingStreamWrite = (line: string) => string;
 
+/**
+ * The fixed line written in place of one that could not be lexed. Public so a
+ * host observing outcomes can recognise it without pattern-matching: pino
+ * always emits a `level`, so this can never be a line pino itself produced.
+ */
+export const PINO_ERROR_LINE = JSON.stringify({ msg: ERROR_MARKER });
+
 const QUOTE = 34;
 const BACKSLASH = 92;
 const COLON = 58;
@@ -56,8 +63,12 @@ function redactLine(scanAndRedact: ScanAndRedact, line: string, options: MaskOpt
   let out = "";
   let last = 0;
   spans.forEach(([start, end], index) => {
-    // Values past maxArrayLength were dropped by the walk: never pass them through.
-    const value = index < masked.length ? masked[index] : LIMIT_MARKER;
+    // Values past maxArrayLength were dropped by the walk: never pass them
+    // through. The walk could not count them — it never saw them — so they are
+    // counted here, or `limited` would under-report exactly the refused values.
+    const dropped = index >= masked.length;
+    if (dropped && options.counter !== undefined) options.counter.limited += 1;
+    const value = dropped ? LIMIT_MARKER : masked[index];
     if (value === values[index]) return;
     out += `${line.slice(last, start)}${JSON.stringify(value)}`;
     last = end;
@@ -81,7 +92,9 @@ export function createRedactingStreamWriteWith(
     try {
       return redactLine(scanAndRedact, line, options);
     } catch {
-      return `${JSON.stringify({ msg: ERROR_MARKER })}${String(line).endsWith("\n") ? "\n" : ""}`;
+      // The whole line is one value the adapter could not represent.
+      if (options.counter !== undefined) options.counter.failed += 1;
+      return `${PINO_ERROR_LINE}${String(line).endsWith("\n") ? "\n" : ""}`;
     }
   };
 }

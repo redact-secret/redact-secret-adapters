@@ -31,7 +31,7 @@
  *
  * Importing this module runs nothing; the plan is computed only when it is
  * executed directly. The pure helpers are exported for
- * scripts/test/release-plan.test.mjs.
+ * scripts/test/release-plan.test.mjs and for scripts/generate-site-feed.mjs.
  */
 
 import { execFileSync } from "node:child_process";
@@ -163,7 +163,7 @@ export function planTable(plan) {
 // continuation lines are indented), so key order, blank lines, comments,
 // multi-line arrays and either TOML string quote don't matter. A dynamic
 // version or a version outside `[project]` is an error, not a guess.
-function pyprojectVersion(text) {
+export function pyprojectVersion(text) {
   let table = null;
   for (const line of text.split(/\r?\n/)) {
     if (line.startsWith("[")) {

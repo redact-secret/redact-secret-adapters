@@ -6,6 +6,7 @@
 
 import type { SecretAction } from "@redact-secret/core";
 
+import type { LeafOutcome, OutcomeCounter } from "./outcome.js";
 import type { Limits, MaskLeafOptions, ScanAndRedact } from "./types.js";
 
 export const BLOCK_MARKER = "[REDACTED:BLOCKED]";
@@ -53,22 +54,62 @@ export function resolveLimit(value: unknown, fallback: number): number {
  * *is* the message, and for a merged field or an `err.message` the leaf is
  * that field's whole text.
  */
-export function maskLeafWith(
+export function maskLeafWith(scanAndRedact: ScanAndRedact, text: string, options: MaskLeafOptions = {}): string {
+  return maskLeafOutcomeWith(scanAndRedact, text, options).text;
+}
+
+/** One masked leaf, with the input-free record of what happened to it. */
+export interface MaskedLeaf {
+  readonly text: string;
+  readonly outcome: LeafOutcome;
+  /**
+   * Findings the core reported for this one leaf — zero when it was never
+   * scanned. Not a count of distinct credentials: see `./outcome.ts`.
+   */
+  readonly findings: number;
+}
+
+/**
+ * {@link maskLeafWith}, plus what happened, for a host adapter that reports
+ * outcome counters. Exactly the same masking decisions; nothing derived from
+ * the leaf's text is in the result besides the masked text itself.
+ */
+export function maskLeafOutcomeWith(
   scanAndRedact: ScanAndRedact,
   text: string,
   { policy, maxStringLength }: MaskLeafOptions = {},
-): string {
+): MaskedLeaf {
   if (typeof text !== "string") {
     throw new TypeError("maskLeafWith: text must be a string");
   }
-  if (text.length > resolveLimit(maxStringLength, DEFAULT_LIMITS.maxStringLength)) return LIMIT_MARKER;
+  if (text.length > resolveLimit(maxStringLength, DEFAULT_LIMITS.maxStringLength)) {
+    return { text: LIMIT_MARKER, outcome: "limited", findings: 0 };
+  }
 
   try {
     const result = scanAndRedact(text, { policy });
-    if (typeof result?.text !== "string" || !Array.isArray(result.findings)) return ERROR_MARKER;
-    if (result.findings.some((finding) => finding?.action === BLOCK)) return BLOCK_MARKER;
-    return result.text;
+    if (typeof result?.text !== "string" || !Array.isArray(result.findings)) {
+      return { text: ERROR_MARKER, outcome: "failed", findings: 0 };
+    }
+    const findings = result.findings.length;
+    if (result.findings.some((finding) => finding?.action === BLOCK)) {
+      return { text: BLOCK_MARKER, outcome: "blocked", findings };
+    }
+    // A `warn` finding leaves the text alone, so a scan can report findings
+    // and still be `unchanged`. That is why the two are counted apart.
+    return { text: result.text, outcome: result.text === text ? "unchanged" : "redacted", findings };
   } catch {
-    return ERROR_MARKER;
+    return { text: ERROR_MARKER, outcome: "failed", findings: 0 };
   }
+}
+
+/** Adds one leaf's outcome to `counter`. A leaf the core never saw does not count as `scanned`. */
+export function countLeaf(counter: OutcomeCounter | undefined, leaf: MaskedLeaf): void {
+  if (counter === undefined) return;
+  if (leaf.outcome !== "limited") counter.scanned += 1;
+  counter.findings += leaf.findings;
+  if (leaf.outcome === "redacted") counter.redacted += 1;
+  else if (leaf.outcome === "blocked") counter.blocked += 1;
+  else if (leaf.outcome === "limited") counter.limited += 1;
+  else if (leaf.outcome === "failed") counter.failed += 1;
 }

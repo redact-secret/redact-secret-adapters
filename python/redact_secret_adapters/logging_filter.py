@@ -8,16 +8,52 @@ It replaces ``exc_info`` with sanitized traceback text and also scans cached
 Attach the filter to each emitting handler. Ancestor logger filters do not
 run for propagated child records; mutations to a record are shared by its
 handlers. Custom formatters must not add unscanned fields afterward.
+
+**If you want PII, enable it before the first record.** Credential detection
+needs no init step -- the native extension loads on ``import redact_secret``,
+unlike the JS package's mandatory ``await initialize()``. PII detection is
+opt-in, process-wide and one-shot, and the application turns it on with
+``redact_secret.initialize(pii=[...])``::
+
+    import logging
+    import redact_secret
+    from redact_secret_adapters.logging_filter import RedactSecretFilter
+
+    redact_secret.initialize(pii=["pii:global"])  # first, before any logging
+
+    handler = logging.StreamHandler()
+    handler.addFilter(RedactSecretFilter())
+    logging.getLogger().addHandler(handler)
+
+The order matters and is easy to get wrong, because handlers are usually
+attached at import time and a module imported earlier can log before the
+line that enables PII has run. Python's binding raises no conflict for a late
+call -- it locks nothing that ``active_pii_selection()`` reads -- so there is
+no error to catch, only a **silent window** in which records are scanned with
+PII off and report nothing. This filter cannot close it: it never learns when
+the process decided to enable PII. ``python/tests/test_pii_activation.py``
+pins the window as a known limitation rather than hiding it.
+
+Activating PII is also not the same as masking every PII value. Under the
+core's default policy PII types are confidence-gated: ``High`` redacts, while
+``Medium`` and ``Low`` resolve to ``warn``, and a ``warn`` finding leaves the
+text alone (see ``mask_leaf.py``), so lower-confidence PII still reaches the
+handler as plaintext. Pass your own ``policy`` mapping those findings to
+``redact`` if you need them masked. The outcome counters make it observable:
+such a record counts ``scanned`` with a non-zero ``findings`` and no
+``redacted``.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 import warnings
 from typing import Any, Callable, Optional, Sequence
 
 from ._walk import mask_exception_text_with, walk
-from .mask_leaf import ERROR_MARKER, mask_leaf_with
+from .mask_leaf import ERROR_MARKER, count_leaf, mask_leaf_outcome_with
+from .outcome import LogRecordOutcome, OutcomeCounter, notify
 
 __all__ = ["RedactSecretFilter"]
 
@@ -52,6 +88,7 @@ class RedactSecretFilter(logging.Filter):
         policy: Optional[Any] = None,
         extra_fields: Sequence[str] = (),
         limits: Optional[dict[str, int]] = None,
+        on_outcome: Optional[Callable[[LogRecordOutcome], None]] = None,
     ) -> None:
         if name:
             # logging.Filter's name would drop records from other loggers,
@@ -76,12 +113,28 @@ class RedactSecretFilter(logging.Filter):
         # A bare string names one field; tuple("auth") would name four.
         self._extra_fields = (extra_fields,) if isinstance(extra_fields, str) else tuple(extra_fields)
         self._limits = limits
+        if on_outcome is not None and not callable(on_outcome):
+            raise TypeError("RedactSecretFilter: on_outcome must be callable")
+        self._on_outcome = on_outcome
+        # A filter instance can be shared by handlers and used from threads, so
+        # re-entrancy is the only state kept here, and only to stop an observer
+        # that logs from recursing. It is thread-local, so one thread reporting
+        # never suppresses another's outcome. Counting state is per
+        # ``filter()`` call.
+        self._state = threading.local()
 
-    def _mask(self, text: str) -> str:
+    def _mask(self, text: str, counter: Optional[OutcomeCounter] = None) -> str:
         max_len = (self._limits or {}).get("max_string_length")
-        return mask_leaf_with(self._scan_and_redact, text, policy=self._policy, max_string_length=max_len)
+        leaf = mask_leaf_outcome_with(self._scan_and_redact, text, policy=self._policy, max_string_length=max_len)
+        count_leaf(counter, leaf)
+        return leaf.text
 
     def filter(self, record: logging.LogRecord) -> bool:
+        # One counter per ``filter()`` call: a record passing through two
+        # filtered handlers is two units of work and reports twice, which is
+        # what a per-handler count means. Nothing is shared between calls.
+        counter = OutcomeCounter() if self._on_outcome is not None else None
+
         try:
             message = record.getMessage()
         except Exception:
@@ -89,8 +142,10 @@ class RedactSecretFilter(logging.Filter):
             # Left alone, the handler's handleError would print msg and args
             # to stderr in the clear; the message is unrecoverable, so mark it.
             record.msg = ERROR_MARKER
+            if counter is not None:
+                counter.failed += 1
         else:
-            record.msg = self._mask(message)
+            record.msg = self._mask(message, counter)
         record.args = None
 
         exc_value = None
@@ -100,20 +155,40 @@ class RedactSecretFilter(logging.Filter):
             record.exc_info = None
         if isinstance(exc_value, BaseException):
             record.exc_text = mask_exception_text_with(
-                self._scan_and_redact, exc_value, policy=self._policy, limits=self._limits
+                self._scan_and_redact, exc_value, policy=self._policy, limits=self._limits, counter=counter
             )
         elif record.exc_text:
             # Also reached with exc_info == (None, None, None): a cached
             # exc_text still renders and must be scanned.
-            record.exc_text = self._mask(record.exc_text)
+            record.exc_text = self._mask(record.exc_text, counter)
 
         if record.stack_info:
-            record.stack_info = self._mask(record.stack_info)
+            record.stack_info = self._mask(record.stack_info, counter)
 
         for field in self._extra_fields:
             if hasattr(record, field):
                 # A new, masked container: the caller's own object is untouched.
-                masked = walk(self._scan_and_redact, getattr(record, field), policy=self._policy, limits=self._limits)
+                masked = walk(
+                    self._scan_and_redact,
+                    getattr(record, field),
+                    policy=self._policy,
+                    limits=self._limits,
+                    counter=counter,
+                )
                 setattr(record, field, masked)
 
+        if counter is not None:
+            self._report(record, counter)
         return True
+
+    def _report(self, record: logging.LogRecord, counter: OutcomeCounter) -> None:
+        """Reports one outcome per record, after the record is fully masked so
+        an observer cannot turn a protected record into an unprotected one."""
+        if getattr(self._state, "reporting", False):
+            # An observer that logs would otherwise re-enter this filter.
+            return
+        self._state.reporting = True
+        try:
+            notify(self._on_outcome, LogRecordOutcome(level=record.levelno, values=counter.snapshot()))
+        finally:
+            self._state.reporting = False

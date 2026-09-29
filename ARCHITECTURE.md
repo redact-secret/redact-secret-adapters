@@ -155,6 +155,42 @@ lexed. It is a second scan of each line, so it is a separate hook the host
 installs next to `logMethod` rather than a replacement: `logMethod` still keeps
 raw values away from the host's own serializers, formatters and `mixin()`.
 
+Because the pair is what covers the boundary and either hook alone leaves a
+plaintext path, `createRedactingHooks` returns both, shaped as pino's `hooks`
+option, so the complete setup is one call rather than two the host has to know
+to pair. The single-hook factories stay exported: they are the escape hatch for
+a host that knowingly has no bindings, `mixin()` or `base` and wants one scan
+per line, and the migration path from `0.1.0`/`0.1.1`.
+
+A host that already passes its own `hooks` hands them to the factory, which
+composes rather than replaces them. One rule decides the order, in both hooks:
+**redaction runs last, closest to the bytes.** The host's `logMethod` runs
+first and is handed a `method` that redacts and then calls pino's real one, so
+arguments the host's hook adds or rewrites are scanned, and a host hook that
+never calls `method` still drops the record. The host's `streamWrite` runs
+first on pino's own line and the redacting hook masks what it returns — pino
+requires a `streamWrite` hook to return valid JSON, which is what the line
+lexer is specified against — so fields the host's hook adds are scanned too. A
+throwing or non-string host `streamWrite` falls back to redacting pino's own
+line rather than letting it through. Keys other than these two are forwarded
+to pino unchanged: a future pino hook is neither dropped nor claimed as
+covered. What is still outside the boundary, and documented as such, is a
+destination or transport that adds text after `streamWrite`, and any hook the
+host wraps *around* the composed pair by hand. That ordering has one
+consequence worth naming: a host `streamWrite` receives pino's line
+**unmasked**, bindings and `mixin()` output included, so a hook that tees or
+copies the line elsewhere is handling plaintext even though what reaches the
+destination is masked.
+
+Reporting an outcome per record (#45) rides on the same seam. The two hooks
+share a stack of in-flight records and the counter handed to the walkers is
+resolved per masking call, because this path is re-entrant in three different
+ways: `mixin()` and a serializer can log *after* masking, and a getter or
+`toJSON()` on the merging object can log *during* the walk. A single shared
+counter would give a nested record the outer record's partial numbers. The
+masking is unaffected either way; only the attribution was, which is why it
+took a test that logs from a getter to catch it.
+
 ### OpenTelemetry
 
 The processor wraps any object shaped like a `SpanProcessor` and, in `onEnd`
@@ -264,12 +300,25 @@ masked as its formatted traceback, also one L1 leaf, and cached `exc_text` and
 `stack_info` likewise. Only the `extra_fields` a caller names go through the L2
 walker.
 
-A `logging.Filter` runs only where it is attached. On a handler, it redacts the
-record before that handler formats it, and since the record is mutated in
-place, before any handler that runs afterwards; a handler without the filter
-that runs earlier sees plaintext. On a logger, it runs for records logged on
-that logger before any handler, but not for records propagated from child
-loggers. Attach it to every emitting handler.
+A `logging.Filter` runs only where it is attached, which makes *placement* the
+security decision in any application with more than one handler. On a handler,
+it redacts the record before that handler formats it, and since the record is
+mutated in place, before any handler that runs afterwards; a handler without
+the filter that runs earlier sees plaintext. On a logger, it runs for records
+logged on that logger before any handler, but not for records propagated from
+child loggers — nor does a filter on an ancestor logger cover a child's own
+handlers. For a `QueueHandler`/`QueueListener` pair the filter belongs on the
+`QueueHandler`, which runs in the emitting thread, so only masked records cross
+the queue; on the listener's sink it protects the final destination but not the
+queue, and not wherever a `QueueHandler` subclass sends the record instead (a
+socket, a `multiprocessing` queue). Attach it to every emitting handler.
+
+Because none of that can be enforced from inside a filter, it is held by tests
+instead: `python/tests/test_logging_placement.py` asserts each supported
+placement and, as synthetic negative controls, that plaintext really does
+escape each wrong one. The filter is idempotent, so two filtered handlers on
+one record are safe, and a record with no finding is formatted exactly as it
+would be without the filter.
 
 ## Cross-language contract
 
@@ -311,8 +360,58 @@ holding the two languages together, so they are shared — one copy, read by bot
 - Fixtures and tests use unmistakably synthetic values only. A real credential
   never enters this repository, in any file, including documentation.
 
+## The vault boundary
+
+`@redact-secret/vault` is an opt-in, in-memory capture published by the sibling
+[`redact-secret-vault`](https://github.com/redact-secret/redact-secret-vault)
+repository. It replaces a detected secret with a `<rsv_…>` token on the way to
+a model and restores the original value into an application-designated field on
+the way back. **This repository does not depend on it, and must not**: the core
+and the adapters stay one-way. What is written down here is only how the two
+sit next to each other.
+
+| Owned here | Owned by the vault repository |
+| --- | --- |
+| Host integrations: pino, OpenTelemetry, Python `logging`, AI context, MCP | `capture()`, the token mapping, `restore()` |
+| Fail-closed masking and the four markers | Reversibility, and every decision about who may reverse |
+
+Three rules follow, and all three are tests
+(`packages/*/test/vault-token.test.ts`, `python/tests/test_vault_token.py`,
+from the shared `fixtures/vault-token-cases.json`):
+
+- **Capture first, adapters after.** `capture()` and `createAiContextBoundary`
+  occupy the same seam — the path to the model — so the order is fixed. What
+  reaches an adapter is already tokenized text, and the adapter scans it as it
+  would any other string.
+- **A token passes through untouched.** No adapter here parses, rewrites or
+  restores a `<rsv_…>` token. A rewrite would not leak anything; it would
+  destroy a value the application still needs, and `restore()` would answer
+  `RESTORE_DENIED` with nothing to point at. The core reports no finding on a
+  token today, in a call argument, a `Bearer` header, an environment assignment
+  or a JSON value under `api_key` — and the pinned tests are what keeps a
+  widened detector from changing that silently.
+- **A restored value never reaches an observability sink.** Restoration puts
+  plaintext back; a log, a span or a model context is exactly where it must not
+  go. The adapters have no restoration to misuse, which is the point of keeping
+  it on the other side of the boundary.
+
+Two paths are known **not** to preserve a token, and both are this
+repository's documented fail-closed behavior rather than a bug: a leaf past
+`maxStringLength` becomes `[REDACTED:LIMIT_EXCEEDED]`, and a core failure
+becomes `[REDACTED:ERROR]`. Either replaces the whole leaf, tokens included,
+with no error raised. They are asserted explicitly in both languages so a
+reader meets them stated rather than as a value that can no longer be restored.
+
+Separately, no default this repository ships may emit the literal `rsv_`: the
+vault refuses any input that already contains one (`TOKEN_LITERAL_IN_INPUT`).
+A custom `placeholderFormatter` is a supported option of `adapter-ai-context`,
+so that is a test, not an assumption.
+
 ## Deliberate exclusions
 
+- **Restoration.** Reversibility, token mapping and `restore()` belong to
+  `@redact-secret/vault`; see [The vault boundary](#the-vault-boundary).
+  No adapter here gains a dependency on it, or vault-aware behavior of its own.
 - **Stream adapters** (Node `Transform`, Web `TransformStream`) belong to
   `@redact-secret/core` and stay there. The word "adapter" in this repository
   means an external host integration; the core repository additionally uses
@@ -346,4 +445,5 @@ python/
   redact_secret_adapters/                               shared + logging + otel extra
 fixtures/                                               cross-language contract, shared
   core/                                                 core-owned contract files, vendored at a pinned core commit
+site-feed/v1/                                           generated adapter release feed + its schema (RELEASING.md)
 ```

@@ -19,16 +19,35 @@ package whose declared version isn't on its registry yet — see
 can read it without leaving their environment.
 
 ## [Unreleased]
-
-### Deprecated
-
-- `RedactSecretFilter(name=...)`: it was accepted but never honored (the
-  filter redacts every record it sees and never drops one, unlike a named
-  `logging.Filter`). Passing a non-empty `name` now emits a
-  `DeprecationWarning`; the parameter will be removed in a later minor
-  release. Attach the filter where it should apply instead.
-
+## [0.1.1] - 2026-09-28
 ### Fixed
+
+- The "there is no init step for the Python bindings" claim in
+  `mask_secrets.py` and `otel.py` was wrong as of `redact-secret`
+  `0.1.0b10` (redact-secret/redact-secret-adapters#51). It holds for
+  credential detection, where the extension still loads on
+  `import redact_secret`, but **PII detection is an explicit, process-wide,
+  one-shot activation**: `redact_secret.initialize(pii=[...])`, whose first
+  selection wins and whose later, different selection raises
+  `PiiActivationConflictError`. Corrected there and in
+  `logging_filter.py`.
+
+- A span's **attribute** values are now counted by the processor's own masker.
+  They were redacted correctly, but went through the module-level
+  `redact_attributes_with`, so a processor reporting outcomes would have
+  counted only the span and event names. Found by the new per-span count
+  tests.
+- The per-span counter is saved and restored around `on_end`, and its values
+  are snapshotted before the span is handed to the next processor. A
+  downstream processor that ends a span synchronously inside `next.on_end`
+  re-enters `on_end` before the outer span has been reported, and used to
+  leave the outer span reporting an **empty** counter. Redaction and export
+  were never affected — only the reported numbers.
+
+Note on `mask_leaf_outcome_with`: counting findings needs
+`len(result.findings)`, so a malformed core result whose `findings` has no
+length (a generator) now fails closed to `ERROR_MARKER` where `0.1.0` returned
+the masked text. That is the direction a malformed result should fail in.
 
 - `otel`: a string-sequence attribute containing `None` (which the SDK
   accepts) was exported unscanned. Each `str` element is now masked and
@@ -73,8 +92,77 @@ can read it without leaving their environment.
   1.25.0 cannot build this project (`license-files` must be a table), and
   1.26.x builds a wheel whose metadata omits the `MIT` license expression.
 
-## [0.1.0] - 2026-09-22
+### Documented
 
+- The placement rule, and the window it leaves open. Handlers are attached
+  and tracer providers built at import time, so a module imported earlier
+  can emit records *before* the line that enables PII has run. Those
+  records are scanned with PII off and report nothing — no exception, no
+  warning, and no counter that tells them apart from a record that
+  genuinely held nothing. These adapters cannot close that window, because
+  the process owns the activation, so it is pinned as a **known
+  limitation** in `python/tests/test_pii_activation.py` rather than hidden;
+  the same file pins the documented order working, and the one-shot
+  conflict, each in its own interpreter.
+- Activating PII is not the same as masking every PII value: under the
+  core's default policy `High`-confidence PII redacts while `Medium` and
+  `Low` resolve to `warn`, and a `warn` finding leaves the text alone (see
+  `mask_leaf.py`), so lower-confidence PII still reaches a handler or an
+  exporter as plaintext unless the caller supplies a `policy` that maps
+  those findings to `redact`. These adapters decide nothing about policy
+  and synthesize none. The counters make it observable, since `findings`
+  and `redacted` are counted apart.
+
+### Added
+
+- `redact_secret_adapters.outcome`: the same input-free outcome contract as
+  the TypeScript `@redact-secret/adapter`
+  (redact-secret/redact-secret-adapters#45). `OutcomeCounter` /
+  `ValueCounts` hold six non-negative integers — `scanned`, `findings`,
+  `redacted`, `blocked`, `limited`, `failed` — and nothing else, so there is
+  no field for a value, a record attribute, a key, an offset or an exception
+  message. `findings` and `redacted` are separate because a `warn` finding
+  changes no text, and neither is a count of distinct credentials.
+- `RedactSecretFilter(on_outcome=...)`: one `LogRecordOutcome` per record
+  the filter masks, carrying the numeric level and the value counts. A record
+  through two filtered handlers is two passes and reports twice, which is what
+  a per-handler count means.
+- `create_redacting_span_processor(on_outcome=...)` and the same keyword on
+  `RedactingSpanProcessorWith`: one `SpanOutcome` per span, with `dropped`.
+  `dropped` is this processor's own decision and is never a claim that an
+  exporter succeeded or that a span was sampled out.
+- Both observers are called after the record or span is fully masked;
+  anything they raise is swallowed, never read, and never changes what is
+  emitted. The re-entrancy guard is thread-local, so an observer that logs or
+  traces does not recurse and one thread never suppresses another's outcome.
+  Neither creates a logger, a handler, an exporter or a network client.
+- `mask_leaf_outcome_with` and `count_leaf`; `mask_leaf_with` is now a
+  one-line wrapper over the former and returns exactly the same string for
+  every input.
+
+### Changed
+
+- The README now states where `RedactSecretFilter` has to be attached in an
+  application with more than one handler, with propagating child loggers, or
+  with a `QueueHandler`/`QueueListener` pair, and what each wrong placement
+  leaves unprotected (redact-secret/redact-secret-adapters#48). No code
+  change: a `logging.Filter` runs only where it is attached, so placement was
+  always the security decision — it was documented in one line under a
+  single-handler example that could be read as global automatic protection.
+  `python/tests/test_logging_placement.py` asserts each supported placement
+  and, as synthetic negative controls, that plaintext really does escape each
+  wrong one; the wheel smoke test now installs the multi-handler setup the
+  README recommends instead of attaching the filter to a logger.
+
+### Deprecated
+
+- `RedactSecretFilter(name=...)`: it was accepted but never honored (the
+  filter redacts every record it sees and never drops one, unlike a named
+  `logging.Filter`). Passing a non-empty `name` now emits a
+  `DeprecationWarning`; the parameter will be removed in a later minor
+  release. Attach the filter where it should apply instead.
+
+## [0.1.0] - 2026-09-22
 Initial release.
 
 ### Added
@@ -95,3 +183,4 @@ Initial release.
   for the stdlib `logging` integration; `otel` extra:
   `opentelemetry-sdk>=1.16.0,<2`, verified by a real span passed through a
   real `TracerProvider` at both ends of the range.
+

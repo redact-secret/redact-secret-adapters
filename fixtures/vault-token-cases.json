@@ -1,0 +1,40 @@
+{
+  "description": "The coexistence contract with `@redact-secret/vault` (redact-secret/redact-secret-adapters#52). The vault is an opt-in, in-memory capture published by the sibling `redact-secret-vault` repository: it replaces a detected secret with a `<rsv_…>` token on the way to a model and restores the original value into an application-designated field afterwards. This repository does not depend on it and never will — the core and the adapters must not depend on the vault repository. What is pinned here is only the shape of the token, which is the vault's published contract, so an adapter that rewrote one would be caught by a test in this repository rather than by an application whose `restore()` starts returning RESTORE_DENIED. The token below is a shape, not a value any vault issued; the body is 32 hex digits because that is what the contract says, and it carries no secret. `contexts` are the places a token is most likely to be mistaken for a credential — each is a `before`/`after` pair the loaders wrap the token in. `packages/*/test/vault-token.test.ts` and `python/tests/test_vault_token.py` replay them through every adapter and assert the text comes back byte for byte.",
+  "token": {
+    "prefix": "<rsv_",
+    "body": "9f3a7c1e5b28d640a1c9e07fb3d54862",
+    "suffix": ">"
+  },
+  "contexts": [
+    {
+      "name": "plain_prose",
+      "before": "the capture note says ",
+      "after": " and nothing more"
+    },
+    {
+      "name": "sdk_call_argument",
+      "before": "Client(api_key=\"",
+      "after": "\")"
+    },
+    {
+      "name": "authorization_bearer",
+      "before": "Authorization: Bearer ",
+      "after": ""
+    },
+    {
+      "name": "env_var_assignment",
+      "before": "export OPENAI_API_KEY=",
+      "after": ""
+    },
+    {
+      "name": "json_value_under_api_key",
+      "before": "{\"api_key\":\"",
+      "after": "\"}"
+    },
+    {
+      "name": "bare_token",
+      "before": "",
+      "after": ""
+    }
+  ]
+}
