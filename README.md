@@ -540,8 +540,12 @@ gives the reason for each.
 
 ## Contributing
 
-Read [ARCHITECTURE.md](./ARCHITECTURE.md) first. Every change must hold to its
-[Security boundary](./ARCHITECTURE.md#security-boundary).
+Read [CONTRIBUTING.md](./CONTRIBUTING.md) first: it covers how to report a bug or
+request an enhancement, how to submit a change, and the requirements a change
+must meet, including tests. Then read [ARCHITECTURE.md](./ARCHITECTURE.md);
+every change must hold to its
+[Security boundary](./ARCHITECTURE.md#security-boundary). Report suspected
+vulnerabilities privately as described in [SECURITY.md](./SECURITY.md).
 
 ## License
 
