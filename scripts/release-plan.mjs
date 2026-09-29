@@ -15,7 +15,10 @@
  *   --require-publish    fail if nothing is planned (cut, and the rc PR's
  *                        rehearsal; not inside the Release workflow, whose
  *                        re-runs may have nothing left to publish)
- *   --require-published  fail if anything is still unpublished (reconcile)
+ *   --require-published  fail if anything is still unpublished (reconcile);
+ *                        polls each miss for up to 15 minutes, since a
+ *                        registry serves a publish for reading minutes
+ *                        after it accepts it
  *   --check-tags         every package's `<tag>@<version>` exists locally
  *                        (fetch tags first)
  *
@@ -201,6 +204,27 @@ async function isPublished(pkg, version) {
   throw new Error(`${url}: unexpected HTTP ${res.status}`);
 }
 
+// A registry serves a publish for reading minutes after it accepts it — npm
+// says so itself ("your package is being processed and may take a few minutes
+// to become available"). `--require-published` runs right after a train's
+// publish jobs, so a 404 there means "not yet", not "never": wait it out
+// rather than read the lag as a failed publish.
+const PUBLISHED_WAIT_MS = 15 * 60 * 1000;
+const PUBLISHED_POLL_MS = 20 * 1000;
+
+async function waitForPublished(pkg, version) {
+  const deadline = Date.now() + PUBLISHED_WAIT_MS;
+  for (let attempt = 1; ; attempt++) {
+    if (await isPublished(pkg, version)) return true;
+    if (Date.now() + PUBLISHED_POLL_MS > deadline) return false;
+    console.log(
+      `${pkg.name}@${version} is not on ${pkg.registry} yet (attempt ${attempt}); ` +
+        `waiting ${PUBLISHED_POLL_MS / 1000}s for the registry to serve it`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, PUBLISHED_POLL_MS));
+  }
+}
+
 function hasChangelogEntry(pkg, version) {
   const text = readFileSync(new URL(pkg.changelog, root), "utf-8");
   const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -213,10 +237,14 @@ function tagExists(tag) {
 
 async function main() {
   const args = new Set(process.argv.slice(2));
+  // Under `--require-published` every declared version is meant to be on its
+  // registry already, so a miss is worth waiting on; when planning a train a
+  // miss is the normal case and must stay a single fast lookup.
+  const lookup = args.has("--require-published") ? waitForPublished : isPublished;
   const plan = [];
   for (const pkg of PACKAGES) {
     const version = declaredVersion(pkg);
-    const published = await isPublished(pkg, version);
+    const published = await lookup(pkg, version);
     plan.push(planEntry(pkg, version, published));
   }
 
@@ -226,7 +254,10 @@ async function main() {
       problems.push(`${p.changelog} has no "## [${p.version}]" heading for the version ${p.manifest} declares`);
     }
     if (args.has("--require-published") && p.publish) {
-      problems.push(`${p.name}@${p.version} is declared but not on ${p.registry}`);
+      problems.push(
+        `${p.name}@${p.version} is declared but still not on ${p.registry} ` +
+          `after waiting ${PUBLISHED_WAIT_MS / 60000} minutes for it`,
+      );
     }
     if (args.has("--check-tags") && !tagExists(p.gitTag)) {
       problems.push(`tag ${p.gitTag} is missing`);

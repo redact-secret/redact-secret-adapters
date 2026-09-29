@@ -343,9 +343,20 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
     label: "tool-result" | "tool-arguments" | "resource",
     signal?: CancellationSignal,
   ) {
+    // A serialized part already scanned in this check with no findings at all
+    // would scan clean again (the scan is pure) and emit nothing, so the
+    // repeat (every block's `{"type":"text"}`) is skipped. Anything that
+    // reported a finding is scanned again, so `onFinding` fires per part.
+    const clean = new Set<string>();
     for (const part of parts) {
-      const outcome = boundary.sanitizeText(JSON.stringify(part), { boundary: label, signal });
+      const serialized = JSON.stringify(part);
+      if (clean.has(serialized)) {
+        if (isAborted(signal)) return ABORTED;
+        continue;
+      }
+      const outcome = boundary.sanitizeText(serialized, { boundary: label, signal });
       if (outcome.outcome !== "ok") return outcome;
+      if (outcome.findings.length === 0) clean.add(serialized);
       if (outcome.findings.some((finding) => finding.action === "redact" || finding.action === "block")) return POLICY;
     }
     return undefined;

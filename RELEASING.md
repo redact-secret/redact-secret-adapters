@@ -10,10 +10,16 @@ A package nobody bumped rides along untouched.
 
 ```
 feature ──PR──▶ develop ──cut──▶ rc/<train> ──PR──▶ release ──PR──▶ main
-                   ▲                  ▲                  │
-                   │                  └── fix PRs        │
-                   └──────────── sync/<train> ◀──────────┘
+                   ▲                  ▲                             │
+                   │                  └── fix PRs                   │
+                   └──────────── sync/<train> ◀─────────────────────┘
 ```
+
+The back-sync starts at `main`, not at `release`, so that **`main` is always
+an ancestor of `develop`**. Merging `release` into each of them separately
+would give both their own merge commit for the same content; main's would
+live only on main, leaving main permanently ahead of develop — one more
+commit every train, with no path back.
 
 | Branch | Holds | Accepts |
 |---|---|---|
@@ -21,13 +27,14 @@ feature ──PR──▶ develop ──cut──▶ rc/<train> ──PR──�
 | `rc/<train>` | a release candidate, cut from `develop` | fix PRs for that train |
 | `release` | what the last train published | PRs from `rc/<train>` only |
 | `main` | the same, once reconciled | PRs from `release` only |
-| `sync/<train>` | `release`, on its way back to `develop` | — (opened by reconcile) |
+| `sync/<train>` | `main`, on its way back to `develop` | — (opened when main moves) |
 
 The `Branch guard` workflow enforces the Accepts column; repository rulesets
 ([.github/rulesets](.github/rulesets)) require a PR and the checks on
 `develop`, `release` and `main`, and allow only merge commits on all three.
-A squash-merged `sync/<train>` PR would leave `develop` without `release`'s
-commits, and cut-rc would refuse every later train.
+A squash-merged `sync/<train>` PR would leave `develop` without `main`'s
+commits, cut-rc would refuse every later train, and main would stay ahead of
+develop for good.
 
 ## Trains
 
@@ -129,10 +136,12 @@ the MCP SDK lines, `opentelemetry-sdk`.
       `train/<train>` and a GitHub Release whose notes are each shipped
       package's CHANGELOG section.
    5. **Reconcile** — verifies every declared version is on its registry and
-      tagged, then opens `release → main` and `sync/<train> → develop`.
-5. **Merge the reconcile PRs.** Merge both with a merge commit, never
-   squash — `develop` has to contain `release`'s commits, and the next train
-   can't be cut until it does.
+      tagged, then opens `release → main`.
+5. **Merge `release → main`.** Merging it moves `main`, which opens
+   `sync/<train> → develop` from main.
+6. **Merge `sync/<train> → develop`.** Merge both PRs with a merge commit,
+   never squash — `develop` has to contain `main`'s commits, and the next
+   train can't be cut until it does.
 
 ## When something fails
 
@@ -151,6 +160,21 @@ the MCP SDK lines, `opentelemetry-sdk`.
   Otherwise re-run **Release reconcile** on `develop` with the train name.
   It is idempotent: it skips PRs that are already open and branches that
   already contain `release`.
+- **The `release` -> `main` PR won't merge**, reporting `N of N required
+  status checks are expected` while `Branch guard` and `CI passed` are green
+  on its head: close and reopen it from your own account.
+
+  ```
+  gh pr close <n> && gh pr reopen <n>
+  ```
+
+  Reconcile opens that PR with `GITHUB_TOKEN`, which fires no `pull_request`
+  event, so GitHub records the CI and Branch guard runs but never executes
+  them — they end as a startup failure with zero jobs and the required
+  contexts stay `expected`. The runs reconcile dispatches onto the head ref
+  do go green, but they land in another check suite and don't satisfy the
+  ruleset; `main`'s ruleset has no bypass actors, so `--admin` won't force it
+  either. Reopening as a user fires a real event, and the checks then count.
 
 A dry run of the whole release (no publish, no tags) is **Release** with
 `dry_run` on, from any branch. On a branch with nothing bumped it runs CI

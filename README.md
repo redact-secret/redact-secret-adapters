@@ -63,12 +63,12 @@ train. A version in the second column exists only here until that train is cut.
 
 | Package | Registry | Host | Published — installable now | Declared on `develop` |
 | --- | --- | --- | --- | --- |
-| `@redact-secret/adapter` | npm | — (shared base) | `0.1.2`, beta | `0.1.3` |
-| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.1`, beta | `0.1.2` |
-| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.1`, beta | `0.1.2` |
-| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.0`, beta | `0.1.1` |
-| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha.1`, prerelease (dist-tag `alpha`) | `0.1.0-alpha.2` |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha.1`, prerelease (dist-tag `alpha`) | `0.1.0-alpha.2` |
+| `@redact-secret/adapter` | npm | — (shared base) | `0.1.3`, beta | `0.1.3` |
+| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
+| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.2`, beta | `0.1.2` |
+| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.1`, beta | `0.1.1` |
+| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0` |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.0-alpha.2`, prerelease (dist-tag `alpha`) | `0.1.0` |
 
 A prerelease publishes under the npm dist-tag `alpha`, never `latest`, so it is
 opt-in by tag or exact version. pip skips a pre-release unless asked for one.
@@ -234,9 +234,8 @@ longer have to invent them before the first call, and any set can still be
 passed explicitly. There is no unbounded mode. Non-JSON values, binary content
 and encoded text are **blocked, not decoded** — convert them yourself, so what
 is scanned is exactly what you send. Published as the prerelease
-`0.1.0-alpha.1` (`npm install @redact-secret/adapter-ai-context@alpha`);
-`createAiContextBoundary()` with no limits needs `0.1.0-alpha.2`
-(**Unreleased**). See the
+`0.1.0-alpha.2` (`npm install @redact-secret/adapter-ai-context@alpha`);
+`createAiContextBoundary()` with no limits needs `0.1.0-alpha.2`. See the
 [package README](./packages/adapter-ai-context#readme).
 
 ### MCP (prerelease)
@@ -261,8 +260,8 @@ original position instead. A content type no qualified protocol revision
 defines also blocks, and a cancelled call is `aborted` with nothing to deliver.
 It names every security non-goal in its
 [package README](./packages/adapter-mcp#readme). Published as the prerelease
-`0.1.0-alpha.1` (`npm install @redact-secret/adapter-mcp@alpha`);
-`createMcpBoundary()` with no limits needs `0.1.0-alpha.2` (**Unreleased**).
+`0.1.0-alpha.2` (`npm install @redact-secret/adapter-mcp@alpha`);
+`createMcpBoundary()` with no limits needs `0.1.0-alpha.2`.
 
 ### Masking callbacks (Langfuse and similar)
 
@@ -479,15 +478,22 @@ tested, so it is not claimed.
 
 ## Operational overhead
 
-`scripts/measure-overhead.mjs` (pino, OpenTelemetry JS, `maskSecrets`) and
+`scripts/measure-overhead.mjs` (pino, OpenTelemetry JS, `maskSecrets`, the
+AI-context boundary, and the MCP boundary, whole-input and streamed) and
 `scripts/measure-overhead.py` (`logging`, OpenTelemetry Python,
 `mask_secrets`) time the same workloads, built from
-[`fixtures/overhead-profiles.json`](./fixtures/overhead-profiles.json). Each
-harness keeps four costs apart: the host alone, the adapter's own traversal
-(over a scanner that finds nothing), the core's scan of exactly the leaves the
-adapter hands it, and the host plus adapter plus the real core. Neither
-harness carries a threshold or a verdict. The numbers depend on the host, so
-the baseline and any budget over it live in
+[`fixtures/overhead-profiles.json`](./fixtures/overhead-profiles.json): typical
+log, span and payload events, a 1×/4×/16× scaling series, and events past each
+`DEFAULT_LIMITS` bound. Each harness keeps four costs apart: the host alone,
+the adapter's own traversal (over a scanner that finds nothing), the core's
+scan of exactly the leaves the adapter hands it, and the host plus adapter plus
+the real core. Each is measured in three separate passes: batch wall time,
+single-event latency (median, p95, p99, maximum), and memory (bytes allocated
+per event in JavaScript, tracemalloc's peak in Python, and garbage-collection
+count and pause).
+
+Neither harness carries a threshold or a verdict. The numbers depend on the
+host, so the baseline and any budget over it live in
 [redact-secret-benchmarks](https://github.com/redact-secret/redact-secret-benchmarks),
 not here.
 
@@ -496,13 +502,55 @@ npm run build && node scripts/measure-overhead.mjs --out overhead-js.json
 pip install -e "./python[otel]" && python scripts/measure-overhead.py --out overhead-python.json
 ```
 
-One-off costs are measured apart from per-event ones:
+### Comparing releases
+
+To compare against the previous release, install it into a prefix and pass
+`--baseline`. Each harness then interleaves the previous release's modes with
+the current build's in one session, sharing the host and the injected core, and
+records for every result a `change` from baseline to current (a record, not a
+verdict):
+
+```bash
+node scripts/install-overhead-baseline.mjs /tmp/overhead-baseline
+node scripts/measure-overhead.mjs --baseline /tmp/overhead-baseline --out overhead-js.json
+python scripts/install-overhead-baseline.py /tmp/overhead-baseline-python
+python scripts/measure-overhead.py --baseline /tmp/overhead-baseline-python --out overhead-python.json
+node scripts/summarize-overhead-change.mjs overhead-js.json overhead-python.json
+```
+
+`npm run bench:docker` (`-- --python` for the Python harness) does the same
+inside [`docker/bench.Dockerfile`](./docker/bench.Dockerfile) or
+[`docker/bench-python.Dockerfile`](./docker/bench-python.Dockerfile). The
+runtime, the OS libraries, the core's native addon and the previous release
+are pinned in the image, the container has no network, and the image id and
+source commit are recorded in the output (`-- --cpuset 2,3` also pins CPUs).
+The image fixes the software, not the hardware, so compare runs from different
+machines only by their same-session `change`, never by absolute microseconds,
+and never run it under emulation.
+
+Which values to read, in order:
+
+| Value | Why |
+| --- | --- |
+| `change.scannerCallsPerEvent` | Deterministic. If it moved, the two builds do different work, and a timing change between them is not like-for-like. |
+| `change.traversal` | The adapter's own code only (walker and seam), independent of the core. This is the one to optimize. |
+| `change.adapterCoreAllocatedBytesPerEvent` / `adapterCorePeakBytes` | Allocation moves first when a walker gets cheaper or more expensive. |
+| `change.adapterCoreLatencyP95` / `P99` | The tail a logger or tracer notices. |
+| `derived.adapterOverheadRatio` | Overhead as a fraction of the host's own time, for hosts that have one. |
+| the `limit-*-over` rows | The fail-closed path past each limit. It must stay cheap. |
+
+A change is only meaningful above the machine's noise floor. Measure it with an
+A/A run, the current build against a copy of itself:
+`npm run bench:docker -- --aa`, then `summarize-overhead-change.mjs` on its
+output.
+
+### One-off costs
+
 `scripts/measure-footprint.mjs` (`npm run footprint`) records each npm
 package's packed and unpacked size, and its initialization time in a fresh
 process (importing the package, the core's own `initialize()` alone, and the
 package's live factory end to end), so the adapter's share of start-up is
-separable from the core's. The `ai-context-js` host in `measure-overhead.mjs`
-measures `adapter-ai-context`'s traversal and scan overhead per context.
+separable from the core's.
 
 ## Relationship to the core
 
