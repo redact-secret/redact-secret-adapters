@@ -231,7 +231,7 @@ jobs:
   overhead-harness:
     # The adapter-overhead harnesses (#11) and the footprint harness (package
     # size and initialization time, #12) in --quick mode: proves they still
-    # run against the current packages and emit the overhead-v1 shape
+    # run against the current packages and emit the overhead-v2 shape
     # redact-secret-benchmarks reads. The numbers from this job are
     # meaningless (three tiny repetitions on a shared runner) and are not
     # kept; measurement and judgement belong to redact-secret-benchmarks.
@@ -258,14 +258,17 @@ jobs:
           python -m pip install --require-hashes -r .github/requirements/python-otel.txt
           python -m pip install --no-deps --no-build-isolation -e ./python
       - run: python scripts/measure-overhead.py --quick --out overhead-python.json
-      - name: Check the outputs carry the overhead-v1 and footprint-v1 shapes
+      - name: Check the outputs carry the overhead-v2 and footprint-v1 shapes
         run: |
           node -e '
             for (const file of ["overhead-js.json", "overhead-python.json"]) {
               const out = JSON.parse(require("fs").readFileSync(file, "utf-8"));
-              if (out.schema !== "redact-secret-adapters/overhead-v1" || out.results.length === 0) throw new Error(file);
+              if (out.schema !== "redact-secret-adapters/overhead-v2" || out.results.length === 0) throw new Error(file);
               for (const r of out.results) for (const m of ["host", "adapter-identity", "adapter-core", "core-direct"]) {
-                if (!(r.modes[m].samples.length > 0)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m}`);
+                const mode = r.modes[m];
+                if (!(mode.samples.length > 0)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m}`);
+                if (!(mode.latency.count > 0 && mode.latency.p99 >= mode.latency.median)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m} latency`);
+                if (!(mode.memory.gcCountPerEvent >= 0)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m} memory`);
               }
             }
             const footprint = JSON.parse(require("fs").readFileSync("footprint-js.json", "utf-8"));

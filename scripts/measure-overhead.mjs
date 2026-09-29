@@ -19,6 +19,14 @@
  *   adapter-core      host + adapter over the real `@redact-secret/core`
  *   core-direct       the real core called directly on exactly the leaves the adapter hands it
  *
+ * Each mode is measured in three separate passes, so one kind of measurement
+ * never perturbs another:
+ *
+ *   batch     wall time over eventsPerRepetition events (the per-mode medians below)
+ *   latency   every event timed on its own, for the tail (p95, p99, maximum)
+ *   memory    bytes allocated and garbage collections, from v8.GCProfiler,
+ *             after a forced collection so each repetition starts from the same heap
+ *
  * and derives, from per-mode medians, `traversal` (adapter-identity − host),
  * `coreScan` (core-direct), `adapterOverhead` (adapter-core − host), and the
  * `unattributed` remainder. Core scan time is therefore never folded into
@@ -28,10 +36,14 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
+import v8 from "node:v8";
+import { runInNewContext } from "node:vm";
 
 import { buildEvents, loadProfiles, workloadDigest } from "./overhead-workloads.mjs";
 
 const HOSTS = ["pino", "pino-streamwrite", "otel-js", "mask-js", "ai-context-js"];
+// Hosts whose host mode is the empty call: a ratio over it means nothing.
+const HOSTLESS = new Set(["mask-js", "ai-context-js"]);
 const MODES = ["host", "adapter-identity", "adapter-core", "core-direct"];
 
 function parseArgs(argv) {
@@ -101,6 +113,59 @@ function summarize(samples) {
     maximum: round(sorted.at(-1)),
     standardDeviation: round(sd),
   };
+}
+
+/** Summary of single-event latencies, pooled over every repetition. */
+function summarizeLatency(samples) {
+  const sorted = [...samples].sort((a, b) => a - b);
+  const round = (x) => Math.round(x * 1000) / 1000;
+  return {
+    unit: "microseconds",
+    count: sorted.length,
+    median: round(percentile(sorted, 0.5)),
+    p95: round(percentile(sorted, 0.95)),
+    p99: round(percentile(sorted, 0.99)),
+    maximum: round(sorted.at(-1)),
+  };
+}
+
+/** Median over repetitions of allocation and collection cost, per event. */
+function summarizeMemory(repetitions, events) {
+  const median = (values) =>
+    percentile(
+      [...values].sort((a, b) => a - b),
+      0.5,
+    );
+  const round = (x) => Math.round(x * 1000) / 1000;
+  return {
+    basis: "v8.GCProfiler: used-heap growth plus the heap every collection reclaimed",
+    allocatedBytesPerEvent: round(median(repetitions.map((r) => r.allocatedBytes)) / events),
+    peakBytes: null,
+    gcCountPerEvent: round(median(repetitions.map((r) => r.gcCount)) / events),
+    gcPauseMicrosecondsPerEvent: round(median(repetitions.map((r) => r.gcPauseMicroseconds)) / events),
+  };
+}
+
+// A forced collection before each memory repetition, without requiring --expose-gc on the command line.
+v8.setFlagsFromString("--expose-gc");
+const collectGarbage = runInNewContext("gc");
+
+/** Bytes allocated while `work` runs: heap growth plus what every collection during it reclaimed. */
+function measureAllocation(work) {
+  collectGarbage();
+  const profiler = new v8.GCProfiler();
+  profiler.start();
+  const before = v8.getHeapStatistics().used_heap_size;
+  work();
+  const after = v8.getHeapStatistics().used_heap_size;
+  const { statistics } = profiler.stop();
+  let reclaimed = 0;
+  let pause = 0;
+  for (const gc of statistics) {
+    reclaimed += gc.beforeGC.heapStatistics.usedHeapSize - gc.afterGC.heapStatistics.usedHeapSize;
+    pause += gc.cost;
+  }
+  return { allocatedBytes: after - before + reclaimed, gcCount: statistics.length, gcPauseMicroseconds: pause };
 }
 
 const identityScanner = (text) => ({ text, findings: [] });
@@ -203,9 +268,39 @@ async function measurePair(host, profile, events, core, options) {
       samples[mode].push(Number(process.hrtime.bigint() - started) / 1000 / options.events);
     }
   }
-  const modes = Object.fromEntries(MODES.map((mode) => [mode, summarize(samples[mode])]));
+  const latencies = Object.fromEntries(MODES.map((mode) => [mode, []]));
+  for (let rep = 0; rep < options.repetitions; rep += 1) {
+    for (let m = 0; m < MODES.length; m += 1) {
+      const mode = MODES[(m + rep) % MODES.length];
+      const runner = runners[mode];
+      for (let k = 0; k < options.events; k += 1) {
+        const event = events[k % events.length];
+        const started = process.hrtime.bigint();
+        runner(event);
+        latencies[mode].push(Number(process.hrtime.bigint() - started) / 1000);
+      }
+    }
+  }
+  const allocations = Object.fromEntries(MODES.map((mode) => [mode, []]));
+  for (let rep = 0; rep < options.repetitions; rep += 1) {
+    for (let m = 0; m < MODES.length; m += 1) {
+      const mode = MODES[(m + rep) % MODES.length];
+      allocations[mode].push(measureAllocation(() => run(mode, options.events)));
+    }
+  }
+  const modes = Object.fromEntries(
+    MODES.map((mode) => [
+      mode,
+      {
+        ...summarize(samples[mode]),
+        latency: summarizeLatency(latencies[mode]),
+        memory: summarizeMemory(allocations[mode], options.events),
+      },
+    ]),
+  );
   const median = (mode) => modes[mode].median;
   const round = (x) => Math.round(x * 1000) / 1000;
+  const derivedOverhead = median("adapter-core") - median("host");
   const scannerCalls = leaves.reduce((s, l) => s + l.length, 0) / leaves.length;
   const leafChars = leaves.reduce((s, l) => s + l.reduce((t, x) => t + x.length, 0), 0) / leaves.length;
   return {
@@ -221,6 +316,12 @@ async function measurePair(host, profile, events, core, options) {
       coreScan: median("core-direct"),
       adapterOverhead: round(median("adapter-core") - median("host")),
       unattributed: round(median("adapter-core") - median("adapter-identity") - median("core-direct")),
+      traversalAllocatedBytes: round(
+        modes["adapter-identity"].memory.allocatedBytesPerEvent - modes.host.memory.allocatedBytesPerEvent,
+      ),
+      // adapterOverhead as a fraction of the host's own time; comparable across machines where µs are not.
+      adapterOverheadRatio:
+        HOSTLESS.has(host) || !(modes.host.median > 0) ? null : round(derivedOverhead / modes.host.median),
     },
   };
 }
@@ -246,7 +347,7 @@ async function main() {
   }
   const cpus = os.cpus();
   const output = {
-    schema: "redact-secret-adapters/overhead-v1",
+    schema: "redact-secret-adapters/overhead-v2",
     language: "javascript",
     measuredAt: new Date().toISOString(),
     source: { repository: "redact-secret/redact-secret-adapters", ...gitState() },
@@ -263,6 +364,8 @@ async function main() {
       logicalCpus: cpus.length,
       totalMemoryBytes: os.totalmem(),
       runtime: `node-${process.versions.node}`,
+      // Set by the container wrapper; null for a run outside one.
+      containerImage: process.env.REDACT_SECRET_BENCH_IMAGE || null,
       // Other work on the machine is the main source of noise between runs.
       loadAverage1m: { start: loadAtStart[0], end: os.loadavg()[0] },
       packages: Object.fromEntries(
@@ -286,12 +389,17 @@ async function main() {
       order: "modes interleaved within each repetition, rotated by one position per repetition",
       clock: "process.hrtime.bigint",
       percentile: "nearest-rank",
+      passes: ["batch", "latency", "memory"],
       processes: 1,
     },
+    // Set when a previous release is measured in the same session; null otherwise.
+    baseline: null,
     results,
     limitations: [
       "Host-dependent: these numbers describe this machine and runtime only.",
       "Per-event times are batch means over eventsPerRepetition events; the distribution is across repetitions, not across single events.",
+      "Single-event latencies include one clock read of overhead each; memory repetitions start from a forced collection, which the batch and latency passes do not.",
+      "memory counts the V8 heap only: native allocations inside the core are not included.",
       "derived values are differences of medians, not medians of differences, and can be negative within noise.",
       "The OpenTelemetry exporter is a no-op, so export cost is excluded; pino writes to a no-op destination, so I/O cost is excluded.",
       "ai-context-js has no host around it: its host mode is the empty call, and it measures buildContext over whole-input scans only, not a stream.",
