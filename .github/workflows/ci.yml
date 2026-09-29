@@ -225,8 +225,8 @@ jobs:
       - run: python -m pip install --require-hashes -r .github/requirements/python-lint.txt
       - run: ruff check python
       - run: ruff format --check python
-      - run: ruff check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py
-      - run: ruff format --check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py
+      - run: ruff check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py scripts/install-overhead-baseline.py
+      - run: ruff format --check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py scripts/install-overhead-baseline.py
 
   overhead-harness:
     # The adapter-overhead harnesses (#11) and the footprint harness (package
@@ -260,6 +260,8 @@ jobs:
           python -m pip install --require-hashes -r .github/requirements/python-otel.txt
           python -m pip install --no-deps --no-build-isolation -e ./python
       - run: python scripts/measure-overhead.py --quick --out overhead-python.json
+      - run: python scripts/install-overhead-baseline.py "$RUNNER_TEMP/overhead-baseline-python"
+      - run: python scripts/measure-overhead.py --quick --profile log-flat,mask-payload --baseline "$RUNNER_TEMP/overhead-baseline-python" --out overhead-baseline-python.json
       - name: Check the outputs carry the overhead-v2 and footprint-v1 shapes
         run: |
           node -e '
@@ -273,11 +275,13 @@ jobs:
                 if (!(mode.memory.gcCountPerEvent >= 0)) throw new Error(`${file}: ${r.host}/${r.profileId} ${m} memory`);
               }
             }
-            const compared = JSON.parse(require("fs").readFileSync("overhead-baseline-js.json", "utf-8"));
-            if (compared.baseline === null || compared.results.length === 0) throw new Error("overhead-baseline-js.json");
-            for (const r of compared.results) {
-              if (r.baseline === undefined) throw new Error(`overhead-baseline-js.json: ${r.host}/${r.profileId} baseline`);
-              if (r.baseline.comparable && !(r.change.traversal.baseline !== undefined)) throw new Error(`overhead-baseline-js.json: ${r.host}/${r.profileId} change`);
+            for (const file of ["overhead-baseline-js.json", "overhead-baseline-python.json"]) {
+              const compared = JSON.parse(require("fs").readFileSync(file, "utf-8"));
+              if (compared.baseline === null || compared.results.length === 0) throw new Error(file);
+              for (const r of compared.results) {
+                if (r.baseline === undefined) throw new Error(`${file}: ${r.host}/${r.profileId} baseline`);
+                if (r.baseline.comparable && !(r.change.traversal.baseline !== undefined)) throw new Error(`${file}: ${r.host}/${r.profileId} change`);
+              }
             }
             const footprint = JSON.parse(require("fs").readFileSync("footprint-js.json", "utf-8"));
             if (footprint.schema !== "redact-secret-adapters/footprint-v1" || footprint.results.length === 0) throw new Error("footprint-js.json");
@@ -301,14 +305,17 @@ jobs:
         with:
           persist-credentials: false
       - run: node scripts/bench-docker.mjs --quick --out out/overhead-js.json -- --profile log-flat,mask-payload
-      - name: Check the output came from the image and carries the baseline
+      - run: node scripts/bench-docker.mjs --python --quick --out out/overhead-python.json -- --profile log-flat,mask-payload
+      - name: Check the outputs came from the images and carry the baseline
         run: |
           node -e '
-            const out = JSON.parse(require("fs").readFileSync("out/overhead-js.json", "utf-8"));
-            if (out.schema !== "redact-secret-adapters/overhead-v2") throw new Error("schema");
-            if (!/^sha256:/.test(out.environment.containerImage ?? "")) throw new Error("containerImage");
-            if (out.source.commit === null) throw new Error("source.commit");
-            if (out.baseline === null || !out.results.every((r) => r.baseline !== undefined)) throw new Error("baseline");'
+            for (const file of ["out/overhead-js.json", "out/overhead-python.json"]) {
+              const out = JSON.parse(require("fs").readFileSync(file, "utf-8"));
+              if (out.schema !== "redact-secret-adapters/overhead-v2") throw new Error(`${file}: schema`);
+              if (!/^sha256:/.test(out.environment.containerImage ?? "")) throw new Error(`${file}: containerImage`);
+              if (out.source.commit === null) throw new Error(`${file}: source.commit`);
+              if (out.baseline === null || !out.results.every((r) => r.baseline !== undefined)) throw new Error(`${file}: baseline`);
+            }'
 
   ci-passed:
     # The single required status check for develop, release and main, so

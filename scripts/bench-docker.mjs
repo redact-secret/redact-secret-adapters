@@ -8,6 +8,8 @@
  *   npm run bench:docker -- --cpuset 2,3 --out out/run.json -- --profile log-flat
  *   npm run bench:docker -- --no-baseline                   # current build only
  *   npm run bench:docker -- --baseline-packages "@redact-secret/adapter-pino@0.1.0"
+ *   npm run bench:docker -- --python                        # the Python harness, out/overhead-python.json
+ *   npm run bench:docker -- --python --baseline-packages 0.1.0
  *
  * The container has no network, a fixed memory limit, and, with --cpuset,
  * pinned CPUs. The image id and the source commit go into the output. Pass
@@ -23,11 +25,25 @@ import { mkdirSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const IMAGE = "redact-secret-adapters-bench";
+const LANGUAGES = {
+  javascript: {
+    dockerfile: "docker/bench.Dockerfile",
+    image: "redact-secret-adapters-bench",
+    out: "out/overhead-js.json",
+    baselineArg: "BASELINE_PACKAGES",
+  },
+  python: {
+    dockerfile: "docker/bench-python.Dockerfile",
+    image: "redact-secret-adapters-bench-python",
+    out: "out/overhead-python.json",
+    baselineArg: "BASELINE_VERSION",
+  },
+};
 
 function parseArgs(argv) {
   const options = {
-    out: "out/overhead-js.json",
+    language: "javascript",
+    out: undefined,
     cpuset: undefined,
     baseline: true,
     baselinePackages: "",
@@ -42,6 +58,7 @@ function parseArgs(argv) {
     }
     if (flag === "--quick") options.harness.push("--quick");
     else if (flag === "--no-baseline") options.baseline = false;
+    else if (flag === "--python") options.language = "python";
     else if (flag === "--out") options.out = argv[++i];
     else if (flag === "--cpuset") options.cpuset = argv[++i];
     else if (flag === "--memory") options.memory = argv[++i];
@@ -60,6 +77,8 @@ function git(args) {
 }
 
 const options = parseArgs(process.argv.slice(2));
+const language = LANGUAGES[options.language];
+const IMAGE = language.image;
 const root = fileURLToPath(new URL("..", import.meta.url));
 const commit = git(["rev-parse", "HEAD"]);
 const dirty = commit === "" ? "" : String(git(["status", "--porcelain"]) !== "");
@@ -69,7 +88,7 @@ execFileSync(
   [
     "build",
     "--file",
-    "docker/bench.Dockerfile",
+    language.dockerfile,
     "--tag",
     IMAGE,
     "--build-arg",
@@ -77,7 +96,7 @@ execFileSync(
     "--build-arg",
     `SOURCE_DIRTY=${dirty}`,
     "--build-arg",
-    `BASELINE_PACKAGES=${options.baselinePackages}`,
+    `${language.baselineArg}=${options.baselinePackages}`,
     ".",
   ],
   { cwd: root, stdio: ["ignore", "inherit", "inherit"] },
@@ -86,7 +105,7 @@ const imageId = execFileSync("docker", ["image", "inspect", "--format", "{{.Id}}
   encoding: "utf-8",
 }).trim();
 
-const out = resolve(options.out);
+const out = resolve(options.out ?? language.out);
 mkdirSync(dirname(out), { recursive: true });
 const run = [
   "run",
