@@ -4,8 +4,10 @@
  * (redact-secret/redact-secret-adapters#51), and keeps its own contract of
  * never rejecting for an initialization failure.
  *
- * Mocked rather than live: `0.1.0-beta.10` is not on the registry, and the
- * core's selection cell is one-shot per process.
+ * Mocked rather than live: the core's selection cell is one-shot per
+ * process, so a real core could serve only one of these orderings per run.
+ * The real core is covered one ordering per spawned process in
+ * `packages/adapter/test/activation-live.test.ts`.
  */
 
 import { beforeEach, expect, test, vi } from "vitest";
@@ -38,8 +40,8 @@ vi.mock("@redact-secret/core", async () => {
 
 const { createMcpBoundary, mcpBlockedResult, toCallToolResult } = await import("../src/index.js");
 
-const PII_ON = "credentials=full;selectors=pii:global;families=email;vocabulary=pii-context/v1";
-const PII_OFF = "credentials=full;selectors=off;families=;vocabulary=pii-context/v1";
+const PII_ON = "credentials=full;selectors=pii:global;families=pii:global:email;vocabulary=pii-context/v2";
+const PII_OFF = "credentials=full;selectors=off;families=;vocabulary=pii-context/v2";
 const FAILED_CLOSED = { outcome: "blocked", reason: "core_error" };
 
 function toolResult() {

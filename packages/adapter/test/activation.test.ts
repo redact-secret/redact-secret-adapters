@@ -29,9 +29,10 @@ import {
   readPiiActivation,
 } from "../src/index.js";
 
-const PII_ON = "credentials=full;selectors=pii:global;families=email,phone;vocabulary=pii-context/v1";
-const PII_TWO = "credentials=full;selectors=pii:global,pii:eu;families=email;vocabulary=pii-context/v1";
-const PII_OFF = "credentials=full;selectors=off;families=;vocabulary=pii-context/v1";
+const PII_ON =
+  "credentials=full;selectors=pii:global;families=pii:global:email,pii:global:phone;vocabulary=pii-context/v2";
+const PII_TWO = "credentials=full;selectors=pii:global,pii:eu;families=pii:global:email;vocabulary=pii-context/v2";
+const PII_OFF = "credentials=full;selectors=off;families=;vocabulary=pii-context/v2";
 
 /** The core's own refusal, shape included: a code, plus a message nothing reads. */
 function conflict(): Error {
@@ -166,7 +167,7 @@ test("isPiiActivationConflict reads only the code, and survives a throwing gette
 test("activationReflects refuses an identity it cannot parse rather than assuming", () => {
   expect(activationReflects(PII_ON, ["pii:global"])).toBe(true);
   expect(activationReflects(PII_OFF, [])).toBe(true);
-  expect(activationReflects("credentials=full;vocabulary=pii-context/v1", ["pii:global"])).toBe(false);
+  expect(activationReflects("credentials=full;vocabulary=pii-context/v2", ["pii:global"])).toBe(false);
   expect(activationReflects("", ["pii:global"])).toBe(false);
   expect(activationReflects(undefined, [])).toBe(false);
   // A duplicate in the request is still one selector.

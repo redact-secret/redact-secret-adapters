@@ -1,6 +1,6 @@
 {
   "schemaVersion": "redact-secret-adapters.release-feed/v1",
-  "generatedAt": "2026-09-28T00:00:00Z",
+  "generatedAt": "2026-09-29T00:00:00Z",
   "repository": "https://github.com/redact-secret/redact-secret-adapters",
   "sources": [
     "scripts/release-plan.mjs",
@@ -17,10 +17,10 @@
       "id": "adapter",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter@0.1.3",
+      "gitTag": "adapter@0.1.4",
       "sourcePath": "packages/adapter",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter",
       "runtime": {
@@ -39,7 +39,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.10"
+          "highest": "0.1.0-beta.11"
         }
       },
       "hosts": [],
@@ -71,7 +71,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.10"
+          "highest": "0.1.0-beta.11"
         }
       },
       "hosts": [
@@ -119,7 +119,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.10"
+          "highest": "0.1.0-beta.11"
         }
       },
       "hosts": [
@@ -167,7 +167,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.10"
+          "highest": "0.1.0-beta.11"
         }
       },
       "hosts": [],
@@ -204,7 +204,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.10"
+          "highest": "0.1.0-beta.11"
         }
       },
       "hosts": [
@@ -274,7 +274,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0b6",
-          "highest": "0.1.0b10"
+          "highest": "0.1.0b11"
         }
       },
       "hosts": [
