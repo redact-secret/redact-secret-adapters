@@ -104,8 +104,8 @@ export function isPiiActivationConflict(error: unknown): boolean {
  * string is not one.
  *
  * An identity looks like
- * `credentials=full;selectors=pii:global;families=…;vocabulary=pii-context/v1`,
- * or `credentials=full;selectors=off;families=;vocabulary=pii-context/v1` when
+ * `credentials=full;selectors=pii:global;families=pii:global:email,…;vocabulary=pii-context/v2`,
+ * or `credentials=full;selectors=off;families=;vocabulary=pii-context/v2` when
  * PII is off. Only the `selectors` field is read, and only to compare it with
  * what the caller asked for — it is never logged, returned in an error, or
  * counted.
