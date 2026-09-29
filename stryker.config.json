@@ -5,10 +5,7 @@
   },
   "checkers": [],
   "coverageAnalysis": "perTest",
-  "reporters": [
-    "clear-text",
-    "json"
-  ],
+  "reporters": ["clear-text", "json"],
   "jsonReporter": {
     "fileName": "reports/mutation/adapter-ai-context.json"
   },
@@ -16,11 +13,5 @@
   "cleanTempDir": true,
   "timeoutMS": 30000,
   "concurrency": 4,
-  "ignorePatterns": [
-    ".claude",
-    ".agents",
-    "graft",
-    "python",
-    "site-feed"
-  ]
+  "ignorePatterns": [".claude", ".agents", "graft", "python", "site-feed"]
 }
