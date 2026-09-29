@@ -1,0 +1,71 @@
+name: Sync develop
+
+# Brings `main` back to `develop` whenever main moves.
+#
+#   release ──PR──▶ main ──sync/<train>──▶ develop
+#
+# The back-sync takes `main`, not `release`, so that `main` is always an
+# ancestor of `develop`. Merging `release` into each of them instead gives
+# both branches their own merge commit for the same content: main's lives
+# only on main, so main is left permanently "N commits ahead of develop",
+# one more for every train, with no path back. Sourcing main closes that
+# path — main's merge commit reaches develop with the rest of the train.
+#
+# Runs on push to main, which is when the `release -> main` PR is merged;
+# reconcile can't do it in the same run, because main has not moved yet
+# while its PR is still open.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sync-develop
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync develop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Open sync/<train> -> develop
+        # A branch of its own rather than main itself, so a conflict with
+        # develop can be resolved on it without touching main.
+        run: |
+          set -euo pipefail
+          if git merge-base --is-ancestor origin/main origin/develop; then
+            echo "develop already contains main"
+            exit 0
+          fi
+          # main is only ever what a train published, so the train tag it
+          # carries names this sync.
+          train="$(git describe --tags --match 'train/*' --abbrev=0 origin/main | sed 's|^train/||')"
+          if [ -z "$train" ]; then
+            echo "::error::main carries no train/* tag; nothing to name this sync after"
+            exit 1
+          fi
+          branch="sync/$train"
+          if ! git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null; then
+            git push origin "origin/main:refs/heads/$branch"
+          fi
+          if [ -z "$(gh pr list --base develop --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base develop --head "$branch" \
+              --title "Sync release train $train back to develop" \
+              --body "Carries main — the train's content plus the merge commit that put it on main — back to develop. **Merge with a merge commit, not squash**: the next train can't be cut until develop contains release, and a squash would leave main ahead of develop for good."
+          fi
+          gh workflow run ci.yml --ref "$branch"
