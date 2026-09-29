@@ -13,6 +13,8 @@ dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
 not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
+
+## [0.1.0-alpha.3] - 2026-09-29
 ### Changed
 - A tool result's repeated envelope strings reach the core once per crossing:
   the value scan reuses identical texts, and the key-context check skips a
