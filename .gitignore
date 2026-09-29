@@ -32,3 +32,7 @@ python/dist/
 /.rtk/
 /RTK.md
 /CLAUDE.local.md
+
+# Stryker
+.stryker-tmp/
+reports/
