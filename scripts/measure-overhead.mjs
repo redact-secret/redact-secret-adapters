@@ -43,6 +43,7 @@ import { pathToFileURL } from "node:url";
 import v8 from "node:v8";
 import { runInNewContext } from "node:vm";
 
+import { cpuEnvironment } from "./bench-environment.mjs";
 import { buildEvents, loadProfiles, workloadDigest } from "./overhead-workloads.mjs";
 
 const HOSTS = ["pino", "pino-streamwrite", "otel-js", "mask-js", "ai-context-js", "mcp-js", "mcp-stream-js"];
@@ -559,8 +560,9 @@ async function main() {
     environment: {
       os: `${os.platform()}-${os.release()}`,
       platform: os.platform(),
-      arch: os.arch(),
-      cpuModel: cpus[0]?.model ?? null,
+      // arch is normalized (arm64/x64) with archRaw beside it; cpuModel is the
+      // host's when the container wrapper passed it, with the visible one recorded (#108).
+      ...cpuEnvironment(process.env, cpus),
       logicalCpus: cpus.length,
       totalMemoryBytes: os.totalmem(),
       runtime: `node-${process.versions.node}`,

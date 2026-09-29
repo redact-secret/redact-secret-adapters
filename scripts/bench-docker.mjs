@@ -26,6 +26,8 @@ import { mkdirSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { HOST_CPU_ENV, readHostCpuModel } from "./bench-environment.mjs";
+
 const LANGUAGES = {
   javascript: {
     dockerfile: "docker/bench.Dockerfile",
@@ -107,6 +109,11 @@ const imageId = execFileSync("docker", ["image", "inspect", "--format", "{{.Id}}
   encoding: "utf-8",
 }).trim();
 
+const hostCpu = readHostCpuModel();
+if (hostCpu === null) {
+  console.error("warning: could not read the host CPU model; the output will carry cpuModel null");
+}
+
 const out = resolve(options.out ?? language.out);
 mkdirSync(dirname(out), { recursive: true });
 const run = [
@@ -121,6 +128,8 @@ const run = [
   ...(options.cpuset === undefined ? [] : ["--cpuset-cpus", options.cpuset]),
   "--env",
   `REDACT_SECRET_BENCH_IMAGE=${imageId}`,
+  // The container cannot see the host CPU; the harness keys the profile on this (#108).
+  ...(hostCpu === null ? [] : ["--env", `${HOST_CPU_ENV}=${hostCpu}`]),
   "--volume",
   `${dirname(out)}:/out`,
   "--user",
