@@ -7,6 +7,7 @@
  *   npm run bench:docker -- --quick
  *   npm run bench:docker -- --cpuset 2,3 --out out/run.json -- --profile log-flat
  *   npm run bench:docker -- --no-baseline                   # current build only
+ *   npm run bench:docker -- --aa                            # current build against a copy of itself: the noise floor
  *   npm run bench:docker -- --baseline-packages "@redact-secret/adapter-pino@0.1.0"
  *   npm run bench:docker -- --python                        # the Python harness, out/overhead-python.json
  *   npm run bench:docker -- --python --baseline-packages 0.1.0
@@ -58,6 +59,7 @@ function parseArgs(argv) {
     }
     if (flag === "--quick") options.harness.push("--quick");
     else if (flag === "--no-baseline") options.baseline = false;
+    else if (flag === "--aa") options.baseline = "self";
     else if (flag === "--python") options.language = "python";
     else if (flag === "--out") options.out = argv[++i];
     else if (flag === "--cpuset") options.cpuset = argv[++i];
@@ -124,7 +126,11 @@ const run = [
   "--user",
   `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`,
   IMAGE,
-  ...(options.baseline ? ["--baseline", "/opt/baseline"] : []),
+  ...(options.baseline === "self"
+    ? ["--baseline", "/opt/self"]
+    : options.baseline
+      ? ["--baseline", "/opt/baseline"]
+      : []),
   "--out",
   `/out/${basename(out)}`,
   ...options.harness,

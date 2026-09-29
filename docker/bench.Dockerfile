@@ -29,6 +29,13 @@ COPY fixtures ./fixtures
 ARG BASELINE_PACKAGES=""
 RUN node scripts/install-overhead-baseline.mjs /opt/baseline $BASELINE_PACKAGES
 
+# A separate copy of this build, for an A/A run (`bench:docker -- --aa`): the
+# current build timed against itself shows the noise floor of the machine.
+RUN for dir in packages/*/; do \
+      name=$(node -p "require('./${dir}package.json').name"); \
+      mkdir -p "/opt/self/node_modules/${name}" && cp -R "${dir}package.json" "${dir}dist" "/opt/self/node_modules/${name}/"; \
+    done
+
 # No .git in the image: the runner passes the source commit in.
 ARG SOURCE_COMMIT=""
 ARG SOURCE_DIRTY=""
