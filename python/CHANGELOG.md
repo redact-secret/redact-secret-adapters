@@ -19,6 +19,8 @@ package whose declared version isn't on its registry yet — see
 can read it without leaving their environment.
 
 ## [Unreleased]
+
+## [0.1.2] - 2026-09-30
 ### Added
 
 - **`max_nodes` walk budget (default 20000)** in `DEFAULT_LIMITS`

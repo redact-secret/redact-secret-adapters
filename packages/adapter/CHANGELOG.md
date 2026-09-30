@@ -19,6 +19,8 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-30
+
 ### Added
 
 - **`maxNodes` walk budget (default 20000)** in `Limits` and `DEFAULT_LIMITS`
