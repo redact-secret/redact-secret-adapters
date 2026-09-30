@@ -60,14 +60,14 @@ export const PACKAGES = [
     changelog: "packages/adapter-pino/CHANGELOG.md",
     tag: "adapter-pino",
   },
-  // `@redact-secret/adapter-otel-trace` (#49) is still `"private": true` and
-  // so not listed. Its first release adds it here, before adapter_otel, which
-  // re-exports it:
-  //   { id: "adapter_otel_trace", name: "@redact-secret/adapter-otel-trace", registry: "npm",
-  //     manifest: "packages/adapter-otel-trace/package.json",
-  //     changelog: "packages/adapter-otel-trace/CHANGELOG.md", tag: "adapter-otel-trace" },
-  // The publish job, rehearsal dry run, tags, report and release notes for it
-  // are already wired and stay inert until then.
+  {
+    id: "adapter_otel_trace",
+    name: "@redact-secret/adapter-otel-trace",
+    registry: "npm",
+    manifest: "packages/adapter-otel-trace/package.json",
+    changelog: "packages/adapter-otel-trace/CHANGELOG.md",
+    tag: "adapter-otel-trace",
+  },
   {
     id: "adapter_otel",
     name: "@redact-secret/adapter-otel",
