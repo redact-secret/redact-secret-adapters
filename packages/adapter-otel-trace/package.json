@@ -1,7 +1,6 @@
 {
   "name": "@redact-secret/adapter-otel-trace",
   "version": "0.1.0",
-  "private": true,
   "description": "A redacting OpenTelemetry JS SpanProcessor (traces only) over the Redact Secret core.",
   "license": "MIT",
   "type": "module",

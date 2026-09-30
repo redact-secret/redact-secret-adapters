@@ -24,6 +24,8 @@ This package's code shipped as `@redact-secret/adapter-otel` `0.1.0` to
 version numbers start again here, at `0.1.0`, and do not follow the old name's.
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-09-30
 ### Added
 
 - The package, under a name that says what it covers: OpenTelemetry JS
