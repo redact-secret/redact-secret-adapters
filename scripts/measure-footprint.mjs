@@ -33,6 +33,9 @@ const root = new URL("../", import.meta.url);
 const LIVE_FACTORIES = {
   "@redact-secret/adapter": "await m.createMaskSecrets();",
   "@redact-secret/adapter-pino": "await m.createRedactingLogMethod();",
+  "@redact-secret/adapter-otel-trace":
+    "await m.createRedactingSpanProcessor({ onStart() {}, onEnd() {}, forceFlush: async () => {}, shutdown: async () => {} });",
+  // The deprecated name re-exports adapter-otel-trace (#49): its package size is the re-export alone.
   "@redact-secret/adapter-otel":
     "await m.createRedactingSpanProcessor({ onStart() {}, onEnd() {}, forceFlush: async () => {}, shutdown: async () => {} });",
   "@redact-secret/adapter-ai-context": `await m.createAiContextBoundary({

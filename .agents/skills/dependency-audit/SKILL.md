@@ -17,7 +17,7 @@ Answer one question: does any dependency we ship or build with have a known vuln
 
 ## Classify every hit
 
-- **Shipped (npm)**: each package's `dependencies` in `packages/*/package.json` and their transitive trees. Today the adapters keep the core and host SDKs as `peerDependencies`, and `adapter-pino`, `adapter-otel`, and `adapter-ai-context` depend on `@redact-secret/adapter`, while `adapter-mcp` depends on `adapter-ai-context`. Read the manifests rather than trusting this list.
+- **Shipped (npm)**: each package's `dependencies` in `packages/*/package.json` and their transitive trees. Today the adapters keep the core and host SDKs as `peerDependencies`, and `adapter-pino`, `adapter-otel-trace`, and `adapter-ai-context` depend on `@redact-secret/adapter`, while `adapter-otel` depends on `adapter-otel-trace` and `adapter-mcp` on `adapter-ai-context`. Read the manifests rather than trusting this list.
 - **Shipped (PyPI)**: `redact-secret` (the core) and the optional `opentelemetry-sdk` extra in `python/pyproject.toml`. The declared ranges are shipped surface, so an advisory inside a range endpoint counts.
 - **Peer and host ranges**: an advisory in the core or a host SDK version inside a declared range is a compatibility finding. Report it, and name the range endpoint tests that cover it.
 - **Build/test only**: typescript, vitest, biome, fast-check, ajv, the MCP and pino and OpenTelemetry host SDKs installed as devDependencies, `.github/npm-tools`, and `.github/requirements` (build, lint, test).

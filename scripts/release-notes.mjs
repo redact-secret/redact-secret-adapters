@@ -23,6 +23,11 @@ const CHANGELOGS = {
     changelog: "packages/adapter-pino/CHANGELOG.md",
     url: "https://www.npmjs.com/package/@redact-secret/adapter-pino/v/",
   },
+  "adapter-otel-trace": {
+    name: "@redact-secret/adapter-otel-trace",
+    changelog: "packages/adapter-otel-trace/CHANGELOG.md",
+    url: "https://www.npmjs.com/package/@redact-secret/adapter-otel-trace/v/",
+  },
   "adapter-otel": {
     name: "@redact-secret/adapter-otel",
     changelog: "packages/adapter-otel/CHANGELOG.md",

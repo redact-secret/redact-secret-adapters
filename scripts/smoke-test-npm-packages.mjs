@@ -15,12 +15,20 @@
  * shape the way an outside consumer would install it.
  *
  * Install order matters: `adapter` first, then `adapter-pino`,
- * `adapter-otel` and `adapter-ai-context`, which depend on it, then
- * `adapter-mcp`, which depends on `adapter-ai-context`. If `adapter` isn't already installed
- * from its tarball when the other two are, npm resolves
- * `@redact-secret/adapter` from the registry instead: a different build
- * than the one under test, or a failed install when the checkout declares
- * a version that isn't published yet.
+ * `adapter-otel-trace` and `adapter-ai-context`, which depend on it, then
+ * `adapter-otel`, which re-exports `adapter-otel-trace`, and `adapter-mcp`,
+ * which depends on `adapter-ai-context`. If a sibling isn't already installed
+ * from its tarball when its dependents are, npm resolves it from the
+ * registry instead: a different build than the one under test, or a failed
+ * install when the checkout declares a version that isn't published yet.
+ *
+ * OpenTelemetry traces are checked at the bytes an exporter sends (#49): the
+ * `adapter-otel-trace` README example runs verbatim and prints the OTLP/JSON
+ * request body, and one span through the live factory is serialized the same
+ * way through three imports — the `adapter-otel-trace` tarball, the
+ * `adapter-otel` compatibility tarball, and the `@redact-secret/adapter-otel`
+ * release currently on npm, installed into its own project — which must all
+ * send the same redacted spans.
  *
  *   node scripts/smoke-test-npm-packages.mjs
  */
@@ -32,7 +40,14 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const PACKAGE_ORDER = ["adapter", "adapter-pino", "adapter-otel", "adapter-ai-context", "adapter-mcp"];
+const PACKAGE_ORDER = [
+  "adapter",
+  "adapter-pino",
+  "adapter-otel-trace",
+  "adapter-otel",
+  "adapter-ai-context",
+  "adapter-mcp",
+];
 
 function manifestFor(pkgDir) {
   return JSON.parse(readFileSync(join(repoRoot, "packages", pkgDir, "package.json"), "utf-8"));
@@ -54,6 +69,15 @@ function readmeExample(pkgDir) {
   const match = /<!-- smoke-test:example -->\s*```js\n([\s\S]*?)```/.exec(readme);
   if (match === null) throw new Error(`${pkgDir}/README.md has no smoke-test:example block`);
   return match[1];
+}
+
+/** Every span in the OTLP/JSON request bodies printed one per line. */
+function otlpSpans(printed) {
+  return printed
+    .trim()
+    .split("\n")
+    .filter((line) => line.startsWith("{"))
+    .flatMap((line) => JSON.parse(line).resourceSpans.flatMap((r) => r.scopeSpans.flatMap((s) => s.spans)));
 }
 
 function main() {
@@ -85,20 +109,27 @@ function main() {
 
     // 3. Install in dependency order: adapter, then its dependents.
     npm(["install", tarballs.adapter], projectDir);
-    npm(["install", tarballs["adapter-pino"], tarballs["adapter-otel"], tarballs["adapter-ai-context"]], projectDir);
-    npm(["install", tarballs["adapter-mcp"]], projectDir);
+    npm(
+      ["install", tarballs["adapter-pino"], tarballs["adapter-otel-trace"], tarballs["adapter-ai-context"]],
+      projectDir,
+    );
+    npm(["install", tarballs["adapter-otel"], tarballs["adapter-mcp"]], projectDir);
 
-    // 4. The peer hosts and the type-only peer, at the ranges this repo declares.
+    // 4. The peer hosts and the type-only peer, at the ranges this repo declares,
+    // and the OTLP serializer the OpenTelemetry checks read the exporter's bytes with.
     const adapterManifest = manifestFor("adapter");
     const pinoManifest = manifestFor("adapter-pino");
-    const otelManifest = manifestFor("adapter-otel");
+    const otelManifest = manifestFor("adapter-otel-trace");
+    const sdkTraceBase = `@opentelemetry/sdk-trace-base@${otelManifest.peerDependencies["@opentelemetry/sdk-trace-base"]}`;
+    const otlpTransformer = `@opentelemetry/otlp-transformer@${otelManifest.devDependencies["@opentelemetry/otlp-transformer"]}`;
     const mcpPeers = manifestFor("adapter-mcp").peerDependencies;
     const rootManifest = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf-8"));
     npm(
       [
         "install",
         `pino@${pinoManifest.peerDependencies.pino}`,
-        `@opentelemetry/sdk-trace-base@${otelManifest.peerDependencies["@opentelemetry/sdk-trace-base"]}`,
+        sdkTraceBase,
+        otlpTransformer,
         `@redact-secret/core@${adapterManifest.peerDependencies["@redact-secret/core"]}`,
         `@modelcontextprotocol/sdk@${mcpPeers["@modelcontextprotocol/sdk"]}`,
         `@modelcontextprotocol/client@${mcpPeers["@modelcontextprotocol/client"]}`,
@@ -174,6 +205,80 @@ function main() {
     }
     console.log("@redact-secret/adapter-mcp: README example ok");
 
+    // 5d. adapter-otel-trace's README example, verbatim, on the real core and
+    // a real BasicTracerProvider. The assertions read the OTLP/JSON request
+    // body the example's exporter wrote, not the in-memory span.
+    writeFileSync(join(projectDir, "otel-trace-example.mjs"), readmeExample("adapter-otel-trace"));
+    console.log("+ node otel-trace-example.mjs");
+    const otelPrinted = execFileSync(process.execPath, ["otel-trace-example.mjs"], {
+      cwd: projectDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    const [otelSpan] = otlpSpans(otelPrinted);
+    const otelAttribute = (attributes, key) => attributes?.find((a) => a.key === key)?.value?.stringValue;
+    if (
+      otelPrinted.includes("ghp_SYNTHETIC") ||
+      otelSpan?.name !== "deploy <SECRET_1>" ||
+      otelAttribute(otelSpan.attributes, "llm.input_messages") !== "deploy with token <SECRET_1>" ||
+      otelAttribute(otelSpan.events?.[0]?.attributes, "tool.args") !== "Bearer <SECRET_1>"
+    ) {
+      throw new Error(`adapter-otel-trace: unexpected exporter bytes ${otelPrinted}`);
+    }
+    console.log("@redact-secret/adapter-otel-trace: README example ok");
+
+    // 5e. The same span through the live factory under every name a consumer
+    // can import it by: this checkout's adapter-otel-trace and adapter-otel
+    // tarballs, and the adapter-otel release on npm in a project of its own
+    // (its own published adapter, nothing from this checkout). All three must
+    // send the same redacted spans.
+    writeFileSync(join(projectDir, "otel-bytes.mjs"), OTEL_BYTES_MJS);
+    const publishedDir = join(root, "published-otel");
+    mkdirSync(publishedDir);
+    writeFileSync(
+      join(publishedDir, "package.json"),
+      JSON.stringify({ name: "redact-secret-adapters-published-otel", private: true, type: "module" }, null, 2),
+    );
+    const publishedOtel = execFileSync("npm", ["view", "@redact-secret/adapter-otel", "version"], {
+      encoding: "utf-8",
+    }).trim();
+    npm(
+      [
+        "install",
+        `@redact-secret/adapter-otel@${publishedOtel}`,
+        sdkTraceBase,
+        otlpTransformer,
+        `@redact-secret/core@${adapterManifest.peerDependencies["@redact-secret/core"]}`,
+      ],
+      publishedDir,
+    );
+    writeFileSync(join(publishedDir, "otel-bytes.mjs"), OTEL_BYTES_MJS);
+    const sent = (cwd, specifier) => {
+      console.log(`+ node otel-bytes.mjs ${specifier}  (in ${cwd})`);
+      return execFileSync(process.execPath, ["otel-bytes.mjs", specifier], {
+        cwd,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "inherit"],
+      }).trim();
+    };
+    const candidateBytes = sent(projectDir, "@redact-secret/adapter-otel-trace");
+    const shimBytes = sent(projectDir, "@redact-secret/adapter-otel");
+    const publishedBytes = sent(publishedDir, "@redact-secret/adapter-otel");
+    if (candidateBytes.includes("ghp_SYNTHETIC") || !/deploy with token <SECRET_\d+>/.test(candidateBytes)) {
+      throw new Error(`adapter-otel-trace: unexpected exporter bytes ${candidateBytes}`);
+    }
+    if (shimBytes !== candidateBytes) {
+      throw new Error(`adapter-otel (this checkout) sent different spans:\n${shimBytes}\n${candidateBytes}`);
+    }
+    if (publishedBytes !== candidateBytes) {
+      throw new Error(
+        `adapter-otel@${publishedOtel} (npm) sent different spans:\n${publishedBytes}\n${candidateBytes}`,
+      );
+    }
+    console.log(
+      `@redact-secret/adapter-otel-trace, adapter-otel (tarball) and adapter-otel@${publishedOtel} (npm): same exporter bytes`,
+    );
+
     // 6. Types resolve for a consumer, typechecked against the installed `.d.ts`.
     writeFileSync(join(projectDir, "smoke-test.ts"), SMOKE_TEST_TS);
     writeFileSync(join(projectDir, "tsconfig.json"), TSCONFIG_JSON);
@@ -215,11 +320,40 @@ export function fakeScanAndRedact(text) {
 }
 `;
 
+// One span through `createRedactingSpanProcessor` imported from argv[2], a
+// real BatchSpanProcessor and an exporter that serializes with the OTLP/JSON
+// serializer. Prints the exported spans with the per-run ids and timestamps
+// removed, so two runs compare byte for byte. Synthetic values only.
+const OTEL_BYTES_MJS = `import { BasicTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { JsonTraceSerializer } from "@opentelemetry/otlp-transformer";
+const { createRedactingSpanProcessor } = await import(process.argv[2]);
+const token = "ghp_SYNTHETICREVOKED00000000000000000000";
+const bodies = [];
+const exporter = {
+  export(spans, done) { bodies.push(new TextDecoder().decode(JsonTraceSerializer.serializeRequest(spans))); done({ code: 0 }); },
+  shutdown: async () => {},
+};
+const provider = new BasicTracerProvider({
+  spanProcessors: [await createRedactingSpanProcessor(new BatchSpanProcessor(exporter))],
+});
+const span = provider.getTracer("smoke-test").startSpan(\`deploy \${token}\`);
+span.setAttribute("llm.input_messages", \`deploy with token \${token}\`);
+span.setAttribute("llm.tags", ["ok", \`tag \${token}\`]);
+span.addEvent("tool_call", { "tool.args": \`Bearer \${token}\` });
+span.setStatus({ code: 2, message: \`denied for \${token}\` });
+span.end();
+await provider.shutdown();
+const VARYING = new Set(["traceId", "spanId", "parentSpanId", "startTimeUnixNano", "endTimeUnixNano", "timeUnixNano"]);
+const spans = bodies.flatMap((body) => JSON.parse(body).resourceSpans.flatMap((r) => r.scopeSpans.flatMap((s) => s.spans)));
+console.log(JSON.stringify(spans, (key, value) => (VARYING.has(key) ? undefined : value)));
+`;
+
 const SMOKE_TEST_MJS = `import assert from "node:assert/strict";
 import pino from "pino";
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { BLOCK_MARKER, ERROR_MARKER, maskSecretsWith } from "@redact-secret/adapter";
 import { createRedactingHooksWith, createRedactingLogMethodWith } from "@redact-secret/adapter-pino";
+import { RedactingSpanProcessorWith as TraceRedactingSpanProcessorWith } from "@redact-secret/adapter-otel-trace";
 import { RedactingSpanProcessorWith } from "@redact-secret/adapter-otel";
 import { createAiContextBoundaryWith } from "@redact-secret/adapter-ai-context";
 import { createMcpBoundaryWith, mcpBlockedResult, toCallToolResult } from "@redact-secret/adapter-mcp";
@@ -262,18 +396,24 @@ assert.equal(pairedLine.session, "<SECRET_1>", "a child binding reached the dest
 assert.equal(pairedLine.msg, "plain");
 console.log("@redact-secret/adapter-pino: ok");
 
-// @redact-secret/adapter-otel: a real span through the packed adapter.
-const exporter = new InMemorySpanExporter();
-const processor = new RedactingSpanProcessorWith(new SimpleSpanProcessor(exporter), fakeScanAndRedact);
-const provider = new BasicTracerProvider({ spanProcessors: [processor] });
-const span = provider.getTracer("smoke-test").startSpan("call");
-span.setAttribute("llm.input", "call SECRET_TOKEN_1 now");
-span.end();
-await provider.forceFlush();
-const [exported] = exporter.getFinishedSpans();
-assert.equal(exported?.attributes["llm.input"], "call <SECRET_1> now");
-await provider.shutdown();
-console.log("@redact-secret/adapter-otel: ok");
+// @redact-secret/adapter-otel-trace, and adapter-otel, which re-exports it: a real span through each packed name.
+assert.equal(RedactingSpanProcessorWith, TraceRedactingSpanProcessorWith, "adapter-otel is not re-exporting adapter-otel-trace");
+for (const [name, Processor] of [
+  ["@redact-secret/adapter-otel-trace", TraceRedactingSpanProcessorWith],
+  ["@redact-secret/adapter-otel", RedactingSpanProcessorWith],
+]) {
+  const exporter = new InMemorySpanExporter();
+  const processor = new Processor(new SimpleSpanProcessor(exporter), fakeScanAndRedact);
+  const provider = new BasicTracerProvider({ spanProcessors: [processor] });
+  const span = provider.getTracer("smoke-test").startSpan("call");
+  span.setAttribute("llm.input", "call SECRET_TOKEN_1 now");
+  span.end();
+  await provider.forceFlush();
+  const [exported] = exporter.getFinishedSpans();
+  assert.equal(exported?.attributes["llm.input"], "call <SECRET_1> now");
+  await provider.shutdown();
+  console.log(\`\${name}: ok\`);
+}
 
 // @redact-secret/adapter-ai-context: the injected API over the fake scanner.
 const boundary = createAiContextBoundaryWith(
@@ -340,6 +480,14 @@ import {
   type RedactingSpanProcessorOptions,
 } from "@redact-secret/adapter-otel";
 import {
+  createRedactingSpanProcessor as createTraceProcessor,
+  RedactingSpanProcessorWith as TraceProcessor,
+  redactAttributesWith as traceRedactAttributesWith,
+  type CreateRedactingSpanProcessorOptions as TraceCreateOptions,
+  type OtelSpanOutcome as TraceSpanOutcome,
+  type RedactingSpanProcessorOptions as TraceProcessorOptions,
+} from "@redact-secret/adapter-otel-trace";
+import {
   AI_CONTEXT_DEFAULT_LIMITS,
   BLOCK_REASONS,
   SAFE_FINDING_FIELDS,
@@ -401,6 +549,16 @@ void createRedactingSpanProcessor;
 void deprecatedOtelOptions;
 const processor = new RedactingSpanProcessorWith(new SimpleSpanProcessor(new InMemorySpanExporter()), scanner, otelOptions);
 void new BasicTracerProvider({ spanProcessors: [processor] });
+
+// The same API under the trace-only name, interchangeable with the deprecated one in both directions.
+const traceOptions: TraceProcessorOptions = otelOptions;
+const traceCreate: TraceCreateOptions = { ...traceOptions, pii: ["pii:global"] };
+const traceProcessor: RedactingSpanProcessorWith = new TraceProcessor(new SimpleSpanProcessor(new InMemorySpanExporter()), scanner, traceOptions);
+const shimProcessor: TraceProcessor = processor;
+const traceOutcome = (outcome: TraceSpanOutcome): OtelSpanOutcome => outcome;
+void [traceCreate, traceProcessor, shimProcessor, traceOutcome, traceRedactAttributesWith];
+const createdTrace: Promise<TraceProcessor> = createTraceProcessor(new SimpleSpanProcessor(new InMemorySpanExporter()));
+void createdTrace;
 
 const aiOptions: AiContextBoundaryOptions = {
   wholeInputLimits: { maxInputBytes: 1024, maxFindings: 8 },

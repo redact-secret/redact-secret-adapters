@@ -48,7 +48,7 @@ version: package versions stay per package.
 | Package tag | `<package>@<version>` | `adapter-pino@0.2.0` |
 | Train tag + GitHub Release | `train/<train>` | `train/2026.09.22` |
 
-Package tags: `adapter`, `adapter-pino`, `adapter-otel`,
+Package tags: `adapter`, `adapter-pino`, `adapter-otel-trace`, `adapter-otel`,
 `adapter-ai-context`, `adapter-mcp`, and `redact-secret-adapters` (PyPI).
 
 ### Prereleases and npm dist-tags
@@ -318,6 +318,30 @@ steps above; `@redact-secret/adapter-ai-context` and
 `@redact-secret/adapter-mcp` were wired in this way for their first
 release, `0.1.0-alpha` (`adapter-mcp` depends on `adapter-ai-context`, so
 that one publishes first).
+
+`@redact-secret/adapter-otel-trace` (#49) is on `develop` the same way:
+`"private": true` at `0.1.0` and absent from `PACKAGES`, so no train plans
+it and trains for other packages are unaffected. Its publish job, rehearsal
+dry run, tags, report row and release notes are already wired and stay
+inert. To release it, in one PR into `develop`: drop `"private"`, add its
+`PACKAGES` entry (the commented one in `scripts/release-plan.mjs`, before
+`adapter_otel`), move its CHANGELOG `Unreleased` entries under
+`## [0.1.0] - YYYY-MM-DD`, and run `npm run feed:generate`; then bootstrap it
+by hand as in steps 1–3 above
+(`npm publish --workspace @redact-secret/adapter-otel-trace --access public --tag latest`).
+`@redact-secret/adapter-otel` re-exports it, and the release plan refuses a
+train that would publish `adapter-otel` before `adapter-otel-trace` is
+released. Bump `adapter-otel` (to `0.1.3`, say) in the same train or a later
+one to ship the re-export; its publish job waits for `adapter-otel-trace`'s.
+Once the re-export is on npm, mark the old name deprecated on the registry:
+
+```bash
+npm deprecate @redact-secret/adapter-otel@">=0.1.3" \
+  "Renamed to @redact-secret/adapter-otel-trace (traces only; OpenTelemetry Logs are not covered). This version re-exports it unchanged."
+```
+
+Deprecate only the re-export versions: `0.1.2` and older are the
+implementation itself, and a consumer pinned to them has nothing to fix.
 
 PRs that cut and reconcile open use `GITHUB_TOKEN`, which fires no
 `pull_request` event; those workflows dispatch CI, Branch guard and

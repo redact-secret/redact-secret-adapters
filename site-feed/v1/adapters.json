@@ -134,12 +134,7 @@
           }
         }
       ],
-      "dependsOn": [
-        {
-          "name": "@redact-secret/adapter",
-          "range": "^0.1.3"
-        }
-      ]
+      "dependsOn": []
     },
     {
       "id": "adapter-ai-context",

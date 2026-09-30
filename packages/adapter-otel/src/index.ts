@@ -1,65 +1,49 @@
 /**
- * The live OpenTelemetry JS integration:
+ * `@redact-secret/adapter-otel` is the previous name of
+ * `@redact-secret/adapter-otel-trace`, kept so existing imports keep working.
+ * It re-exports that package's API unchanged: the same functions and the
+ * same class object, so `instanceof` and every option behave exactly as they
+ * do when imported from the new name. Nothing here adds behavior.
+ *
+ * The package only ever covered **traces** (a `SpanProcessor`). It does not
+ * protect OpenTelemetry Logs, and the new name says so. Migrate by changing
+ * the import specifier:
  *
  * ```js
- * import { NodeTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-node";
+ * // before
  * import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel";
- *
- * const provider = new NodeTracerProvider({
- *   spanProcessors: [await createRedactingSpanProcessor(new BatchSpanProcessor(exporter))],
- * });
+ * // after
+ * import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel-trace";
  * ```
  *
- * `await initialize()` must resolve before `scanAndRedact` is used; this
- * factory enforces that order. It is the only code in the package that loads
- * `@redact-secret/core` at runtime, and does so on call (as
- * `@redact-secret/adapter`'s `createMaskSecrets` does), so importing the
- * injected API never loads the native core.
+ * The deprecation is carried by `@deprecated` on every export, the README,
+ * and the npm registry. This module prints nothing at import or call time:
+ * the package stays side-effect free.
  *
- * PII detection is opt-in and process-wide in the core. Omit `pii` and this
- * factory initializes the core as before and accepts whatever selection the
- * application already activated, in either order. Pass
- * `createRedactingSpanProcessor(next, { pii: ["pii:global"] })` to activate a
- * selection from here instead, and the factory rejects rather than run with
- * PII off. See `@redact-secret/adapter`'s `activateCore` for the whole rule,
- * including why activation is not the same as masking every PII value.
+ * @packageDocumentation
  */
 
-import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { activateCore, type CoreActivation } from "@redact-secret/adapter";
+import * as trace from "@redact-secret/adapter-otel-trace";
 
-import { type RedactingSpanProcessorOptions, RedactingSpanProcessorWith } from "./span-processor.js";
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export type CoreActivation = trace.CoreActivation;
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export type MaskLeafOptions = trace.MaskLeafOptions;
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export type OtelSpanOutcome = trace.OtelSpanOutcome;
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export type RedactAttributesOptions = trace.RedactAttributesOptions;
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export type RedactingSpanProcessorOptions = trace.RedactingSpanProcessorOptions;
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export type CreateRedactingSpanProcessorOptions = trace.CreateRedactingSpanProcessorOptions;
 
-export type { CoreActivation, MaskLeafOptions } from "@redact-secret/adapter";
-export {
-  type OtelSpanOutcome,
-  type RedactAttributesOptions,
-  type RedactingSpanProcessorOptions,
-  RedactingSpanProcessorWith,
-  redactAttributesWith,
-} from "./span-processor.js";
-
-/** {@link RedactingSpanProcessorOptions} plus the live factory's PII activation. */
-export type CreateRedactingSpanProcessorOptions = RedactingSpanProcessorOptions & CoreActivation;
-
-/**
- * Awaits `initialize()` once, then wraps `next` with the real scanner.
- * `options.onOutcome` reports one input-free summary per span.
- *
- * `options.pii` activates core PII selectors for the whole process. Omit it
- * and an activation the application already made is accepted rather than
- * fought over. Pass it and this rejects — with a fixed message and code, never
- * a selector or a core message — rather than run with PII off.
- */
-export async function createRedactingSpanProcessor(
-  next: SpanProcessor,
-  options: CreateRedactingSpanProcessorOptions = {},
-): Promise<RedactingSpanProcessorWith> {
-  // `pii` is read by property so an inherited activation survives, and
-  // `options` is forwarded as the same object so every other inherited key
-  // does too. `pii` rides along unread, as any unknown key would.
-  const activation: CoreActivation = options.pii === undefined ? {} : { pii: options.pii };
-  const loaded = await import("@redact-secret/core");
-  await activateCore(loaded, activation);
-  return new RedactingSpanProcessorWith(next, loaded.scanAndRedact, options);
-}
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export const createRedactingSpanProcessor: typeof trace.createRedactingSpanProcessor =
+  trace.createRedactingSpanProcessor;
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export const redactAttributesWith: typeof trace.redactAttributesWith = trace.redactAttributesWith;
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export const RedactingSpanProcessorWith: typeof trace.RedactingSpanProcessorWith = trace.RedactingSpanProcessorWith;
+/** @deprecated Import from `@redact-secret/adapter-otel-trace`; this name only covers traces. */
+export type RedactingSpanProcessorWith = trace.RedactingSpanProcessorWith;

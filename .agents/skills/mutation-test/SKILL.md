@@ -14,7 +14,7 @@ A fail-closed check that can be deleted without a test failing is not protected.
 - Mutate only security-relevant source, or the file given as an argument:
   - `packages/adapter/src/`: `mask-leaf.ts`, `walk.ts`, `walk-strict.ts`, `outcome.ts`, `activation.ts`
   - `packages/adapter-pino/src/`: `hooks.ts`, `log-method.ts`, `stream-write.ts`, `format-message.ts`
-  - `packages/adapter-otel/src/span-processor.ts`
+  - `packages/adapter-otel-trace/src/span-processor.ts` (`packages/adapter-otel` only re-exports it)
   - `packages/adapter-ai-context/src/boundary.ts`
   - `packages/adapter-mcp/src/boundary.ts`
 - Python: `python/redact_secret_adapters/` (`mask_leaf.py`, `_walk.py`, `logging_filter.py`, `otel.py`) can be mutated with `mutmut` against `pytest python/tests`. Do this only when asked, and say it separately.
