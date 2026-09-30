@@ -45,6 +45,12 @@ here — plus `onOutcome` since `0.1.2`, and `pii` on the live factory
 (**Unreleased**). The older `RedactAttributesOptions` alias is deprecated. See
 [`@redact-secret/adapter`](../adapter#fail-closed-markers) for the markers.
 
+**Attribute names are not scanned.** The processor masks attribute *values*
+(and the span name, event names, and status message). Every attribute key,
+on the span, its events, and its links, reaches the exporter unchanged, so an
+attribute *named* after a secret keeps that name. Do not put a secret in an
+attribute key.
+
 ## PII detection is opt-in
 
 **Unreleased.** The core detects credentials out of the box; PII detection is a

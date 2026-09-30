@@ -306,8 +306,13 @@ Bounds (`DEFAULT_LIMITS`, overridable per call):
 | `maxObjectKeys` | 200 |
 | `maxStringLength` | 200000 |
 | `maxTotalLeaves` | 5000 |
+| `maxNodes` | 20000 |
 
-Elements and keys beyond a limit are dropped, not passed through.
+Elements and keys beyond a limit are dropped, not passed through. `maxNodes`
+counts every value visited, containers and leaves alike but not keys, once per
+path. It bounds the work for an in-process object graph with shared
+references, which the walk visits once per path. The Python walker uses the
+same limits in snake case (`max_nodes`, ...).
 
 ## PII detection is opt-in
 

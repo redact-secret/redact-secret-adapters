@@ -8,6 +8,7 @@ languages make the same decision given the same finding.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -24,13 +25,40 @@ CYCLE_MARKER = "[REDACTED:CYCLE]"
 # spent, never reaches the core: it becomes LIMIT_MARKER instead. Every log
 # call pays the scan cost, so these bounds also cap per-call latency for a
 # pathological extra mapping.
+#
+# max_nodes caps every visit, containers included, so a shared-reference
+# graph (walked once per path) cannot multiply the work past it. It is four
+# times max_total_leaves, so a string-heavy value still meets the leaf budget
+# first. Same default as ``maxNodes`` in ``mask-leaf.ts``.
 DEFAULT_LIMITS: dict[str, int] = {
     "max_depth": 8,
     "max_array_length": 1000,
     "max_object_keys": 200,
     "max_string_length": 200_000,
     "max_total_leaves": 5000,
+    "max_nodes": 20_000,
 }
+
+
+def resolve_limit(value: Any, fallback: int) -> Any:
+    """``value`` if it is a usable bound, else ``fallback``, like
+    ``resolveLimit`` in ``mask-leaf.ts``. ``None``, ``NaN``, a negative
+    number, a ``bool``, or a non-number would otherwise raise out of a
+    walk, disable a bound (``len(text) > nan`` is never true), or turn a
+    slice bound negative (``[:-1]`` keeps almost everything)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return fallback
+    if value != value or value < 0:  # NaN is the one value unequal to itself
+        return fallback
+    return value
+
+
+def resolve_limits(overrides: Optional[Any]) -> dict[str, Any]:
+    """Per-key :func:`resolve_limit` over ``DEFAULT_LIMITS``; like
+    ``resolveLimits`` in ``walk.ts``, anything that is not a mapping is no
+    overrides at all, and unknown keys are ignored."""
+    source = overrides if isinstance(overrides, Mapping) else {}
+    return {key: resolve_limit(source.get(key), default) for key, default in DEFAULT_LIMITS.items()}
 
 
 def mask_leaf_with(
@@ -91,8 +119,7 @@ def mask_leaf_outcome_with(
     if not isinstance(text, str):
         raise TypeError("mask_leaf_with: text must be a str")
 
-    limit = max_string_length if max_string_length is not None else DEFAULT_LIMITS["max_string_length"]
-    if len(text) > limit:
+    if len(text) > resolve_limit(max_string_length, DEFAULT_LIMITS["max_string_length"]):
         return MaskedLeaf(LIMIT_MARKER, "limited")
 
     try:

@@ -75,7 +75,9 @@ class RedactSecretFilter(logging.Filter):
     native extension). ``extra_fields`` names attributes set via a log
     call's ``extra={...}`` kwarg to also redact: a string is masked, and a
     dict/list/tuple/exception is walked like ``mask_log_value_with`` and
-    replaced by its masked copy. Unlisted attributes are left untouched,
+    replaced by its masked copy; a number, bool or ``None`` is kept, and any
+    other object (a set, bytes, a dataclass, ...) fails closed to
+    ``ERROR_MARKER`` (see ``_walk.py``). Unlisted attributes are left untouched,
     since this filter never assumes a wire format wide enough to know every
     possible extra field.
     """
@@ -168,13 +170,20 @@ class RedactSecretFilter(logging.Filter):
         for field in self._extra_fields:
             if hasattr(record, field):
                 # A new, masked container: the caller's own object is untouched.
-                masked = walk(
-                    self._scan_and_redact,
-                    getattr(record, field),
-                    policy=self._policy,
-                    limits=self._limits,
-                    counter=counter,
-                )
+                try:
+                    masked = walk(
+                        self._scan_and_redact,
+                        getattr(record, field),
+                        policy=self._policy,
+                        limits=self._limits,
+                        counter=counter,
+                    )
+                except Exception:
+                    # walk() degrades per key and element and should never
+                    # raise; if it does, the extra is lost, not the record.
+                    masked = ERROR_MARKER
+                    if counter is not None:
+                        counter.failed += 1
                 setattr(record, field, masked)
 
         if counter is not None:
