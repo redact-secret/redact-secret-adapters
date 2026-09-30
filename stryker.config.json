@@ -1,9 +1,10 @@
 {
   "testRunner": "vitest",
   "vitest": {
-    "configFile": "vitest.config.ts"
+    "configFile": "vitest.stryker.config.ts"
   },
   "checkers": [],
+  "disableTypeChecks": "packages/*/{src,test}/**/*.{js,ts,mts,cts}",
   "coverageAnalysis": "perTest",
   "reporters": ["clear-text", "json"],
   "jsonReporter": {
