@@ -19,6 +19,23 @@ package whose declared version isn't on its registry yet — see
 can read it without leaving their environment.
 
 ## [Unreleased]
+### Added
+
+- **`max_nodes` walk budget (default 20000)** in `DEFAULT_LIMITS`
+  (redact-secret/redact-secret-adapters#87). The walker behind
+  `mask_secrets_with`, `mask_log_value_with` and `extra_fields` budgeted only
+  string leaves, and it walks a shared reference once per path. An in-process
+  graph of shared lists therefore cost exponential time before any string
+  budget tripped (a probe: 10^8 paths took 85 s). Every visited value now
+  counts, containers included, with the same rule and default as the
+  TypeScript `maxNodes`. Past the budget, every value becomes
+  `[REDACTED:LIMIT_EXCEEDED]` (counted `limited`). Invalid overrides fall back
+  to the default through `resolve_limit`. Tested by
+  `test_max_nodes_counts_every_visit_once_per_path`,
+  `test_a_shared_reference_dag_is_bounded_by_max_nodes_not_its_path_count`, and
+  the shared `shared_reference_dag_is_bounded_by_max_nodes` and
+  `tightened_max_nodes_bounds_a_shared_reference_dag` cases.
+
 ### Changed
 
 - **An object the walker does not walk now fails closed to

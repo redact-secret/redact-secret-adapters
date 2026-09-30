@@ -22,6 +22,7 @@ test("the four markers and DEFAULT_LIMITS are the documented public API", () => 
     maxObjectKeys: 200,
     maxStringLength: 200_000,
     maxTotalLeaves: 5000,
+    maxNodes: 20_000,
   });
   expect(Object.isFrozen(DEFAULT_LIMITS)).toBe(true);
 });

@@ -25,12 +25,18 @@ CYCLE_MARKER = "[REDACTED:CYCLE]"
 # spent, never reaches the core: it becomes LIMIT_MARKER instead. Every log
 # call pays the scan cost, so these bounds also cap per-call latency for a
 # pathological extra mapping.
+#
+# max_nodes caps every visit, containers included, so a shared-reference
+# graph (walked once per path) cannot multiply the work past it. It is four
+# times max_total_leaves, so a string-heavy value still meets the leaf budget
+# first. Same default as ``maxNodes`` in ``mask-leaf.ts``.
 DEFAULT_LIMITS: dict[str, int] = {
     "max_depth": 8,
     "max_array_length": 1000,
     "max_object_keys": 200,
     "max_string_length": 200_000,
     "max_total_leaves": 5000,
+    "max_nodes": 20_000,
 }
 
 

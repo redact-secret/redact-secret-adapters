@@ -1,5 +1,5 @@
 {
-  "description": "Pathological value trees for the shared walker (#11). Each case names a shape that both languages build from the same parameters, instead of storing multi-megabyte JSON. Every case asserts that the walk terminates, never passes the planted synthetic secret through, and calls the scanner no more often than the named limit allows. `maxScannerCalls` is an upper bound, not an expected count. A `cause-chain` is an error whose cause is an error, `depth` levels deep, with the leaf only in the innermost message. A `shared-reference` is `{x: s, y: s}` for one non-cyclic `s = {leaf}`. Optional: `mustNotContain`, a string the serialized result must not contain, and `expected`, the exact result. An `opaque-object` is a class instance holding the leaf in an attribute and in its string form; TS walks it as its own properties, Python fails closed to `[REDACTED:ERROR]` (#85), so its `mustContain` names each language's result. A `throwing-entry` is a mapping whose `bad` entry raises when read and whose `ok` entry is the leaf. Python serializes with `default=str`, like a JSON log formatter. Limits may be deliberately invalid (null, negative, a string, a boolean): both languages fall back to the default.",
+  "description": "Pathological value trees for the shared walker (#11). Each case names a shape that both languages build from the same parameters, instead of storing multi-megabyte JSON. Every case asserts that the walk terminates, never passes the planted synthetic secret through, and calls the scanner no more often than the named limit allows. `maxScannerCalls` is an upper bound, not an expected count. A `cause-chain` is an error whose cause is an error, `depth` levels deep, with the leaf only in the innermost message. A `shared-reference` is `{x: s, y: s}` for one non-cyclic `s = {leaf}`. Optional: `mustNotContain`, a string the serialized result must not contain, and `expected`, the exact result. An `opaque-object` is a class instance holding the leaf in an attribute and in its string form; TS walks it as its own properties, Python fails closed to `[REDACTED:ERROR]` (#85), so its `mustContain` names each language's result. A `throwing-entry` is a mapping whose `bad` entry raises when read and whose `ok` entry is the leaf. Python serializes with `default=str`, like a JSON log formatter. Limits may be deliberately invalid (null, negative, a string, a boolean): both languages fall back to the default. A `shared-reference-dag` is `depth` levels of `width`-element arrays whose every element is the same next level, with the leaf at the bottom: `width^depth` paths over `depth * width` references, walked once per path, so only `maxNodes` bounds it (#87). Optional `maxSeconds` bounds the walk's wall-clock time.",
   "cases": [
     {
       "name": "deeply_nested_arrays",
@@ -177,6 +177,34 @@
         "maxTotalLeaves": null
       },
       "maxScannerCalls": 5000,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "shared_reference_dag_is_bounded_by_max_nodes",
+      "shape": {
+        "kind": "shared-reference-dag",
+        "depth": 7,
+        "width": 1000,
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {},
+      "maxScannerCalls": 5000,
+      "maxSeconds": 5,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "tightened_max_nodes_bounds_a_shared_reference_dag",
+      "shape": {
+        "kind": "shared-reference-dag",
+        "depth": 4,
+        "width": 10,
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {
+        "maxNodes": 100
+      },
+      "maxScannerCalls": 97,
+      "maxSeconds": 5,
       "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
     }
   ]

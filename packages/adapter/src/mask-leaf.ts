@@ -23,6 +23,11 @@ const BLOCK: SecretAction = "block";
  * reaches the core: it becomes {@link LIMIT_MARKER} instead. Every log
  * call pays the scan cost, so these bounds also cap per-call latency for
  * pathological merging objects.
+ *
+ * `maxNodes` caps every visit, containers included, so a shared-reference
+ * graph (walked once per path) cannot multiply the work past it. It is four
+ * times `maxTotalLeaves`, so a string-heavy value still meets the leaf
+ * budget first.
  */
 export const DEFAULT_LIMITS: Limits = Object.freeze({
   maxDepth: 8,
@@ -30,6 +35,7 @@ export const DEFAULT_LIMITS: Limits = Object.freeze({
   maxObjectKeys: 200,
   maxStringLength: 200_000,
   maxTotalLeaves: 5000,
+  maxNodes: 20_000,
 });
 
 /**
