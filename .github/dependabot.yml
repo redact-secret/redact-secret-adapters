@@ -29,6 +29,13 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # @types/node tracks the lowest Node in `engines` (20.x), so type-checking
+      # rejects APIs that Node lacks. Minor and patch updates within that major
+      # are fine; move the major only when the engines floor moves (#72).
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
 
   # Pinned npm CLI used by the release workflows (see .github/npm-tools).
   # Its bundled dependencies are scanned by Scorecard, so track new npm releases.
@@ -61,3 +68,10 @@ updates:
     open-pull-requests-limit: 2
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # The bench image must run a Node the packages support and CI tests
+      # (engines and compatibility.json: 20.x, 22.x, 24.x). Lift this when a
+      # newer major joins the engines range and the CI matrix (#106).
+      - dependency-name: node
+        versions:
+          - ">= 25"
