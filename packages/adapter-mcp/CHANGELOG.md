@@ -13,6 +13,8 @@ dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
 not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
+
+## [0.1.2] - 2026-09-30
 ### Changed
 - The optional peer `@modelcontextprotocol/sdk` range is raised from
   `>=1.13.0 <=1.30.1` to `>=1.26.0 <=1.30.1`. Every 1.x release before 1.26.0
