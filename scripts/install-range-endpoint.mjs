@@ -32,6 +32,7 @@ function resolve(name, range) {
 }
 
 const packagesDir = new URL("../packages/", import.meta.url);
+let coreSpec;
 for (const dir of workspaceDirs(packagesDir)) {
   const manifest = JSON.parse(readFileSync(new URL(`${dir}/package.json`, packagesDir), "utf-8"));
   const ranges = { ...manifest.peerDependencies };
@@ -40,6 +41,16 @@ for (const dir of workspaceDirs(packagesDir)) {
 
   const specs = Object.entries(ranges).map(([name, range]) => `${name}@${resolve(name, range)}`);
   if (specs.length === 0) continue;
+  coreSpec ??= specs.find((spec) => spec.startsWith(`${CORE}@`));
   console.log(`${manifest.name}: ${end} -> ${specs.join(" ")}`);
   execFileSync("npm", ["install", "--no-save", "--workspace", manifest.name, ...specs], { stdio: "inherit" });
+}
+
+// The workspace installs above nest a copy of the core under each package. The
+// root copy comes from the lockfile, so without this the tree mixes two core
+// versions whenever the lockfile is not at the endpoint being installed, and
+// the types of one no longer match the other.
+if (coreSpec) {
+  console.log(`root: ${end} -> ${coreSpec}`);
+  execFileSync("npm", ["install", "--no-save", coreSpec], { stdio: "inherit" });
 }
