@@ -1,9 +1,9 @@
 import type { ScanAndRedact } from "@redact-secret/adapter";
-import { ERROR_MARKER, LIMIT_MARKER } from "@redact-secret/adapter";
+import { createOutcomeCounter, ERROR_MARKER, LIMIT_MARKER } from "@redact-secret/adapter";
 import { expect, test } from "vitest";
 
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
-import { createRedactingStreamWriteWith } from "../src/index.js";
+import { createRedactingStreamWriteWith, PINO_ERROR_LINE } from "../src/index.js";
 
 const streamWrite = createRedactingStreamWriteWith(fakeScanAndRedact);
 
@@ -45,4 +45,29 @@ test("an unparseable line is replaced, never written as is", () => {
 
 test("rejects a non-function scanAndRedact", () => {
   expect(() => createRedactingStreamWriteWith(null as unknown as ScanAndRedact)).toThrow(TypeError);
+});
+
+test("maxDepth 0 refuses the whole walk: the line becomes PINO_ERROR_LINE, never a partial rewrite", () => {
+  const counter = createOutcomeCounter();
+  const limited = createRedactingStreamWriteWith(fakeScanAndRedact, { limits: { maxDepth: 0 }, counter });
+  expect(limited('{"level":30,"msg":"SECRET_TOKEN_1"}\n')).toBe(`${PINO_ERROR_LINE}\n`);
+  expect(counter.failed).toBe(1);
+  const uncounted = createRedactingStreamWriteWith(fakeScanAndRedact, { limits: { maxDepth: 0 } });
+  expect(uncounted('{"msg":"x"}')).toBe(PINO_ERROR_LINE);
+});
+
+test("values past maxArrayLength become the limit marker and are counted as limited", () => {
+  const line = '{"a":"x","b":"SECRET_TOKEN_1"}';
+  const expected = `{"a":"x","b":${JSON.stringify(LIMIT_MARKER)}}`;
+  const counter = createOutcomeCounter();
+  const limited = createRedactingStreamWriteWith(fakeScanAndRedact, { limits: { maxArrayLength: 1 }, counter });
+  expect(limited(line)).toBe(expected);
+  expect(counter.limited).toBe(1);
+  // Without a counter the value is still refused, and the line is not failed.
+  expect(createRedactingStreamWriteWith(fakeScanAndRedact, { limits: { maxArrayLength: 1 } })(line)).toBe(expected);
+});
+
+test("an unchanged value keeps its original escapes byte for byte", () => {
+  const line = '{"url":"a\\/b","e":"caf\\u00e9"}';
+  expect(streamWrite(line)).toBe(line);
 });

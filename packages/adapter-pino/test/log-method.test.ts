@@ -1,5 +1,5 @@
 import type { ScanAndRedact } from "@redact-secret/adapter";
-import { BLOCK_MARKER, ERROR_MARKER } from "@redact-secret/adapter";
+import { BLOCK_MARKER, createOutcomeCounter, ERROR_MARKER } from "@redact-secret/adapter";
 import type { LogFn, Logger } from "pino";
 import { expect, test } from "vitest";
 
@@ -232,4 +232,18 @@ test("the policy option reaches scanAndRedact from both hooks", () => {
 
 test("rejects a non-function scanAndRedact", () => {
   expect(() => createRedactingLogMethodWith(null as unknown as ScanAndRedact)).toThrow(TypeError);
+});
+
+test("maxDepth 0 refuses the whole argument list: the call logs only the error marker, counted once as failed", () => {
+  const counter = createOutcomeCounter();
+  const counted = spyMethod();
+  const hook = createRedactingLogMethodWith(fakeScanAndRedact, { limits: { maxDepth: 0 }, counter });
+  callHook(hook, {}, [{ a: "SECRET_TOKEN_1" }, "msg"], counted.method, 30);
+  expect(counted.calls[0]?.args).toEqual([ERROR_MARKER]);
+  expect(counter.failed).toBe(1);
+
+  const uncounted = spyMethod();
+  const bare = createRedactingLogMethodWith(fakeScanAndRedact, { limits: { maxDepth: 0 } });
+  callHook(bare, {}, ["token is SECRET_TOKEN_1"], uncounted.method, 30);
+  expect(uncounted.calls[0]?.args).toEqual([ERROR_MARKER]);
 });
