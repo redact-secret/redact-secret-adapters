@@ -68,7 +68,7 @@ train. A version in the second column exists only here until that train is cut.
 | `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.2`, beta | `0.1.2` |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.1`, beta | `0.1.1` |
 | `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.1`, beta | `0.1.1` |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.1`, beta | `0.1.1` |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.26.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.1`, beta | `0.1.1` |
 
 A prerelease publishes under the npm dist-tag `alpha`, never `latest`, so it is
 opt-in by tag or exact version. pip skips a pre-release unless asked for one.
@@ -426,7 +426,7 @@ exercises, at both ends of the declared range.
 | `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger`: filter before formatter, `QueueHandler`/`QueueListener`, threads sharing one handler, a failing handler |
 | `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | real spans through simple and batch processors, spans from threads, a failing exporter, flush and shutdown |
 | `adapter-ai-context` (prerelease) | `@redact-secret/core ^0.1.0-beta.6` (no host) | the core's AI-context conformance fixture replayed on the real core before and after `initialize()`, and an end-to-end agent turn with every limit |
-| `adapter-mcp` (prerelease) | `@modelcontextprotocol/sdk >=1.13.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-06-18 and 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
+| `adapter-mcp` (prerelease) | `@modelcontextprotocol/sdk >=1.26.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
 
 [`compatibility.json`](./compatibility.json) is the machine-readable form of
 this table: every declared range, the endpoints CI installs, the runtimes it
