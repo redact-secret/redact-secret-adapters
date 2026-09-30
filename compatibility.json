@@ -62,6 +62,43 @@
       ]
     },
     {
+      "name": "@redact-secret/adapter-otel-trace",
+      "registry": "npm",
+      "manifest": "packages/adapter-otel-trace/package.json",
+      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "ciExercised": ["20", "22", "24"] },
+      "requires": [
+        {
+          "name": "@opentelemetry/sdk-trace-base",
+          "range": "^2.0.0",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "2.0.0", "highest": "2.11.0" }
+        },
+        {
+          "name": "@redact-secret/core",
+          "range": "^0.1.0-beta.6",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.11" }
+        }
+      ],
+      "lifecycle": [
+        "SimpleSpanProcessor and BatchSpanProcessor wrapped by the redacting processor",
+        "span name, string and string-array attributes, events, status message, and link attributes",
+        "the OTLP JSON bytes an exporter sends, for the injected processor and the live factory on the real core",
+        "concurrent spans from interleaved async tasks",
+        "an exporter that fails through its result callback or by throwing, with SDK diagnostics captured",
+        "forceFlush and shutdown forwarding, and spans ended after shutdown",
+        "traces only: OpenTelemetry Logs (LogRecord) are not a qualified host of this package"
+      ],
+      "qualifiedBy": [
+        "packages/adapter-otel-trace/test/otel-host.test.ts",
+        "packages/adapter-otel-trace/test/otel-lifecycle.test.ts",
+        "packages/adapter-otel-trace/test/exporter-bytes.test.ts",
+        "packages/adapter-otel-trace/test/outcome.test.ts",
+        "packages/adapter-otel-trace/test/vault-token.test.ts",
+        "packages/adapter/test/activation-live.test.ts"
+      ]
+    },
+    {
       "name": "@redact-secret/adapter-otel",
       "registry": "npm",
       "manifest": "packages/adapter-otel/package.json",
@@ -81,17 +118,15 @@
         }
       ],
       "lifecycle": [
-        "SimpleSpanProcessor and BatchSpanProcessor wrapped by the redacting processor",
-        "span name, string and string-array attributes, events, status message, and link attributes",
-        "concurrent spans from interleaved async tasks",
-        "an exporter that fails through its result callback or by throwing, with SDK diagnostics captured",
-        "forceFlush and shutdown forwarding, and spans ended after shutdown"
+        "deprecated name: re-exports @redact-secret/adapter-otel-trace, whose lifecycle above applies unchanged",
+        "the same export list and the same objects as @redact-secret/adapter-otel-trace",
+        "the same OTLP JSON bytes as @redact-secret/adapter-otel-trace for one span through a real BatchSpanProcessor, injected and live on the real core"
       ],
       "qualifiedBy": [
-        "packages/adapter-otel/test/otel-host.test.ts",
-        "packages/adapter-otel/test/otel-lifecycle.test.ts",
-        "packages/adapter-otel/test/outcome.test.ts",
-        "packages/adapter-otel/test/vault-token.test.ts",
+        "packages/adapter-otel/test/compat-shim.test.ts",
+        "packages/adapter-otel-trace/test/otel-host.test.ts",
+        "packages/adapter-otel-trace/test/otel-lifecycle.test.ts",
+        "packages/adapter-otel-trace/test/exporter-bytes.test.ts",
         "packages/adapter/test/activation-live.test.ts"
       ]
     },
@@ -234,7 +269,13 @@
       "host": "@opentelemetry/sdk-trace-base",
       "versions": "<2.0.0 or >=3.0.0",
       "enforcement": "refused",
-      "how": "peerDependencies ^2.0.0: npm 7 and later stop with ERESOLVE (checked 2026-09-25 with npm 11.4.1: adapter-otel@0.1.0 with sdk-trace-base@1 fails) unless --legacy-peer-deps or --force overrides it"
+      "how": "peerDependencies ^2.0.0: npm 7 and later stop with ERESOLVE (checked 2026-09-25 with npm 11.4.1: adapter-otel@0.1.0 with sdk-trace-base@1 fails) unless --legacy-peer-deps or --force overrides it; adapter-otel-trace declares the same range"
+    },
+    {
+      "host": "OpenTelemetry JS Logs (@opentelemetry/sdk-logs, LogRecord)",
+      "versions": "all",
+      "enforcement": "documented",
+      "how": "adapter-otel-trace and adapter-otel are span processors: a LogRecord never passes through them. Their READMEs, and the repository README, say that OpenTelemetry Logs are not protected; @redact-secret/adapter-otel-logs is a reserved name, not a package (#49)"
     },
     {
       "host": "@redact-secret/core",

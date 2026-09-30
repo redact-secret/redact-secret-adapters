@@ -7,7 +7,7 @@
 
 import { describe, expect, test } from "vitest";
 
-import { distTagFor, outputLines, PACKAGES, planEntry, planTable } from "../release-plan.mjs";
+import { distTagFor, outputLines, PACKAGES, planEntry, planTable, unreleasedDependencies } from "../release-plan.mjs";
 
 describe("distTagFor", () => {
   test.each([
@@ -82,6 +82,41 @@ describe("the plan", () => {
     expect(planTable([planEntry(npmPkg, "0.1.0-alpha", false)])).toContain(
       "| @redact-secret/adapter | npm | 0.1.0-alpha | alpha | **publish** |",
     );
+  });
+
+  test("a package depending on an unreleased workspace package is caught (#49)", () => {
+    const workspaces = new Set([
+      "@redact-secret/adapter",
+      "@redact-secret/adapter-otel-trace",
+      "@redact-secret/adapter-otel",
+    ]);
+    const released = new Set(PACKAGES.map((p) => p.name));
+    const shim = { dependencies: { "@redact-secret/adapter-otel-trace": "^0.1.0", tslib: "^2.0.0" } };
+    expect(unreleasedDependencies(shim, workspaces, released)).toEqual(
+      released.has("@redact-secret/adapter-otel-trace") ? [] : ["@redact-secret/adapter-otel-trace"],
+    );
+    expect(
+      unreleasedDependencies(shim, workspaces, new Set([...released, "@redact-secret/adapter-otel-trace"])),
+    ).toEqual([]);
+    expect(
+      unreleasedDependencies({ dependencies: { "@redact-secret/adapter": "^0.1.3" } }, workspaces, released),
+    ).toEqual([]);
+    expect(unreleasedDependencies({}, workspaces, released)).toEqual([]);
+  });
+
+  test("the adapter-otel-trace and adapter-otel manifests agree with the release plan (#49)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const read = (path) => JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), "utf-8"));
+    const trace = read("packages/adapter-otel-trace/package.json");
+    const shim = read("packages/adapter-otel/package.json");
+    const ids = PACKAGES.map((p) => p.id);
+    // Unreleased means private and unplanned; released means planned before the name that re-exports it.
+    expect(trace.private === true).toBe(!ids.includes("adapter_otel_trace"));
+    if (ids.includes("adapter_otel_trace")) {
+      expect(ids.indexOf("adapter_otel_trace")).toBeLessThan(ids.indexOf("adapter_otel"));
+    }
+    expect(shim.dependencies).toEqual({ "@redact-secret/adapter-otel-trace": expect.any(String) });
+    expect(shim.peerDependencies).toEqual(trace.peerDependencies);
   });
 
   test("every npm package's declared version has a dist-tag", async () => {

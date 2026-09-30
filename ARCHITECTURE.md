@@ -204,6 +204,18 @@ took a test that logs from a getter to catch it.
 
 ### OpenTelemetry
 
+`@redact-secret/adapter-otel-trace` is a **trace** integration: a
+`SpanProcessor`, which sees spans and nothing else. OpenTelemetry Logs
+(`LogRecord`s through `@opentelemetry/sdk-logs` or a log bridge) and metrics
+never reach it. The package was published as `@redact-secret/adapter-otel`
+up to `0.1.2`; that name is now a compatibility package that re-exports
+`adapter-otel-trace` unchanged and marks every export `@deprecated`, so
+existing imports keep working. `adapter-otel-logs` is reserved for a Logs
+integration once a `LogRecordProcessor` boundary has been designed and
+qualified against a real SDK; nothing implements it yet. The choice and its
+release consequences are recorded in
+[docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md](docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md).
+
 The processor wraps any object shaped like a `SpanProcessor` and, in `onEnd`
 before delegating, redacts every free-text field an exporter sends: the span
 name, string and string-array attributes (keeping `null` holes in place), each
@@ -445,6 +457,9 @@ so that is a test, not an assumption.
   never patches a client.
 - **LangChain**, and any other framework integration whose host contract has not
   been read and tested here.
+- **OpenTelemetry Logs and metrics.** `adapter-otel-trace` is a span
+  processor. A `LogRecordProcessor` needs its own design and real-SDK
+  qualification; `adapter-otel-logs` is reserved for it, not implemented.
 - **A Langfuse package.** Masking-callback hosts need the shared walker and one
   line of user code; a package would add a release surface and change nothing.
 
@@ -454,7 +469,8 @@ so that is a test, not an assumption.
 packages/
   adapter/              @redact-secret/adapter          shared L1 + L2, TypeScript
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
-  adapter-otel/         @redact-secret/adapter-otel     L3 + live wrapper
+  adapter-otel-trace/   @redact-secret/adapter-otel-trace  L3 + live wrapper, traces only (unreleased)
+  adapter-otel/         @redact-secret/adapter-otel     deprecated name: re-exports adapter-otel-trace
   adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper (unreleased)
   adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context (unreleased)
 python/

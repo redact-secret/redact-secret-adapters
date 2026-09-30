@@ -38,7 +38,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readdirSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 // `id` is the output-key stem the workflows read (`publish_adapter_pino`,
@@ -60,6 +60,14 @@ export const PACKAGES = [
     changelog: "packages/adapter-pino/CHANGELOG.md",
     tag: "adapter-pino",
   },
+  // `@redact-secret/adapter-otel-trace` (#49) is still `"private": true` and
+  // so not listed. Its first release adds it here, before adapter_otel, which
+  // re-exports it:
+  //   { id: "adapter_otel_trace", name: "@redact-secret/adapter-otel-trace", registry: "npm",
+  //     manifest: "packages/adapter-otel-trace/package.json",
+  //     changelog: "packages/adapter-otel-trace/CHANGELOG.md", tag: "adapter-otel-trace" },
+  // The publish job, rehearsal dry run, tags, report and release notes for it
+  // are already wired and stay inert until then.
   {
     id: "adapter_otel",
     name: "@redact-secret/adapter-otel",
@@ -148,6 +156,29 @@ export function outputLines(plan) {
     )}`,
   );
   return lines;
+}
+
+/**
+ * The runtime dependencies of `manifest` that are packages of this repository
+ * no train releases (`"private": true`, so absent from PACKAGES). Publishing a
+ * package with one would hand consumers a dependency the registry does not
+ * have: `@redact-secret/adapter-otel` re-exports
+ * `@redact-secret/adapter-otel-trace`, so bumping it before the trace package's
+ * first release must stop the train, not ship an uninstallable package (#49).
+ */
+export function unreleasedDependencies(manifest, workspaceNames, releasedNames) {
+  return Object.keys(manifest.dependencies ?? {})
+    .filter((name) => workspaceNames.has(name) && !releasedNames.has(name))
+    .sort();
+}
+
+function workspaceNames() {
+  const packagesDir = new URL("packages/", root);
+  return new Set(
+    readdirSync(packagesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => JSON.parse(readFileSync(new URL(`${entry.name}/package.json`, packagesDir), "utf-8")).name),
+  );
 }
 
 export function planTable(plan) {
@@ -249,7 +280,17 @@ async function main() {
   }
 
   const problems = [];
+  const workspaces = workspaceNames();
+  const released = new Set(PACKAGES.map((pkg) => pkg.name));
   for (const p of plan) {
+    if (p.publish && p.registry === "npm") {
+      const manifest = JSON.parse(readFileSync(new URL(p.manifest, root), "utf-8"));
+      for (const name of unreleasedDependencies(manifest, workspaces, released)) {
+        problems.push(
+          `${p.name}@${p.version} depends on ${name}, which no train releases yet ("private": true, not in PACKAGES): release ${name} first`,
+        );
+      }
+    }
     if (args.has("--check-changelog") && p.publish && !hasChangelogEntry(p, p.version)) {
       problems.push(`${p.changelog} has no "## [${p.version}]" heading for the version ${p.manifest} declares`);
     }
