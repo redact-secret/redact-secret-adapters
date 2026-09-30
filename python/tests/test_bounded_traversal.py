@@ -46,6 +46,16 @@ def build_shape(shape: dict[str, Any]) -> Any:
     if kind == "cube":
         side = shape["side"]
         return [[[leaf] * side for _ in range(side)] for _ in range(side)]
+    if kind == "cause-chain":
+        error = ValueError(leaf)
+        for _ in range(shape["depth"]):
+            wrapper = ValueError("wrapper")
+            wrapper.__cause__ = error
+            error = wrapper
+        return error
+    if kind == "shared-reference":
+        shared = {"leaf": leaf}
+        return {"x": shared, "y": shared}
     if kind == "long-string":
         return "x" * shape["length"] + " " + leaf
     raise ValueError(f"unknown shape kind: {kind}")
@@ -62,6 +72,10 @@ class BoundedTraversalTest(unittest.TestCase):
                 self.assertLessEqual(len(scanner.calls), case["maxScannerCalls"])
                 self.assertNotIn(case["shape"]["leaf"], serialized)
                 self.assertIn(case["mustContain"], serialized)
+                if "mustNotContain" in case:
+                    self.assertNotIn(case["mustNotContain"], serialized)
+                if "expected" in case:
+                    self.assertEqual(result, case["expected"])
 
 
 if __name__ == "__main__":

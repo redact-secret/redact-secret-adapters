@@ -29,6 +29,8 @@ interface BoundedCase {
   readonly limits: Partial<Limits>;
   readonly maxScannerCalls: number;
   readonly mustContain: string;
+  readonly mustNotContain?: string;
+  readonly expected?: unknown;
 }
 
 const path = fileURLToPath(new URL("../../../fixtures/bounded-traversal-cases.json", import.meta.url));
@@ -56,6 +58,15 @@ function buildShape(shape: Shape): unknown {
       Array.from({ length: side }, () => Array.from({ length: side }, () => leaf)),
     );
   }
+  if (kind === "cause-chain") {
+    let error = new Error(leaf);
+    for (let level = 0; level < (shape.depth ?? 0); level += 1) error = new Error("wrapper", { cause: error });
+    return error;
+  }
+  if (kind === "shared-reference") {
+    const shared = { leaf };
+    return { x: shared, y: shared };
+  }
   if (kind === "long-string") return `${"x".repeat(shape.length ?? 0)} ${leaf}`;
   throw new Error(`unknown shape kind: ${kind}`);
 }
@@ -70,6 +81,8 @@ test("the shared bounded-traversal cases cover every shape kind", () => {
       "wide-object",
       "cube",
       "long-string",
+      "cause-chain",
+      "shared-reference",
     ]),
   );
 });
@@ -86,5 +99,7 @@ for (const boundedCase of cases) {
     expect(calls).toBeLessThanOrEqual(boundedCase.maxScannerCalls);
     expect(serialized).not.toContain(boundedCase.shape.leaf);
     expect(serialized).toContain(boundedCase.mustContain);
+    if (boundedCase.mustNotContain !== undefined) expect(serialized).not.toContain(boundedCase.mustNotContain);
+    if (boundedCase.expected !== undefined) expect(result).toEqual(boundedCase.expected);
   });
 }

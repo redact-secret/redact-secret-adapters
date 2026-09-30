@@ -60,6 +60,21 @@ test("a leaf past maxStringLength is never sent to the core", () => {
   expect(called).toBe(false);
 });
 
+test("maxStringLength is inclusive: a string of exactly that length is scanned", () => {
+  // "SECRET_TOKEN_7" is 14 characters.
+  expect(maskLeafWith(fakeScanAndRedact, "SECRET_TOKEN_7", { maxStringLength: 14 })).toBe("<SECRET_1>");
+  expect(maskLeafWith(fakeScanAndRedact, "SECRET_TOKEN_70", { maxStringLength: 14 })).toBe(LIMIT_MARKER);
+});
+
+test("maxStringLength 0 limits every non-empty string; a non-number falls back to the default", () => {
+  expect(maskLeafWith(fakeScanAndRedact, "a", { maxStringLength: 0 })).toBe(LIMIT_MARKER);
+  expect(maskLeafWith(fakeScanAndRedact, "", { maxStringLength: 0 })).toBe("");
+  for (const maxStringLength of [null, "5", true]) {
+    const options = { maxStringLength } as unknown as { maxStringLength: number };
+    expect(maskLeafWith(fakeScanAndRedact, "SECRET_TOKEN_7", options), String(maxStringLength)).toBe("<SECRET_1>");
+  }
+});
+
 test("rejects a non-string leaf", () => {
   expect(() => maskLeafWith(fakeScanAndRedact, 42 as unknown as string)).toThrow(TypeError);
 });

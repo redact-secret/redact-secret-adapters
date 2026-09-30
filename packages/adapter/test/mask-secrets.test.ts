@@ -216,3 +216,31 @@ test("preserves prototype-named JSON keys as redacted own data", () => {
   );
   expect(Object.getOwnPropertyDescriptor(input, "__proto__")?.value.value).toBe("SECRET_TOKEN_1");
 });
+
+// The cause-chain and shared-reference cases live in
+// fixtures/bounded-traversal-cases.json, so the Python walker runs them too.
+
+test("a boxed primitive is its primitive: a String is masked whole, never walked per character", () => {
+  expect(maskSecretsWith(fakeScanAndRedact, new String("SECRET_TOKEN_7"))).toBe("<SECRET_1>");
+  expect(maskSecretsWith(fakeScanAndRedact, { n: new Number(7), b: new Boolean(false) })).toEqual({ n: 7, b: false });
+});
+
+test("a revoked Proxy fails closed to the error marker, at the root and inside a value", () => {
+  const { proxy, revoke } = Proxy.revocable({}, {});
+  revoke();
+  expect(maskSecretsWith(fakeScanAndRedact, proxy)).toBe(ERROR_MARKER);
+  expect(maskSecretsWith(fakeScanAndRedact, { inner: proxy, kept: "SECRET_TOKEN_7" })).toEqual({
+    inner: ERROR_MARKER,
+    kept: "<SECRET_1>",
+  });
+});
+
+test("an Error without a cause gets no cause key", () => {
+  expect(Object.hasOwn(maskSecretsWith(fakeScanAndRedact, new Error("plain")) as Masked, "cause")).toBe(false);
+});
+
+test("a toJSON that returns a fresh toJSON object on every call ends at the depth limit", () => {
+  const fresh = (): object => ({ toJSON: fresh });
+  expect(maskSecretsWith(fakeScanAndRedact, fresh())).toBe(LIMIT_MARKER);
+  expect(maskSecretsWith(fakeScanAndRedact, { a: fresh() }, { limits: { maxDepth: 3 } })).toEqual({ a: LIMIT_MARKER });
+});
