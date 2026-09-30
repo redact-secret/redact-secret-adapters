@@ -1,5 +1,5 @@
 {
-  "description": "Pathological value trees for the shared walker (#11). Each case names a shape that both languages build from the same parameters, instead of storing multi-megabyte JSON. Every case asserts that the walk terminates, never passes the planted synthetic secret through, and calls the scanner no more often than the named limit allows. `maxScannerCalls` is an upper bound, not an expected count.",
+  "description": "Pathological value trees for the shared walker (#11). Each case names a shape that both languages build from the same parameters, instead of storing multi-megabyte JSON. Every case asserts that the walk terminates, never passes the planted synthetic secret through, and calls the scanner no more often than the named limit allows. `maxScannerCalls` is an upper bound, not an expected count. A `cause-chain` is an error whose cause is an error, `depth` levels deep, with the leaf only in the innermost message. A `shared-reference` is `{x: s, y: s}` for one non-cyclic `s = {leaf}`. Optional: `mustNotContain`, a string the serialized result must not contain, and `expected`, the exact result.",
   "cases": [
     {
       "name": "deeply_nested_arrays",
@@ -56,6 +56,22 @@
       "limits": { "maxDepth": 3, "maxArrayLength": 10, "maxTotalLeaves": 50 },
       "maxScannerCalls": 50,
       "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "cause_chain_deeper_than_max_depth",
+      "shape": { "kind": "cause-chain", "depth": 20, "leaf": "SECRET_TOKEN_1" },
+      "limits": {},
+      "maxScannerCalls": 24,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "shared_acyclic_reference_is_masked_at_every_path",
+      "shape": { "kind": "shared-reference", "leaf": "SECRET_TOKEN_1" },
+      "limits": {},
+      "maxScannerCalls": 2,
+      "mustContain": "<SECRET_1>",
+      "mustNotContain": "[REDACTED:CYCLE]",
+      "expected": { "x": { "leaf": "<SECRET_1>" }, "y": { "leaf": "<SECRET_1>" } }
     }
   ]
 }
