@@ -43,7 +43,7 @@ hosts actually move at.
 | I want to protect | Install | Status | Where it attaches | Not covered |
 | --- | --- | --- | --- | --- |
 | **pino** log lines | `npm i @redact-secret/core @redact-secret/adapter-pino pino` | released | `pino({ hooks })` — both hooks, from one `createRedactingHooks()` call | object *keys*; anything a destination or transport adds after `streamWrite` |
-| **OpenTelemetry JS** traces (spans) | `npm i @redact-secret/core @redact-secret/adapter-otel-trace @opentelemetry/sdk-trace-base` (before its first release: `@redact-secret/adapter-otel`, the same code) | released as `adapter-otel`; `adapter-otel-trace` is not yet published | wraps the next `SpanProcessor` in your provider's `spanProcessors` | OpenTelemetry **Logs** and metrics; attribute names; spans the wrapped processor never receives (sampled out, a processor registered ahead of it) |
+| **OpenTelemetry JS** traces (spans) | `npm i @redact-secret/core @redact-secret/adapter-otel-trace @opentelemetry/sdk-trace-base` | released (`adapter-otel-trace`; `adapter-otel` is the deprecated name) | wraps the next `SpanProcessor` in your provider's `spanProcessors` | OpenTelemetry **Logs** and metrics; attribute names; spans the wrapped processor never receives (sampled out, a processor registered ahead of it) |
 | Python **`logging`** records | `pip install redact-secret redact-secret-adapters` | released | `handler.addFilter(...)` on **every emitting handler** | record attributes not named in `extra_fields`; handlers without the filter |
 | **OpenTelemetry Python** traces (spans) | `pip install redact-secret "redact-secret-adapters[otel]"` | released | wraps the next span processor | as OpenTelemetry JS, plus: a span whose private fields will not take the write is **dropped**, not exported |
 | OpenTelemetry **Logs** (`LogRecord`s, JS or Python) | — | **not covered** | nothing here sees a log record | everything: `adapter-otel-logs` is a reserved name, not a package |
@@ -67,8 +67,8 @@ train. A version in the second column exists only here until that train is cut.
 | --- | --- | --- | --- | --- |
 | `@redact-secret/adapter` | npm | — (shared base) | `0.1.5`, beta | `0.1.5` |
 | `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
-| `@redact-secret/adapter-otel-trace` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` (traces only) | — not yet published | `0.1.0` |
-| `@redact-secret/adapter-otel` | npm | deprecated name: re-exports `adapter-otel-trace` | `0.1.2`, beta | `0.1.3` (re-export) |
+| `@redact-secret/adapter-otel-trace` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` (traces only) | `0.1.0` | `0.1.0` |
+| `@redact-secret/adapter-otel` | npm | deprecated name: re-exports `adapter-otel-trace` | `0.1.3`, deprecated re-export | `0.1.3` |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.2`, beta | `0.1.2` |
 | `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.1`, beta | `0.1.1` |
 | `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.26.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.2`, beta | `0.1.2` |
@@ -188,10 +188,9 @@ protected by anything in this repository; nor are metrics.
 
 The package was published as `@redact-secret/adapter-otel` up to `0.1.2`, and
 `@redact-secret/adapter-otel-trace` is its trace-only name from its first
-release (redact-secret/redact-secret-adapters#49). Until that is on npm,
-install `@redact-secret/adapter-otel`, which is the same code. Existing
-`@redact-secret/adapter-otel` imports keep working after it: the old name
-re-exports the new one, and migrating is an import-specifier change —
+release, `0.1.0` (redact-secret/redact-secret-adapters#49). From `0.1.3`,
+`@redact-secret/adapter-otel` is deprecated on npm. Existing imports keep
+working: the old name re-exports the new one, and migrating is an import-specifier change —
 [migration guide](./packages/adapter-otel-trace#migrating-from-redact-secretadapter-otel).
 
 ### Python `logging`
