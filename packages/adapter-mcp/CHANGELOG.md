@@ -36,6 +36,12 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   `sanitizeToolResult`, `sanitizeResourceResult` and the wrapped handlers as an
   exception. The boundary now passes on the string it checked. Backed by
   `test/boundary-edges.test.ts` (#91).
+- A streamed-result step whose `done` or `value` getter throws is now
+  `tool_error`, and the boundary aborts the session and closes the producer.
+  Before, the getter's error escaped
+  `sanitizeStreamedToolResult` and `wrapStreamedToolHandler` as a rejection
+  carrying the producer's own error, and the session stayed open. Backed by
+  `test/boundary-edges.test.ts` (#92).
 
 ## [0.1.1] - 2026-09-29
 ### Fixed
