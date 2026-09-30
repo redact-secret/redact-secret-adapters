@@ -17,10 +17,10 @@
       "id": "adapter",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter@0.1.4",
+      "gitTag": "adapter@0.1.5",
       "sourcePath": "packages/adapter",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter",
       "runtime": {
@@ -134,12 +134,7 @@
           }
         }
       ],
-      "dependsOn": [
-        {
-          "name": "@redact-secret/adapter",
-          "range": "^0.1.3"
-        }
-      ]
+      "dependsOn": []
     },
     {
       "id": "adapter-ai-context",
@@ -182,10 +177,10 @@
       "id": "adapter-mcp",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-mcp",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-mcp@0.1.1",
+      "gitTag": "adapter-mcp@0.1.2",
       "sourcePath": "packages/adapter-mcp",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-mcp",
       "runtime": {
@@ -220,11 +215,11 @@
         },
         {
           "name": "@modelcontextprotocol/sdk",
-          "range": ">=1.13.0 <=1.30.1",
+          "range": ">=1.26.0 <=1.30.1",
           "kind": "peerDependency",
           "optional": true,
           "tested": {
-            "lowest": "1.13.0",
+            "lowest": "1.26.0",
             "highest": "1.30.1"
           }
         },
@@ -250,10 +245,10 @@
       "id": "redact-secret-adapters",
       "ecosystem": "pypi",
       "name": "redact-secret-adapters",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "redact-secret-adapters@0.1.1",
+      "gitTag": "redact-secret-adapters@0.1.2",
       "sourcePath": "python",
       "registryUrl": "https://pypi.org/project/redact-secret-adapters/",
       "runtime": {

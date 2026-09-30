@@ -12,6 +12,7 @@
 **JavaScript(npm)**
 [![npm: @redact-secret/adapter](https://img.shields.io/npm/v/@redact-secret/adapter?label=%40redact-secret%2Fadapter)](https://www.npmjs.com/package/@redact-secret/adapter)
 [![npm: @redact-secret/adapter-pino](https://img.shields.io/npm/v/@redact-secret/adapter-pino?label=%40redact-secret%2Fadapter-pino)](https://www.npmjs.com/package/@redact-secret/adapter-pino)
+[![npm: @redact-secret/adapter-otel-trace](https://img.shields.io/npm/v/@redact-secret/adapter-otel-trace?label=%40redact-secret%2Fadapter-otel-trace&registry_uri=https%3A%2F%2Fregistry.npmjs.org)](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace)
 [![npm: @redact-secret/adapter-otel](https://img.shields.io/npm/v/@redact-secret/adapter-otel?label=%40redact-secret%2Fadapter-otel)](https://www.npmjs.com/package/@redact-secret/adapter-otel)
 [![npm: @redact-secret/adapter-ai-context](https://img.shields.io/npm/v/@redact-secret/adapter-ai-context?label=%40redact-secret%2Fadapter-ai-context&registry_uri=https%3A%2F%2Fregistry.npmjs.org)](https://www.npmjs.com/package/@redact-secret/adapter-ai-context)
 [![npm: @redact-secret/adapter-mcp](https://img.shields.io/npm/v/@redact-secret/adapter-mcp?label=%40redact-secret%2Fadapter-mcp&registry_uri=https%3A%2F%2Fregistry.npmjs.org)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
@@ -42,9 +43,10 @@ hosts actually move at.
 | I want to protect | Install | Status | Where it attaches | Not covered |
 | --- | --- | --- | --- | --- |
 | **pino** log lines | `npm i @redact-secret/core @redact-secret/adapter-pino pino` | released | `pino({ hooks })` — both hooks, from one `createRedactingHooks()` call | object *keys*; anything a destination or transport adds after `streamWrite` |
-| **OpenTelemetry JS** spans | `npm i @redact-secret/core @redact-secret/adapter-otel @opentelemetry/sdk-trace-base` | released | wraps the next `SpanProcessor` in your provider's `spanProcessors` | attribute names; spans the wrapped processor never receives (sampled out, a processor registered ahead of it) |
+| **OpenTelemetry JS** traces (spans) | `npm i @redact-secret/core @redact-secret/adapter-otel-trace @opentelemetry/sdk-trace-base` (before its first release: `@redact-secret/adapter-otel`, the same code) | released as `adapter-otel`; `adapter-otel-trace` is not yet published | wraps the next `SpanProcessor` in your provider's `spanProcessors` | OpenTelemetry **Logs** and metrics; attribute names; spans the wrapped processor never receives (sampled out, a processor registered ahead of it) |
 | Python **`logging`** records | `pip install redact-secret redact-secret-adapters` | released | `handler.addFilter(...)` on **every emitting handler** | record attributes not named in `extra_fields`; handlers without the filter |
-| **OpenTelemetry Python** spans | `pip install redact-secret "redact-secret-adapters[otel]"` | released | wraps the next span processor | as OpenTelemetry JS, plus: a span whose private fields will not take the write is **dropped**, not exported |
+| **OpenTelemetry Python** traces (spans) | `pip install redact-secret "redact-secret-adapters[otel]"` | released | wraps the next span processor | as OpenTelemetry JS, plus: a span whose private fields will not take the write is **dropped**, not exported |
+| OpenTelemetry **Logs** (`LogRecord`s, JS or Python) | — | **not covered** | nothing here sees a log record | everything: `adapter-otel-logs` is a reserved name, not a package |
 | A host that hands you a value to **mask** (Langfuse and similar) | `npm i @redact-secret/core @redact-secret/adapter` / `pip install redact-secret redact-secret-adapters` | released | the host's `mask` callback | whatever the host does not route through that callback |
 | **AI context** — user input, tool results, a built context, streamed text | `npm i @redact-secret/core @redact-secret/adapter-ai-context` | released | your own code, where the context is built | binary/non-JSON values and encoded text (refused, not decoded); model *output* |
 | **MCP** `tools/call` and `resources/read` results | `npm i @redact-secret/core @redact-secret/adapter-mcp` | released | around your `callTool` / tool handler | MCP methods other than those two; binary payloads (blocked by default) |
@@ -63,12 +65,13 @@ train. A version in the second column exists only here until that train is cut.
 
 | Package | Registry | Host | Published — installable now | Declared on `develop` |
 | --- | --- | --- | --- | --- |
-| `@redact-secret/adapter` | npm | — (shared base) | `0.1.3`, beta | `0.1.4` |
+| `@redact-secret/adapter` | npm | — (shared base) | `0.1.3`, beta | `0.1.5` |
 | `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
-| `@redact-secret/adapter-otel` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` | `0.1.2`, beta | `0.1.2` |
-| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.1`, beta | `0.1.1` |
+| `@redact-secret/adapter-otel-trace` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` (traces only) | — not yet published | `0.1.0`, unreleased (`private` until its first train) |
+| `@redact-secret/adapter-otel` | npm | deprecated name: re-exports `adapter-otel-trace` | `0.1.2`, beta | `0.1.2` (re-export; unreleased) |
+| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.1`, beta | `0.1.2` |
 | `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.1`, beta | `0.1.1` |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.13.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.1`, beta | `0.1.1` |
+| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.26.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.1`, beta | `0.1.2` |
 
 A prerelease publishes under the npm dist-tag `alpha`, never `latest`, so it is
 opt-in by tag or exact version. pip skips a pre-release unless asked for one.
@@ -160,11 +163,11 @@ separately, and `0.1.0` has no `streamWrite` hook at all. Full ordering rules,
 the executable example, and what stays outside the boundary: the
 [package README](./packages/adapter-pino#readme).
 
-### OpenTelemetry
+### OpenTelemetry traces
 
 ```js
 import { NodeTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-node";
-import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel";
+import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel-trace";
 
 const provider = new NodeTracerProvider({
   spanProcessors: [await createRedactingSpanProcessor(new BatchSpanProcessor(exporter))],
@@ -178,6 +181,18 @@ name, event names, the status message and link attributes are redacted too
 allowlisted, so OpenInference (`llm.input_messages`, `input.value`, …) and GenAI
 semantic-convention attributes (`gen_ai.prompt`, …) are covered without
 hardcoding either convention.
+
+This is a **trace** processor. OpenTelemetry **Logs** — a `LogRecord` from
+`@opentelemetry/sdk-logs` or a log bridge — never pass through it and are not
+protected by anything in this repository; nor are metrics.
+
+The package was published as `@redact-secret/adapter-otel` up to `0.1.2`, and
+`@redact-secret/adapter-otel-trace` is its trace-only name from its first
+release (redact-secret/redact-secret-adapters#49). Until that is on npm,
+install `@redact-secret/adapter-otel`, which is the same code. Existing
+`@redact-secret/adapter-otel` imports keep working after it: the old name
+re-exports the new one, and migrating is an import-specifier change —
+[migration guide](./packages/adapter-otel-trace#migrating-from-redact-secretadapter-otel).
 
 ### Python `logging`
 
@@ -306,8 +321,13 @@ Bounds (`DEFAULT_LIMITS`, overridable per call):
 | `maxObjectKeys` | 200 |
 | `maxStringLength` | 200000 |
 | `maxTotalLeaves` | 5000 |
+| `maxNodes` | 20000 |
 
-Elements and keys beyond a limit are dropped, not passed through.
+Elements and keys beyond a limit are dropped, not passed through. `maxNodes`
+counts every value visited, containers and leaves alike but not keys, once per
+path. It bounds the work for an in-process object graph with shared
+references, which the walk visits once per path. The Python walker uses the
+same limits in snake case (`max_nodes`, ...).
 
 ## PII detection is opt-in
 
@@ -337,7 +357,7 @@ const logger = pino({ hooks: await createRedactingHooks({ pii: ["pii:global"] })
 `createAiContextBoundary` and `createMcpBoundary`. When you pass it, the
 factory reads the core's `piiActivation()` afterwards and **refuses** if the
 active selection is not the one you asked for, rather than running with PII
-silently off — as a rejection in `adapter-pino` and `adapter-otel`, and as the
+silently off — as a rejection in `adapter-pino` and `adapter-otel-trace`, and as the
 usual fail-closed `blocked` / `core_error` in `adapter-ai-context` and
 `adapter-mcp`, which never reject. The refusal carries a fixed code
 (`PII_ACTIVATION_NOT_ACTIVE`, or `PII_ACTIVATION_UNSUPPORTED` against a core
@@ -422,11 +442,12 @@ exercises, at both ends of the declared range.
 | Adapter | Declared range | Verified by |
 | --- | --- | --- |
 | `adapter-pino` | `pino ^10.0.0` | a real `pino` logger: captured stream, sonic-boom async destination, worker-thread transport, concurrent loggers, a failing destination |
-| `adapter-otel` | `@opentelemetry/sdk-trace-base ^2.0.0` | real spans through `SimpleSpanProcessor` and `BatchSpanProcessor`, concurrent spans, a failing exporter, flush and shutdown |
+| `adapter-otel-trace` | `@opentelemetry/sdk-trace-base ^2.0.0` | real spans through `SimpleSpanProcessor` and `BatchSpanProcessor`, the OTLP JSON bytes the exporter sends, concurrent spans, a failing exporter, flush and shutdown. Traces only |
+| `adapter-otel` (deprecated name) | `@opentelemetry/sdk-trace-base ^2.0.0` | the same export list and objects as `adapter-otel-trace`, and the same OTLP JSON bytes for one span; the clean-install smoke test also compares the release on npm |
 | `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger`: filter before formatter, `QueueHandler`/`QueueListener`, threads sharing one handler, a failing handler |
 | `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | real spans through simple and batch processors, spans from threads, a failing exporter, flush and shutdown |
 | `adapter-ai-context` (prerelease) | `@redact-secret/core ^0.1.0-beta.6` (no host) | the core's AI-context conformance fixture replayed on the real core before and after `initialize()`, and an end-to-end agent turn with every limit |
-| `adapter-mcp` (prerelease) | `@modelcontextprotocol/sdk >=1.13.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-06-18 and 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
+| `adapter-mcp` (prerelease) | `@modelcontextprotocol/sdk >=1.26.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
 
 [`compatibility.json`](./compatibility.json) is the machine-readable form of
 this table: every declared range, the endpoints CI installs, the runtimes it

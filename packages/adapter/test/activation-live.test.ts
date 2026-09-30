@@ -82,6 +82,14 @@ const FACTORIES: readonly { name: string; build: string; probe: string }[] = [
     probe: `console.log(typeof made.logMethod === "function" && typeof made.streamWrite === "function" ? "MASKED" : "LEAKED");`,
   },
   {
+    name: "@redact-secret/adapter-otel-trace createRedactingSpanProcessor",
+    build: `const { createRedactingSpanProcessor } = await import(${JSON.stringify(dist("adapter-otel-trace"))});
+            const next = { onStart() {}, onEnd() {}, shutdown: async () => {}, forceFlush: async () => {} };
+            const made = await createRedactingSpanProcessor(next, OPTIONS);`,
+    probe: `console.log(typeof made.onEnd === "function" ? "MASKED" : "LEAKED");`,
+  },
+  {
+    // The deprecated name re-exports adapter-otel-trace; it must route through activateCore the same way.
     name: "@redact-secret/adapter-otel createRedactingSpanProcessor",
     build: `const { createRedactingSpanProcessor } = await import(${JSON.stringify(dist("adapter-otel"))});
             const next = { onStart() {}, onEnd() {}, shutdown: async () => {}, forceFlush: async () => {} };

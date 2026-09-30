@@ -94,6 +94,13 @@ describe("walkStrict", () => {
     expect(walkStrict([], { maxDepth: 0, maxNodes: 1 }, visitors)).toEqual({ ok: false, failure: "limit_exceeded" });
   });
 
+  test("arrays count toward maxDepth like objects: exactly maxDepth nested arrays pass, one more does not", () => {
+    const { visitors } = recorder();
+    expect(walkStrict([[["x"]]], LIMITS, visitors)).toEqual({ ok: true, value: [[["X"]]] });
+    expect(walkStrict([[[["x"]]]], LIMITS, visitors)).toEqual({ ok: false, failure: "limit_exceeded" });
+    expect(walkStrict({ a: [[[1]]] }, LIMITS, visitors)).toEqual({ ok: false, failure: "limit_exceeded" });
+  });
+
   const revoked = Proxy.revocable([], {});
   revoked.revoke();
   test.each([

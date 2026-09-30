@@ -1,13 +1,14 @@
 {
   "testRunner": "vitest",
   "vitest": {
-    "configFile": "vitest.config.ts"
+    "configFile": "vitest.stryker.config.ts"
   },
   "checkers": [],
+  "disableTypeChecks": "packages/*/{src,test}/**/*.{js,ts,mts,cts}",
   "coverageAnalysis": "perTest",
   "reporters": ["clear-text", "json"],
   "jsonReporter": {
-    "fileName": "reports/mutation/adapter-ai-context.json"
+    "fileName": "reports/mutation/mutation.json"
   },
   "tempDirName": ".stryker-tmp",
   "cleanTempDir": true,

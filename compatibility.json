@@ -62,6 +62,43 @@
       ]
     },
     {
+      "name": "@redact-secret/adapter-otel-trace",
+      "registry": "npm",
+      "manifest": "packages/adapter-otel-trace/package.json",
+      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "ciExercised": ["20", "22", "24"] },
+      "requires": [
+        {
+          "name": "@opentelemetry/sdk-trace-base",
+          "range": "^2.0.0",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "2.0.0", "highest": "2.11.0" }
+        },
+        {
+          "name": "@redact-secret/core",
+          "range": "^0.1.0-beta.6",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.11" }
+        }
+      ],
+      "lifecycle": [
+        "SimpleSpanProcessor and BatchSpanProcessor wrapped by the redacting processor",
+        "span name, string and string-array attributes, events, status message, and link attributes",
+        "the OTLP JSON bytes an exporter sends, for the injected processor and the live factory on the real core",
+        "concurrent spans from interleaved async tasks",
+        "an exporter that fails through its result callback or by throwing, with SDK diagnostics captured",
+        "forceFlush and shutdown forwarding, and spans ended after shutdown",
+        "traces only: OpenTelemetry Logs (LogRecord) are not a qualified host of this package"
+      ],
+      "qualifiedBy": [
+        "packages/adapter-otel-trace/test/otel-host.test.ts",
+        "packages/adapter-otel-trace/test/otel-lifecycle.test.ts",
+        "packages/adapter-otel-trace/test/exporter-bytes.test.ts",
+        "packages/adapter-otel-trace/test/outcome.test.ts",
+        "packages/adapter-otel-trace/test/vault-token.test.ts",
+        "packages/adapter/test/activation-live.test.ts"
+      ]
+    },
+    {
       "name": "@redact-secret/adapter-otel",
       "registry": "npm",
       "manifest": "packages/adapter-otel/package.json",
@@ -81,17 +118,15 @@
         }
       ],
       "lifecycle": [
-        "SimpleSpanProcessor and BatchSpanProcessor wrapped by the redacting processor",
-        "span name, string and string-array attributes, events, status message, and link attributes",
-        "concurrent spans from interleaved async tasks",
-        "an exporter that fails through its result callback or by throwing, with SDK diagnostics captured",
-        "forceFlush and shutdown forwarding, and spans ended after shutdown"
+        "deprecated name: re-exports @redact-secret/adapter-otel-trace, whose lifecycle above applies unchanged",
+        "the same export list and the same objects as @redact-secret/adapter-otel-trace",
+        "the same OTLP JSON bytes as @redact-secret/adapter-otel-trace for one span through a real BatchSpanProcessor, injected and live on the real core"
       ],
       "qualifiedBy": [
-        "packages/adapter-otel/test/otel-host.test.ts",
-        "packages/adapter-otel/test/otel-lifecycle.test.ts",
-        "packages/adapter-otel/test/outcome.test.ts",
-        "packages/adapter-otel/test/vault-token.test.ts",
+        "packages/adapter-otel/test/compat-shim.test.ts",
+        "packages/adapter-otel-trace/test/otel-host.test.ts",
+        "packages/adapter-otel-trace/test/otel-lifecycle.test.ts",
+        "packages/adapter-otel-trace/test/exporter-bytes.test.ts",
         "packages/adapter/test/activation-live.test.ts"
       ]
     },
@@ -140,9 +175,9 @@
         },
         {
           "name": "@modelcontextprotocol/sdk",
-          "range": ">=1.13.0 <=1.30.1",
+          "range": ">=1.26.0 <=1.30.1",
           "kind": "peerDependency (optional)",
-          "endpoints": { "lowest": "1.13.0", "highest": "1.30.1" }
+          "endpoints": { "lowest": "1.26.0", "highest": "1.30.1" }
         },
         {
           "name": "@modelcontextprotocol/server",
@@ -159,7 +194,7 @@
       ],
       "lifecycle": [
         "the core's mcp-boundary conformance fixture and runner, vendored at a pinned core commit, replayed through the public API on the real core before and after initialize()",
-        "the same fixture carried by real SDK 1.x and 2.x clients and servers over stdio (child process) and Streamable HTTP (127.0.0.1), protocol 2025-06-18 (1.13.0) and 2025-11-25 (1.30.1, 2.0.0, 2.1.0)",
+        "the same fixture carried by real SDK 1.x and 2.x clients and servers over stdio (child process) and Streamable HTTP (127.0.0.1), protocol 2025-11-25 (1.26.0, 1.30.1, 2.0.0, 2.1.0)",
         "resources/read (redact-secret/redact-secret#843): the core's mcp-resources-read fixture and runner, vendored at the same pinned core commit, replayed through the public API before and after initialize(), and carried by real SDK 1.x and 2.x clients and servers over stdio and Streamable HTTP at both endpoints of each line: host placement around client.readResource, and wrapResourceReadHandler on the low-level Server and McpServer.registerResource (fixed URI and URI template) sending exactly the fixed JSON-RPC error",
         "opt-in argument sanitation before dispatch: a blocked argument set never reaches the server",
         "server wrappers on the low-level Server and McpServer.registerTool: a throwing handler caught before the SDK converts its message",
@@ -171,6 +206,7 @@
         "packages/adapter-mcp/test/conformance.test.ts",
         "packages/adapter-mcp/test/conformance-uninitialized.test.ts",
         "packages/adapter-mcp/test/transport.test.ts",
+        "packages/adapter-mcp/test/resources-transport.test.ts",
         "packages/adapter-mcp/test/e2e.test.ts",
         "packages/adapter-mcp/test/boundary.test.ts",
         "packages/adapter-mcp/test/live-init-failure.test.ts",
@@ -233,7 +269,13 @@
       "host": "@opentelemetry/sdk-trace-base",
       "versions": "<2.0.0 or >=3.0.0",
       "enforcement": "refused",
-      "how": "peerDependencies ^2.0.0: npm 7 and later stop with ERESOLVE (checked 2026-09-25 with npm 11.4.1: adapter-otel@0.1.0 with sdk-trace-base@1 fails) unless --legacy-peer-deps or --force overrides it"
+      "how": "peerDependencies ^2.0.0: npm 7 and later stop with ERESOLVE (checked 2026-09-25 with npm 11.4.1: adapter-otel@0.1.0 with sdk-trace-base@1 fails) unless --legacy-peer-deps or --force overrides it; adapter-otel-trace declares the same range"
+    },
+    {
+      "host": "OpenTelemetry JS Logs (@opentelemetry/sdk-logs, LogRecord)",
+      "versions": "all",
+      "enforcement": "documented",
+      "how": "adapter-otel-trace and adapter-otel are span processors: a LogRecord never passes through them. Their READMEs, and the repository README, say that OpenTelemetry Logs are not protected; @redact-secret/adapter-otel-logs is a reserved name, not a package (#49)"
     },
     {
       "host": "@redact-secret/core",
@@ -243,9 +285,9 @@
     },
     {
       "host": "@modelcontextprotocol/sdk",
-      "versions": "<1.13.0 or >1.30.1",
+      "versions": "<1.26.0 or >1.30.1",
       "enforcement": "refused",
-      "how": "optional peerDependency >=1.13.0 <=1.30.1 on adapter-mcp: when the SDK is installed, npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it. The cap is the highest tested release: a newer one is unqualified until it is added as an endpoint here"
+      "how": "optional peerDependency >=1.26.0 <=1.30.1 on adapter-mcp: when the SDK is installed, npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it. The cap is the highest tested release: a newer one is unqualified until it is added as an endpoint here. The floor is 1.26.0, the first release clear of the high-severity advisories GHSA-w48q-cv73-mx4w, GHSA-8r9q-7v3j-jr4g and GHSA-345p-7cg4-v4c7: an older SDK is refused rather than qualified with them (#83)"
     },
     {
       "host": "@modelcontextprotocol/client and @modelcontextprotocol/server",

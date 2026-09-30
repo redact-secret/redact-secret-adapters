@@ -55,6 +55,12 @@ export interface Limits {
   readonly maxObjectKeys: number;
   readonly maxStringLength: number;
   readonly maxTotalLeaves: number;
+  /**
+   * Every value the walk visits — containers and leaves alike, not object
+   * keys — counts once per path it is reached by, as in `walkStrict`. Bounds
+   * the work for a shared-reference graph, which is walked once per path.
+   */
+  readonly maxNodes: number;
 }
 
 export interface MaskLeafOptions {

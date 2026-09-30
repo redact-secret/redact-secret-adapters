@@ -174,6 +174,15 @@ test("activationReflects refuses an identity it cannot parse rather than assumin
   expect(activationReflects(PII_ON, ["pii:global", "pii:global"])).toBe(true);
 });
 
+test("activationReflects reads selectors=off as no selectors, and tolerates whitespace around fields", () => {
+  expect(activationReflects("selectors=off", [])).toBe(true);
+  expect(activationReflects("selectors=off", ["pii:global"])).toBe(false);
+  expect(activationReflects("credentials=full; selectors = off ;", [])).toBe(true);
+  expect(activationReflects("credentials=full; selectors = pii:global , pii:eu ;", ["pii:eu", "pii:global"])).toBe(
+    true,
+  );
+});
+
 test("activePiiActivation reports the identity, once, outside the six-integer counter", async () => {
   await activateCore(fakeCore({ identity: PII_TWO }), { pii: ["pii:global"] });
   expect(activePiiActivation()).toBe(PII_TWO);

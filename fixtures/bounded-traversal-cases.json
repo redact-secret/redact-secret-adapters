@@ -1,60 +1,210 @@
 {
-  "description": "Pathological value trees for the shared walker (#11). Each case names a shape that both languages build from the same parameters, instead of storing multi-megabyte JSON. Every case asserts that the walk terminates, never passes the planted synthetic secret through, and calls the scanner no more often than the named limit allows. `maxScannerCalls` is an upper bound, not an expected count.",
+  "description": "Pathological value trees for the shared walker (#11). Each case names a shape that both languages build from the same parameters, instead of storing multi-megabyte JSON. Every case asserts that the walk terminates, never passes the planted synthetic secret through, and calls the scanner no more often than the named limit allows. `maxScannerCalls` is an upper bound, not an expected count. A `cause-chain` is an error whose cause is an error, `depth` levels deep, with the leaf only in the innermost message. A `shared-reference` is `{x: s, y: s}` for one non-cyclic `s = {leaf}`. Optional: `mustNotContain`, a string the serialized result must not contain, and `expected`, the exact result. An `opaque-object` is a class instance holding the leaf in an attribute and in its string form; TS walks it as its own properties, Python fails closed to `[REDACTED:ERROR]` (#85), so its `mustContain` names each language's result. A `throwing-entry` is a mapping whose `bad` entry raises when read and whose `ok` entry is the leaf. Python serializes with `default=str`, like a JSON log formatter. Limits may be deliberately invalid (null, negative, a string, a boolean): both languages fall back to the default. A `shared-reference-dag` is `depth` levels of `width`-element arrays whose every element is the same next level, with the leaf at the bottom: `width^depth` paths over `depth * width` references, walked once per path, so only `maxNodes` bounds it (#87). Optional `maxSeconds` bounds the walk's wall-clock time.",
   "cases": [
     {
       "name": "deeply_nested_arrays",
-      "shape": { "kind": "nested-arrays", "depth": 10000, "leaf": "SECRET_TOKEN_1" },
+      "shape": {
+        "kind": "nested-arrays",
+        "depth": 10000,
+        "leaf": "SECRET_TOKEN_1"
+      },
       "limits": {},
       "maxScannerCalls": 0,
       "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
     },
     {
       "name": "deeply_nested_objects",
-      "shape": { "kind": "nested-objects", "depth": 10000, "leaf": "SECRET_TOKEN_1" },
+      "shape": {
+        "kind": "nested-objects",
+        "depth": 10000,
+        "leaf": "SECRET_TOKEN_1"
+      },
       "limits": {},
       "maxScannerCalls": 0,
       "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
     },
     {
       "name": "secret_at_every_level_of_a_deep_chain",
-      "shape": { "kind": "nested-objects-with-leaves", "depth": 10000, "leaf": "SECRET_TOKEN_1" },
+      "shape": {
+        "kind": "nested-objects-with-leaves",
+        "depth": 10000,
+        "leaf": "SECRET_TOKEN_1"
+      },
       "limits": {},
       "maxScannerCalls": 8,
       "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
     },
     {
       "name": "very_wide_array",
-      "shape": { "kind": "wide-array", "width": 100000, "leaf": "SECRET_TOKEN_1" },
+      "shape": {
+        "kind": "wide-array",
+        "width": 100000,
+        "leaf": "SECRET_TOKEN_1"
+      },
       "limits": {},
       "maxScannerCalls": 1000,
       "mustContain": "<SECRET_1>"
     },
     {
       "name": "very_wide_object",
-      "shape": { "kind": "wide-object", "width": 10000, "leaf": "SECRET_TOKEN_1" },
+      "shape": {
+        "kind": "wide-object",
+        "width": 10000,
+        "leaf": "SECRET_TOKEN_1"
+      },
       "limits": {},
       "maxScannerCalls": 200,
       "mustContain": "<SECRET_1>"
     },
     {
       "name": "dense_cube_exhausts_the_leaf_budget",
-      "shape": { "kind": "cube", "side": 50, "leaf": "SECRET_TOKEN_1" },
+      "shape": {
+        "kind": "cube",
+        "side": 50,
+        "leaf": "SECRET_TOKEN_1"
+      },
       "limits": {},
       "maxScannerCalls": 5000,
       "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
     },
     {
       "name": "overlong_string_is_never_scanned",
-      "shape": { "kind": "long-string", "length": 1000000, "leaf": "SECRET_TOKEN_1" },
+      "shape": {
+        "kind": "long-string",
+        "length": 1000000,
+        "leaf": "SECRET_TOKEN_1"
+      },
       "limits": {},
       "maxScannerCalls": 0,
       "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
     },
     {
       "name": "tightened_limits_bound_a_mixed_tree",
-      "shape": { "kind": "cube", "side": 20, "leaf": "SECRET_TOKEN_1" },
-      "limits": { "maxDepth": 3, "maxArrayLength": 10, "maxTotalLeaves": 50 },
+      "shape": {
+        "kind": "cube",
+        "side": 20,
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {
+        "maxDepth": 3,
+        "maxArrayLength": 10,
+        "maxTotalLeaves": 50
+      },
       "maxScannerCalls": 50,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "cause_chain_deeper_than_max_depth",
+      "shape": {
+        "kind": "cause-chain",
+        "depth": 20,
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {},
+      "maxScannerCalls": 24,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "shared_acyclic_reference_is_masked_at_every_path",
+      "shape": {
+        "kind": "shared-reference",
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {},
+      "maxScannerCalls": 2,
+      "mustContain": "<SECRET_1>",
+      "mustNotContain": "[REDACTED:CYCLE]",
+      "expected": {
+        "x": {
+          "leaf": "<SECRET_1>"
+        },
+        "y": {
+          "leaf": "<SECRET_1>"
+        }
+      }
+    },
+    {
+      "name": "opaque_object_never_passes_its_secret_through",
+      "shape": {
+        "kind": "opaque-object",
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {},
+      "maxScannerCalls": 1,
+      "mustContain": {
+        "ts": "<SECRET_1>",
+        "python": "[REDACTED:ERROR]"
+      }
+    },
+    {
+      "name": "throwing_entry_degrades_for_that_entry_alone",
+      "shape": {
+        "kind": "throwing-entry",
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {},
+      "maxScannerCalls": 1,
+      "mustContain": "[REDACTED:ERROR]",
+      "expected": {
+        "ok": "<SECRET_1>",
+        "bad": "[REDACTED:ERROR]"
+      }
+    },
+    {
+      "name": "invalid_depth_limits_fall_back_to_the_defaults",
+      "shape": {
+        "kind": "nested-objects-with-leaves",
+        "depth": 10000,
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {
+        "maxDepth": null,
+        "maxObjectKeys": "5",
+        "maxStringLength": true
+      },
+      "maxScannerCalls": 8,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "invalid_budget_limits_fall_back_to_the_defaults",
+      "shape": {
+        "kind": "cube",
+        "side": 50,
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {
+        "maxArrayLength": -1,
+        "maxTotalLeaves": null
+      },
+      "maxScannerCalls": 5000,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "shared_reference_dag_is_bounded_by_max_nodes",
+      "shape": {
+        "kind": "shared-reference-dag",
+        "depth": 7,
+        "width": 1000,
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {},
+      "maxScannerCalls": 5000,
+      "maxSeconds": 5,
+      "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
+    },
+    {
+      "name": "tightened_max_nodes_bounds_a_shared_reference_dag",
+      "shape": {
+        "kind": "shared-reference-dag",
+        "depth": 4,
+        "width": 10,
+        "leaf": "SECRET_TOKEN_1"
+      },
+      "limits": {
+        "maxNodes": 100
+      },
+      "maxScannerCalls": 97,
+      "maxSeconds": 5,
       "mustContain": "[REDACTED:LIMIT_EXCEEDED]"
     }
   ]
