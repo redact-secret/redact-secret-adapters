@@ -220,10 +220,14 @@ function without(object: Record<string, unknown>, omit: string): Record<string, 
   return copy;
 }
 
-/** `sanitized` with `key` put back, unscanned, at its original position in `original`. */
-function restore(original: Record<string, unknown>, sanitized: Record<string, unknown>, key: string) {
+/**
+ * `sanitized` with `key` put back as `value`, unscanned, at its position in
+ * `original`. `value` is the one read `detachBinary` type-checked: reading
+ * `original[key]` again would let a getter swap in something else.
+ */
+function restore(original: Record<string, unknown>, sanitized: Record<string, unknown>, key: string, value: unknown) {
   const out: Record<string, unknown> = {};
-  for (const name of Object.keys(original)) define(out, name, name === key ? original[key] : sanitized[name]);
+  for (const name of Object.keys(original)) define(out, name, name === key ? value : sanitized[name]);
   return out;
 }
 
@@ -289,10 +293,13 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
   function detachBinary(
     object: Record<string, unknown>,
     key: string,
-  ): { failure: BlockedOutcome } | { view: Record<string, unknown>; binary: boolean } {
+  ): { failure: BlockedOutcome } | { view: Record<string, unknown>; binary: boolean; value?: string } {
     if (!(key in object)) return { view: object, binary: false };
-    if (binaryContent === "block" || typeof object[key] !== "string") return { failure: UNSUPPORTED };
-    return { view: without(object, key), binary: true };
+    if (binaryContent === "block") return { failure: UNSUPPORTED };
+    // Read once: the value checked here is the value passed through.
+    const value = object[key];
+    if (typeof value !== "string") return { failure: UNSUPPORTED };
+    return { view: without(object, key), binary: true, value };
   }
 
   function prepareBlock(block: unknown): Prepared {
@@ -302,7 +309,10 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
     if (block.type === "image" || block.type === "audio") {
       const detached = detachBinary(block, "data");
       if ("failure" in detached) return detached;
-      return { view: detached.view, reassemble: detached.binary ? (clean) => restore(block, clean, "data") : null };
+      return {
+        view: detached.view,
+        reassemble: detached.binary ? (clean) => restore(block, clean, "data", detached.value) : null,
+      };
     }
     if (block.type === "resource") {
       const resource = block.resource;
@@ -320,7 +330,9 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
             define(
               out,
               key,
-              key === "resource" ? restore(resource, clean.resource as Record<string, unknown>, "blob") : clean[key],
+              key === "resource"
+                ? restore(resource, clean.resource as Record<string, unknown>, "blob", detached.value)
+                : clean[key],
             );
           }
           return out;
@@ -472,7 +484,7 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
     if (hasText) return typeof entry.text === "string" ? { view: entry, reassemble: null } : { failure: UNSUPPORTED };
     const detached = detachBinary(entry, "blob");
     if ("failure" in detached) return detached;
-    return { view: detached.view, reassemble: (clean) => restore(entry, clean, "blob") };
+    return { view: detached.view, reassemble: (clean) => restore(entry, clean, "blob", detached.value) };
   }
 
   /**
