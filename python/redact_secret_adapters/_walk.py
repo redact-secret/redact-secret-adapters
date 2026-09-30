@@ -8,7 +8,8 @@ subclasses, returned as a plain ``list``; tuples, returned as a plain
 ``tuple``; and exceptions, returned as a ``{"type", "message", "stack",
 "cause"}`` mapping plus one key per attribute in the exception's
 ``__dict__``. ``int``, ``float``, ``bool`` and ``None`` are returned
-unchanged.
+unchanged until ``max_nodes`` is spent; past it, every value is
+``LIMIT_MARKER``.
 
 Anything else -- a ``set``, ``bytes``, a dataclass, a ``datetime``, any
 other instance -- fails closed to ``ERROR_MARKER``: the walker cannot know
@@ -50,7 +51,7 @@ def _slice_bound(limit: Any) -> Optional[int]:
 
 
 class _Walk:
-    __slots__ = ("scan_and_redact", "policy", "limits", "leaves", "seen", "counter")
+    __slots__ = ("scan_and_redact", "policy", "limits", "leaves", "nodes", "seen", "counter")
 
     def __init__(
         self,
@@ -63,6 +64,7 @@ class _Walk:
         self.policy = policy
         self.limits = resolve_limits(limits)
         self.leaves = self.limits["max_total_leaves"]
+        self.nodes = self.limits["max_nodes"]
         self.seen: set[int] = set()
         # Caller-owned; see ``outcome.py``. ``None`` means nothing is counted.
         self.counter = counter
@@ -130,6 +132,11 @@ class _Walk:
         return out
 
     def value(self, value: Any, depth: int) -> Any:
+        # Every visit counts, once per path: ``seen`` holds only the current
+        # path, so a shared reference is walked again from each parent.
+        if self.nodes <= 0:
+            return self.marker(LIMIT_MARKER)
+        self.nodes -= 1
         if isinstance(value, str):
             return self.string(value)
         if isinstance(value, _PRIMITIVES):

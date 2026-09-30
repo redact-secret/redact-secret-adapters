@@ -32,6 +32,7 @@ interface BoundedCase {
   readonly mustContain: string | { readonly ts: string; readonly python: string };
   readonly mustNotContain?: string;
   readonly expected?: unknown;
+  readonly maxSeconds?: number;
 }
 
 const path = fileURLToPath(new URL("../../../fixtures/bounded-traversal-cases.json", import.meta.url));
@@ -68,6 +69,14 @@ function buildShape(shape: Shape): unknown {
     const shared = { leaf };
     return { x: shared, y: shared };
   }
+  if (kind === "shared-reference-dag") {
+    let value: unknown = leaf;
+    for (let level = 0; level < (shape.depth ?? 0); level += 1) {
+      const next = value;
+      value = Array.from({ length: shape.width ?? 0 }, () => next);
+    }
+    return value;
+  }
   if (kind === "opaque-object") {
     class Opaque {
       readonly token = leaf;
@@ -103,6 +112,7 @@ test("the shared bounded-traversal cases cover every shape kind", () => {
       "shared-reference",
       "opaque-object",
       "throwing-entry",
+      "shared-reference-dag",
     ]),
   );
 });
@@ -114,7 +124,12 @@ for (const boundedCase of cases) {
       calls += 1;
       return fakeScanAndRedact(text);
     };
-    const result = maskSecretsWith(counting, buildShape(boundedCase.shape), { limits: boundedCase.limits });
+    const value = buildShape(boundedCase.shape);
+    const start = performance.now();
+    const result = maskSecretsWith(counting, value, { limits: boundedCase.limits });
+    if (boundedCase.maxSeconds !== undefined) {
+      expect(performance.now() - start).toBeLessThan(boundedCase.maxSeconds * 1000);
+    }
     const serialized = JSON.stringify(result);
     expect(calls).toBeLessThanOrEqual(boundedCase.maxScannerCalls);
     expect(serialized).not.toContain(boundedCase.shape.leaf);

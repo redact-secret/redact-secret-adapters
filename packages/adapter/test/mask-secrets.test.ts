@@ -157,6 +157,42 @@ test("the total-leaf budget bounds work across the whole call, not per branch", 
   expect(result.c).toBe(LIMIT_MARKER);
 });
 
+test("maxNodes counts every visit, containers and non-string leaves included, once per path (#87)", () => {
+  // root, a, a[0], a[1], b: five visits.
+  const value = { a: [1, 2], b: "SECRET_TOKEN_7" };
+  expect(maskSecretsWith(fakeScanAndRedact, value, { limits: { maxNodes: 5 } })).toEqual({
+    a: [1, 2],
+    b: "<SECRET_1>",
+  });
+  expect(maskSecretsWith(fakeScanAndRedact, value, { limits: { maxNodes: 4 } })).toEqual({
+    a: [1, 2],
+    b: LIMIT_MARKER,
+  });
+  expect(maskSecretsWith(fakeScanAndRedact, value, { limits: { maxNodes: 2 } })).toEqual({
+    a: [LIMIT_MARKER, LIMIT_MARKER],
+    b: LIMIT_MARKER,
+  });
+  expect(maskSecretsWith(fakeScanAndRedact, value, { limits: { maxNodes: 0 } })).toBe(LIMIT_MARKER);
+  // A shared reference counts on every path it is reached by.
+  const shared = [1, 2, 3];
+  expect(maskSecretsWith(fakeScanAndRedact, [shared, shared], { limits: { maxNodes: 6 } })).toEqual([
+    [1, 2, 3],
+    [LIMIT_MARKER, LIMIT_MARKER, LIMIT_MARKER],
+  ]);
+});
+
+test("a shared-reference DAG is bounded by maxNodes, not by its path count (#87)", () => {
+  // 8 levels of 1000 references to the next: 1000^8 paths, 8001 objects.
+  let node: unknown = 1;
+  for (let level = 0; level < 8; level += 1) node = Array.from({ length: 1000 }, () => node);
+  const counter = { scanned: 0, findings: 0, redacted: 0, blocked: 0, limited: 0, failed: 0 };
+  const start = performance.now();
+  const result = JSON.stringify(maskSecretsWith(fakeScanAndRedact, node, { counter }));
+  expect(performance.now() - start).toBeLessThan(2000);
+  expect(result).toContain(LIMIT_MARKER);
+  expect(counter.limited).toBeGreaterThan(0);
+});
+
 test("a cycle is marked rather than recursed into forever", () => {
   const input: Masked = { name: "root" };
   input.self = input;

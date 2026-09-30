@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import unittest
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,11 @@ def build_shape(shape: dict[str, Any]) -> Any:
     if kind == "shared-reference":
         shared = {"leaf": leaf}
         return {"x": shared, "y": shared}
+    if kind == "shared-reference-dag":
+        value = leaf
+        for _ in range(shape["depth"]):
+            value = [value] * shape["width"]
+        return value
     if kind == "opaque-object":
 
         class Opaque:
@@ -86,7 +92,11 @@ class BoundedTraversalTest(unittest.TestCase):
             with self.subTest(name=case["name"]):
                 scanner = RecordingScanner()
                 limits = {_snake(key): value for key, value in case["limits"].items()}
-                result = mask_secrets_with(scanner, build_shape(case["shape"]), limits=limits or None)
+                value = build_shape(case["shape"])
+                start = time.perf_counter()
+                result = mask_secrets_with(scanner, value, limits=limits or None)
+                if "maxSeconds" in case:
+                    self.assertLess(time.perf_counter() - start, case["maxSeconds"])
                 # default=str, like a JSON log formatter: whatever the walk
                 # passes through unmasked is printed, not rejected.
                 serialized = json.dumps(result, default=str)

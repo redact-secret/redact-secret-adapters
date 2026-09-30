@@ -211,7 +211,14 @@ this case.
 | `[REDACTED:CYCLE]` | A self-referencing object |
 
 `DEFAULT_LIMITS`: `max_depth` 8, `max_array_length` 1000, `max_object_keys` 200,
-`max_string_length` 200000, `max_total_leaves` 5000.
+`max_string_length` 200000, `max_total_leaves` 5000, `max_nodes` 20000.
+
+`max_nodes` counts every value the walk visits: containers and leaves alike,
+but not dict keys. A value reached by more than one path counts once per path.
+The walk does not track values it has already visited, so a structure built
+from shared lists or dicts is walked once per path, and without this budget
+its cost would grow exponentially. Past `max_nodes`, every value, a number
+included, becomes `[REDACTED:LIMIT_EXCEEDED]`.
 
 A `limits` override that is not a usable bound (`None`, `NaN`, a negative
 number, a `bool`, or not a number at all) falls back to that key's default,

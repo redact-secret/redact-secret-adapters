@@ -108,6 +108,10 @@ public API and move only in a major version. The reasons behind them:
   message can carry the input.
 - A value past a budget is never sent to the core, and elements or keys past a
   width limit are dropped rather than passed through unmasked.
+- Every visit counts against `maxNodes`, not only string leaves. The walk
+  tracks only the current path, which is enough to detect a cycle, so a shared
+  reference is walked once per path. Budgeting leaves alone would let an
+  in-process graph of shared containers cost exponential time.
 
 ## Adapter-specific notes
 

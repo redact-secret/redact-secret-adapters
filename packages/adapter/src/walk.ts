@@ -19,7 +19,7 @@ import type { Limits, MaskOptions, Policy, ScanAndRedact } from "./types.js";
 export interface WalkContext {
   readonly policy: Policy;
   readonly limits: Limits;
-  readonly budget: { leaves: number };
+  readonly budget: { leaves: number; nodes: number };
   /** Optional, caller-owned: see `./outcome.ts`. Absent means nothing is counted. */
   readonly counter?: OutcomeCounter | undefined;
 }
@@ -35,7 +35,12 @@ export function resolveLimits(overrides: Partial<Limits> | undefined): Limits {
 
 export function createWalkContext(options: MaskOptions): WalkContext {
   const limits = resolveLimits(options.limits);
-  return { policy: options.policy, limits, budget: { leaves: limits.maxTotalLeaves }, counter: options.counter };
+  return {
+    policy: options.policy,
+    limits,
+    budget: { leaves: limits.maxTotalLeaves, nodes: limits.maxNodes },
+    counter: options.counter,
+  };
 }
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -167,12 +172,17 @@ function maskObject(value: object, scanAndRedact: ScanAndRedact, walk: Walk, ctx
  * be read (throwing getter or `toJSON`, revoked proxy) becomes
  * {@link ERROR_MARKER}, a repeat visit {@link CYCLE_MARKER}, and anything
  * past a budget {@link LIMIT_MARKER}. Numbers, booleans, `null`,
- * `undefined`, bigints, symbols and functions pass through unchanged.
+ * `undefined`, bigints, symbols and functions pass through unchanged
+ * until `maxNodes` is spent; past it, every value is {@link LIMIT_MARKER}.
  */
 export function walkValue(scanAndRedact: ScanAndRedact, data: unknown, options: MaskOptions): unknown {
   const ctx = createWalkContext(options);
   const seen = new Set<object>();
   const walk: Walk = (value, depth) => {
+    // Every visit counts, once per path: `seen` holds only the current
+    // path, so a shared reference is walked again from each parent.
+    if (ctx.budget.nodes <= 0) return countMarker(ctx, LIMIT_MARKER);
+    ctx.budget.nodes -= 1;
     if (typeof value === "string") return maskString(scanAndRedact, value, ctx);
     if (typeof value !== "object" || value === null) return value;
     if (depth >= ctx.limits.maxDepth) return countMarker(ctx, LIMIT_MARKER);

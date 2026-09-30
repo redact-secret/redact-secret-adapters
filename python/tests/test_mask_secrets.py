@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import unittest
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
@@ -227,6 +228,36 @@ class MaskSecretsWithTest(unittest.TestCase):
         self.assertEqual(result["a"], "<SECRET_1>")
         self.assertEqual(result["b"], "<SECRET_1>")
         self.assertEqual(result["c"], LIMIT_MARKER)
+
+    def test_max_nodes_counts_every_visit_once_per_path(self) -> None:
+        # #87. root, a, a[0], a[1], b: five visits.
+        data = {"a": [1, 2], "b": "SECRET_TOKEN_7"}
+
+        def masked(max_nodes: int):
+            return mask_secrets_with(fake_scan_and_redact, data, limits={"max_nodes": max_nodes})
+
+        self.assertEqual(masked(5), {"a": [1, 2], "b": "<SECRET_1>"})
+        self.assertEqual(masked(4), {"a": [1, 2], "b": LIMIT_MARKER})
+        self.assertEqual(masked(2), {"a": [LIMIT_MARKER, LIMIT_MARKER], "b": LIMIT_MARKER})
+        self.assertEqual(masked(0), LIMIT_MARKER)
+        # A shared reference counts on every path it is reached by.
+        shared = [1, 2, 3]
+        self.assertEqual(
+            mask_secrets_with(fake_scan_and_redact, [shared, shared], limits={"max_nodes": 6}),
+            [[1, 2, 3], [LIMIT_MARKER, LIMIT_MARKER, LIMIT_MARKER]],
+        )
+
+    def test_a_shared_reference_dag_is_bounded_by_max_nodes_not_its_path_count(self) -> None:
+        # #87. 8 levels of 1000 references to the next: 1000^8 paths, 8001 lists.
+        node: object = 1
+        for _ in range(8):
+            node = [node] * 1000
+        counter = OutcomeCounter()
+        start = time.perf_counter()
+        result = walk(fake_scan_and_redact, node, policy=None, limits=None, counter=counter)
+        self.assertLess(time.perf_counter() - start, 5.0)
+        self.assertIn(LIMIT_MARKER, json.dumps(result))
+        self.assertGreater(counter.limited, 0)
 
     def test_cycle_is_marked_rather_than_recursed_into_forever(self) -> None:
         data: dict = {"name": "root"}
