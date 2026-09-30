@@ -28,7 +28,11 @@ interface BoundedCase {
   readonly shape: Shape;
   readonly limits: Partial<Limits>;
   readonly maxScannerCalls: number;
-  readonly mustContain: string;
+  /** One string for both languages, or each language's own where they differ by design. */
+  readonly mustContain: string | { readonly ts: string; readonly python: string };
+  readonly mustNotContain?: string;
+  readonly expected?: unknown;
+  readonly maxSeconds?: number;
 }
 
 const path = fileURLToPath(new URL("../../../fixtures/bounded-traversal-cases.json", import.meta.url));
@@ -56,6 +60,40 @@ function buildShape(shape: Shape): unknown {
       Array.from({ length: side }, () => Array.from({ length: side }, () => leaf)),
     );
   }
+  if (kind === "cause-chain") {
+    let error = new Error(leaf);
+    for (let level = 0; level < (shape.depth ?? 0); level += 1) error = new Error("wrapper", { cause: error });
+    return error;
+  }
+  if (kind === "shared-reference") {
+    const shared = { leaf };
+    return { x: shared, y: shared };
+  }
+  if (kind === "shared-reference-dag") {
+    let value: unknown = leaf;
+    for (let level = 0; level < (shape.depth ?? 0); level += 1) {
+      const next = value;
+      value = Array.from({ length: shape.width ?? 0 }, () => next);
+    }
+    return value;
+  }
+  if (kind === "opaque-object") {
+    class Opaque {
+      readonly token = leaf;
+      toString(): string {
+        return leaf;
+      }
+    }
+    return new Opaque();
+  }
+  if (kind === "throwing-entry") {
+    return Object.defineProperty({ ok: leaf }, "bad", {
+      enumerable: true,
+      get() {
+        throw new Error("unreadable");
+      },
+    });
+  }
   if (kind === "long-string") return `${"x".repeat(shape.length ?? 0)} ${leaf}`;
   throw new Error(`unknown shape kind: ${kind}`);
 }
@@ -70,6 +108,11 @@ test("the shared bounded-traversal cases cover every shape kind", () => {
       "wide-object",
       "cube",
       "long-string",
+      "cause-chain",
+      "shared-reference",
+      "opaque-object",
+      "throwing-entry",
+      "shared-reference-dag",
     ]),
   );
 });
@@ -81,10 +124,18 @@ for (const boundedCase of cases) {
       calls += 1;
       return fakeScanAndRedact(text);
     };
-    const result = maskSecretsWith(counting, buildShape(boundedCase.shape), { limits: boundedCase.limits });
+    const value = buildShape(boundedCase.shape);
+    const start = performance.now();
+    const result = maskSecretsWith(counting, value, { limits: boundedCase.limits });
+    if (boundedCase.maxSeconds !== undefined) {
+      expect(performance.now() - start).toBeLessThan(boundedCase.maxSeconds * 1000);
+    }
     const serialized = JSON.stringify(result);
     expect(calls).toBeLessThanOrEqual(boundedCase.maxScannerCalls);
     expect(serialized).not.toContain(boundedCase.shape.leaf);
-    expect(serialized).toContain(boundedCase.mustContain);
+    const { mustContain } = boundedCase;
+    expect(serialized).toContain(typeof mustContain === "string" ? mustContain : mustContain.ts);
+    if (boundedCase.mustNotContain !== undefined) expect(serialized).not.toContain(boundedCase.mustNotContain);
+    if (boundedCase.expected !== undefined) expect(result).toEqual(boundedCase.expected);
   });
 }

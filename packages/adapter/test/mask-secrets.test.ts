@@ -157,6 +157,42 @@ test("the total-leaf budget bounds work across the whole call, not per branch", 
   expect(result.c).toBe(LIMIT_MARKER);
 });
 
+test("maxNodes counts every visit, containers and non-string leaves included, once per path (#87)", () => {
+  // root, a, a[0], a[1], b: five visits.
+  const value = { a: [1, 2], b: "SECRET_TOKEN_7" };
+  expect(maskSecretsWith(fakeScanAndRedact, value, { limits: { maxNodes: 5 } })).toEqual({
+    a: [1, 2],
+    b: "<SECRET_1>",
+  });
+  expect(maskSecretsWith(fakeScanAndRedact, value, { limits: { maxNodes: 4 } })).toEqual({
+    a: [1, 2],
+    b: LIMIT_MARKER,
+  });
+  expect(maskSecretsWith(fakeScanAndRedact, value, { limits: { maxNodes: 2 } })).toEqual({
+    a: [LIMIT_MARKER, LIMIT_MARKER],
+    b: LIMIT_MARKER,
+  });
+  expect(maskSecretsWith(fakeScanAndRedact, value, { limits: { maxNodes: 0 } })).toBe(LIMIT_MARKER);
+  // A shared reference counts on every path it is reached by.
+  const shared = [1, 2, 3];
+  expect(maskSecretsWith(fakeScanAndRedact, [shared, shared], { limits: { maxNodes: 6 } })).toEqual([
+    [1, 2, 3],
+    [LIMIT_MARKER, LIMIT_MARKER, LIMIT_MARKER],
+  ]);
+});
+
+test("a shared-reference DAG is bounded by maxNodes, not by its path count (#87)", () => {
+  // 8 levels of 1000 references to the next: 1000^8 paths, 8001 objects.
+  let node: unknown = 1;
+  for (let level = 0; level < 8; level += 1) node = Array.from({ length: 1000 }, () => node);
+  const counter = { scanned: 0, findings: 0, redacted: 0, blocked: 0, limited: 0, failed: 0 };
+  const start = performance.now();
+  const result = JSON.stringify(maskSecretsWith(fakeScanAndRedact, node, { counter }));
+  expect(performance.now() - start).toBeLessThan(2000);
+  expect(result).toContain(LIMIT_MARKER);
+  expect(counter.limited).toBeGreaterThan(0);
+});
+
 test("a cycle is marked rather than recursed into forever", () => {
   const input: Masked = { name: "root" };
   input.self = input;
@@ -215,4 +251,32 @@ test("preserves prototype-named JSON keys as redacted own data", () => {
     JSON.parse('{"__proto__":{"value":"<SECRET_1>"},"constructor":"<SECRET_1>","toString":"<SECRET_1>"}'),
   );
   expect(Object.getOwnPropertyDescriptor(input, "__proto__")?.value.value).toBe("SECRET_TOKEN_1");
+});
+
+// The cause-chain and shared-reference cases live in
+// fixtures/bounded-traversal-cases.json, so the Python walker runs them too.
+
+test("a boxed primitive is its primitive: a String is masked whole, never walked per character", () => {
+  expect(maskSecretsWith(fakeScanAndRedact, new String("SECRET_TOKEN_7"))).toBe("<SECRET_1>");
+  expect(maskSecretsWith(fakeScanAndRedact, { n: new Number(7), b: new Boolean(false) })).toEqual({ n: 7, b: false });
+});
+
+test("a revoked Proxy fails closed to the error marker, at the root and inside a value", () => {
+  const { proxy, revoke } = Proxy.revocable({}, {});
+  revoke();
+  expect(maskSecretsWith(fakeScanAndRedact, proxy)).toBe(ERROR_MARKER);
+  expect(maskSecretsWith(fakeScanAndRedact, { inner: proxy, kept: "SECRET_TOKEN_7" })).toEqual({
+    inner: ERROR_MARKER,
+    kept: "<SECRET_1>",
+  });
+});
+
+test("an Error without a cause gets no cause key", () => {
+  expect(Object.hasOwn(maskSecretsWith(fakeScanAndRedact, new Error("plain")) as Masked, "cause")).toBe(false);
+});
+
+test("a toJSON that returns a fresh toJSON object on every call ends at the depth limit", () => {
+  const fresh = (): object => ({ toJSON: fresh });
+  expect(maskSecretsWith(fakeScanAndRedact, fresh())).toBe(LIMIT_MARKER);
+  expect(maskSecretsWith(fakeScanAndRedact, { a: fresh() }, { limits: { maxDepth: 3 } })).toEqual({ a: LIMIT_MARKER });
 });

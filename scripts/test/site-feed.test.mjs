@@ -93,6 +93,15 @@ describe("buildFeed", () => {
     expect(mcp.dependsOn.map((d) => d.name)).toEqual(["@redact-secret/adapter-ai-context"]);
   });
 
+  test("adapter-otel keeps the core and host ranges its published releases declared (#49)", () => {
+    const shim = buildFeed(inputs()).packages.find((p) => p.id === "adapter-otel");
+    expect(shim.core.range).toBe("^0.1.0-beta.6");
+    expect(shim.hosts.map((h) => [h.name, h.range])).toEqual([["@opentelemetry/sdk-trace-base", "^2.0.0"]]);
+    // adapter-otel-trace is listed once a train releases it, and not before.
+    const trace = buildFeed(inputs()).packages.find((p) => p.id === "adapter-otel-trace");
+    expect(trace === undefined).toBe(!PACKAGES.some((p) => p.id === "adapter_otel_trace"));
+  });
+
   test("refuses a private package in the release plan", () => {
     const privatised = withManifest(inputs(), "packages/adapter/package.json", (m) => {
       m.private = true;

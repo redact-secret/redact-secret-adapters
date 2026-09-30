@@ -31,7 +31,7 @@ This module does not import ``opentelemetry`` at all: ``SpanProcessor``'s
 abstract) methods, so Python's duck typing means a class implementing the
 same four methods -- plus the private ``_on_ending`` hook the SDK calls on
 every processor -- needs no base class, no import, and no dependency --
-matching ``packages/adapter-otel/src/span-processor.ts``. Install the
+matching ``packages/adapter-otel-trace/src/span-processor.ts``. Install the
 ``otel`` extra to get the SDK this module is meant to be used with:
 
     from opentelemetry.sdk.trace import TracerProvider

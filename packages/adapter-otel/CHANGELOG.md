@@ -19,6 +19,32 @@ tarball (`files` in `package.json`), so a consumer can read it from
 `node_modules` without leaving their editor.
 
 ## [Unreleased]
+### Deprecated
+
+- This package is now a compatibility re-export of
+  [`@redact-secret/adapter-otel-trace`](../adapter-otel-trace), the same
+  processor under a name that says what it covers: OpenTelemetry **traces**
+  (a `SpanProcessor`), not OpenTelemetry Logs
+  (redact-secret/redact-secret-adapters#49). Every export keeps its name,
+  signature and behavior — `createRedactingSpanProcessor`,
+  `RedactingSpanProcessorWith` (the same class object, so `instanceof` still
+  holds), `redactAttributesWith` and the option and outcome types — and each
+  is marked `@deprecated` in the type declarations. Nothing is printed at
+  import or call time. Migrate by changing the import specifier to
+  `@redact-secret/adapter-otel-trace`; see the
+  [migration guide](./README.md#migrating-to-redact-secretadapter-otel-trace).
+  `test/compat-shim.test.ts` checks that every export is identical to the new
+  package's and that a real `BasicTracerProvider` span exports the same OTLP
+  JSON bytes through either name.
+
+### Changed
+
+- Depends on `@redact-secret/adapter-otel-trace` `^0.1.0` instead of
+  `@redact-secret/adapter` directly (the trace package brings it). The
+  `@opentelemetry/sdk-trace-base` `^2.0.0` and `@redact-secret/core`
+  `^0.1.0-beta.6` peer ranges are unchanged, backed by the same tests, now in
+  `packages/adapter-otel-trace/test`.
+
 ## [0.1.2] - 2026-09-28
 ### Added
 

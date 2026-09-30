@@ -32,14 +32,43 @@ function resolve(name, range) {
 }
 
 const packagesDir = new URL("../packages/", import.meta.url);
+const endpoints = new Map();
 for (const dir of workspaceDirs(packagesDir)) {
   const manifest = JSON.parse(readFileSync(new URL(`${dir}/package.json`, packagesDir), "utf-8"));
   const ranges = { ...manifest.peerDependencies };
   const coreRange = manifest.dependencies?.[CORE] ?? manifest.peerDependencies?.[CORE];
   if (coreRange) ranges[CORE] = coreRange;
 
-  const specs = Object.entries(ranges).map(([name, range]) => `${name}@${resolve(name, range)}`);
-  if (specs.length === 0) continue;
-  console.log(`${manifest.name}: ${end} -> ${specs.join(" ")}`);
-  execFileSync("npm", ["install", "--no-save", "--workspace", manifest.name, ...specs], { stdio: "inherit" });
+  const specs = [];
+  for (const [name, range] of Object.entries(ranges)) {
+    const version = resolve(name, range);
+    const seen = endpoints.get(name);
+    if (seen !== undefined && seen !== version) {
+      throw new Error(`${name}: the ${end} endpoint is ${seen} for one workspace and ${version} for ${manifest.name}`);
+    }
+    endpoints.set(name, version);
+    specs.push(`${name}@${version}`);
+  }
+  if (specs.length > 0) console.log(`${manifest.name}: ${end} -> ${specs.join(" ")}`);
 }
+
+// One install at the root, for every endpoint at once. `--no-save` reifies
+// from the lockfile, so each further `--no-save` install would put back what
+// the one before it installed and only the last would stick. The root is also
+// where these packages are hoisted, so every workspace resolves the endpoint
+// and the tree never mixes two core versions.
+const specs = [...endpoints].map(([name, version]) => `${name}@${version}`);
+if (specs.length > 0) {
+  console.log(`root: ${end} -> ${specs.join(" ")}`);
+  execFileSync("npm", ["install", "--no-save", ...specs], { stdio: "inherit" });
+}
+
+// Fail rather than test some other version: read back what is installed.
+const rootDir = new URL("../", import.meta.url);
+for (const [name, version] of endpoints) {
+  const installed = JSON.parse(readFileSync(new URL(`node_modules/${name}/package.json`, rootDir), "utf-8")).version;
+  if (installed !== version) {
+    throw new Error(`${name}: expected ${version} installed for the ${end} endpoint, found ${installed}`);
+  }
+}
+console.log(`installed the ${end} endpoint of ${endpoints.size} ranges`);

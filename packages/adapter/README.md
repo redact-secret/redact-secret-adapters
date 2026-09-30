@@ -173,8 +173,25 @@ Public API; they change only in a major version.
 | `CYCLE_MARKER` `[REDACTED:CYCLE]` | A self-referencing object |
 
 `DEFAULT_LIMITS`: `maxDepth` 8, `maxArrayLength` 1000, `maxObjectKeys` 200,
-`maxStringLength` 200000, `maxTotalLeaves` 5000. Elements and keys beyond a
-limit are dropped, not passed through.
+`maxStringLength` 200000, `maxTotalLeaves` 5000, `maxNodes` 20000. Elements and
+keys beyond a limit are dropped, not passed through.
+
+`maxNodes` counts every value the walk visits: containers and leaves alike,
+but not object keys, the same rule as `walkStrict`'s `maxNodes`. A value
+reached by more than one path counts once per path. The walk does not track
+values it has already visited, so an object graph with shared references (the
+same array held 1000 times at each of several levels) is walked once per path,
+and without this budget its cost would grow exponentially. Past `maxNodes`,
+every value, a number included, becomes `[REDACTED:LIMIT_EXCEEDED]`. An
+override that is `undefined`, `NaN`, negative, or not a number falls back to
+the default, as for every other limit.
+
+**Object keys and attribute names are not scanned.** `maskSecretsWith` and
+`maskLogValueWith` mask values only. Every key, including the own property
+names copied from an `Error` or a class instance, reaches the host unchanged,
+so `{ [token]: 1 }` keeps `token` in the output. Do not put a secret in a key.
+`walkStrict` differs: it hands every key to the caller's visitor, and the
+AI-context boundary built on it does scan keys.
 
 ## License
 

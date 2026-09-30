@@ -19,6 +19,60 @@ package whose declared version isn't on its registry yet — see
 can read it without leaving their environment.
 
 ## [Unreleased]
+
+## [0.1.2] - 2026-09-30
+### Added
+
+- **`max_nodes` walk budget (default 20000)** in `DEFAULT_LIMITS`
+  (redact-secret/redact-secret-adapters#87). The walker behind
+  `mask_secrets_with`, `mask_log_value_with` and `extra_fields` budgeted only
+  string leaves, and it walks a shared reference once per path. An in-process
+  graph of shared lists therefore cost exponential time before any string
+  budget tripped (a probe: 10^8 paths took 85 s). Every visited value now
+  counts, containers included, with the same rule and default as the
+  TypeScript `maxNodes`. Past the budget, every value becomes
+  `[REDACTED:LIMIT_EXCEEDED]` (counted `limited`). Invalid overrides fall back
+  to the default through `resolve_limit`. Tested by
+  `test_max_nodes_counts_every_visit_once_per_path`,
+  `test_a_shared_reference_dag_is_bounded_by_max_nodes_not_its_path_count`, and
+  the shared `shared_reference_dag_is_bounded_by_max_nodes` and
+  `tightened_max_nodes_bounds_a_shared_reference_dag` cases.
+
+### Changed
+
+- **An object the walker does not walk now fails closed to
+  `[REDACTED:ERROR]`** instead of passing through unchanged
+  (redact-secret/redact-secret-adapters#85). This covers a `set`, `bytes`, a
+  dataclass, a `datetime`, or any other instance reached by
+  `mask_secrets_with`, `mask_log_value_with`, or a `RedactSecretFilter`
+  `extra_fields` entry. Before, a `%(ctx)s` format or a JSON formatter with
+  `default=str` printed such a value unscanned. `str`, `int`, `float`,
+  `bool` and `None` are unchanged, and `dict`, `list`, `tuple` and
+  exceptions are still walked. To keep such a value, convert it to a
+  `dict` or `str` before logging it. Tested by
+  `test_any_other_object_fails_closed_to_the_error_marker`,
+  `test_a_non_container_object_extra_fails_closed_for_str_and_json_formatters`,
+  and the shared `opaque_object_never_passes_its_secret_through` case in
+  `fixtures/bounded-traversal-cases.json`.
+
+### Fixed
+
+- A container whose read raises (a `dict` subclass whose `__getitem__` or
+  `keys()` raises, a `list` subclass whose slicing raises) no longer raises
+  out of the walk, or out of `logger.info()` through `RedactSecretFilter`
+  (#85). It becomes `[REDACTED:ERROR]` for that key alone, or for the whole
+  container when it cannot be listed, as in the TypeScript walker. Tested by
+  `test_a_container_whose_read_raises_degrades_per_entry_and_never_raises`,
+  `test_an_extra_whose_read_raises_never_raises_into_the_logging_call`, and
+  the shared `throwing_entry_degrades_for_that_entry_alone` case.
+- `limits` are validated like the TypeScript `resolveLimit` (#85): `None`,
+  `NaN`, a negative number, a `bool`, or a non-number falls back to that
+  key's default. Before, `max_depth=None` raised `TypeError` out of
+  `filter()`, `max_total_leaves=float("nan")` never tripped, and
+  `max_array_length=-1` kept all but the last element. Tested by
+  `test_an_invalid_limit_falls_back_to_the_default_instead_of_disabling_it`,
+  `test_invalid_limits_fall_back_to_the_defaults_instead_of_raising`, and the
+  shared `invalid_*_limits_fall_back_to_the_defaults` cases.
 ## [0.1.1] - 2026-09-28
 ### Fixed
 

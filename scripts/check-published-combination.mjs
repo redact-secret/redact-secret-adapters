@@ -27,7 +27,14 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const PACKAGE_DIRS = ["adapter", "adapter-pino", "adapter-otel", "adapter-ai-context", "adapter-mcp"];
+const PACKAGE_DIRS = [
+  "adapter",
+  "adapter-pino",
+  "adapter-otel-trace",
+  "adapter-otel",
+  "adapter-ai-context",
+  "adapter-mcp",
+];
 const manifests = Object.fromEntries(
   PACKAGE_DIRS.map((dir) => [dir, JSON.parse(readFileSync(join(repoRoot, "packages", dir, "package.json"), "utf-8"))]),
 );
@@ -99,6 +106,16 @@ const LIMITS = `{
 // Synthetic values only. A leaf identified only by its object key is redacted
 // in place, not blocked (redact-secret/redact-secret#842).
 const PROBES = {
+  // The deprecated name must hand out exactly what the lowest adapter-otel-trace its range admits exports (#49).
+  "adapter-otel": `import assert from "node:assert/strict";
+import * as shim from "@redact-secret/adapter-otel";
+import * as trace from "@redact-secret/adapter-otel-trace";
+assert.deepEqual(Object.keys(shim).sort(), Object.keys(trace).sort());
+for (const name of Object.keys(trace)) assert.equal(shim[name], trace[name], name);
+const next = { onStart() {}, onEnd() {}, shutdown: async () => {}, forceFlush: async () => {} };
+assert.ok((await shim.createRedactingSpanProcessor(next)) instanceof trace.RedactingSpanProcessorWith);
+console.log("@redact-secret/adapter-otel: re-exports adapter-otel-trace unchanged");
+`,
   "adapter-ai-context": `import assert from "node:assert/strict";
 import { createAiContextBoundary } from "@redact-secret/adapter-ai-context";
 const boundary = await createAiContextBoundary(${LIMITS});

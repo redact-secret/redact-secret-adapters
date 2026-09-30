@@ -19,6 +19,27 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-30
+
+### Added
+
+- **`maxNodes` walk budget (default 20000)** in `Limits` and `DEFAULT_LIMITS`
+  (redact-secret/redact-secret-adapters#87). `walkValue`, behind
+  `maskSecretsWith` and `maskLogValueWith`, budgeted only string leaves, and it
+  walks a shared reference once per path. An in-process graph of 8 levels, each
+  holding 1000 references to the next, therefore cost about 1000^7 container
+  visits before any string budget tripped (a probe: 10^8 paths took 8 s).
+  Every visited value now counts, containers included, using the same rule as
+  `walkStrict`'s `maxNodes`. Past the budget, every value becomes
+  `[REDACTED:LIMIT_EXCEEDED]` (counted `limited`). The default is four times
+  `maxTotalLeaves`, so a string-heavy value still meets the leaf budget first.
+  Invalid overrides fall back to the default through `resolveLimit`. Tested by
+  "maxNodes counts every visit…" and "a shared-reference DAG is bounded by
+  maxNodes…" in `test/mask-secrets.test.ts`, and the shared
+  `shared_reference_dag_is_bounded_by_max_nodes` and
+  `tightened_max_nodes_bounds_a_shared_reference_dag` cases in
+  `fixtures/bounded-traversal-cases.json`.
+
 ## [0.1.4] - 2026-09-29
 
 ### Changed

@@ -10,6 +10,7 @@
  * conformance check against the real algorithm, not a description of it.
  */
 
+import fc from "fast-check";
 import realFormat from "quick-format-unescaped";
 import { expect, test } from "vitest";
 
@@ -50,6 +51,35 @@ test("formatPinoMessage matches the real quick-format-unescaped package byte-for
     const actual = formatPinoMessage(fmt, values);
     expect(actual, `case: ${name}`).toBe(expected);
   }
+});
+
+test("formatPinoMessage matches quick-format-unescaped on random format strings and values", () => {
+  // A small alphabet makes placeholders, `%%`, and a trailing `%` common.
+  const fmt = fc.string({
+    unit: fc.constantFrom("%", "s", "d", "f", "i", "j", "o", "O", "x", " ", "é"),
+    maxLength: 16,
+  });
+  const value = fc.oneof(
+    fc.string({ maxLength: 6 }),
+    fc.double(),
+    fc.integer(),
+    fc.boolean(),
+    fc.constant(null),
+    fc.constant(undefined),
+    fc.constantFrom(
+      function named() {},
+      () => {},
+    ),
+    fc.jsonValue({ maxDepth: 2 }),
+    // JSON.stringify throws on a bigint: exercises the `"[Circular]"` fallback.
+    fc.bigInt(),
+  );
+  fc.assert(
+    fc.property(fmt, fc.array(value, { maxLength: 5 }), (f, values) => {
+      expect(formatPinoMessage(f, values)).toBe(realFormat(f, values));
+    }),
+    { numRuns: 2000 },
+  );
 });
 
 test("no interpolation values returns the format string unchanged, without scanning it for placeholders", () => {
