@@ -97,14 +97,31 @@ range endpoints, pack contents, install smoke tests) runs in
 
 [Stryker](https://stryker-mutator.io/) is configured in `stryker.config.json`
 and runs Vitest against mutated source. It is not part of CI. Mutate one
-package, or one file, per run:
+package, or one file, per run, from any checkout or worktree:
 
 ```sh
 npm ci
+npm run build
 npx stryker run --mutate 'packages/<pkg>/src/**/*.ts'
 npx stryker run --mutate 'packages/adapter/src/walk.ts' --concurrency 2
 ```
 
+- Stryker runs Vitest through `vitest.stryker.config.ts`: the same tests as
+  `vitest.config.ts`, in Vitest's `related` mode, so only the tests that import
+  the mutated file run. The sandbox in `.stryker-tmp/` symlinks `node_modules`
+  back to the checkout, so `@redact-secret/adapter` and
+  `@redact-secret/adapter-otel-trace` resolve to the checkout's `dist/`, not the
+  sandbox's. Without a build, Vitest cannot resolve them and Stryker stops with
+  "No tests were executed". `vitest.stryker-setup.ts` builds the checkout when a
+  package has no `dist/`, but it does not rebuild a stale one, so run
+  `npm run build` after changing another package's source. Mutants in one
+  package are therefore not seen by another package's tests; each package's own
+  tests are what a run measures.
+- `disableTypeChecks` is limited to `packages/*/{src,test}`. Stryker's default
+  adds `// @ts-nocheck` to every script in the sandbox, including the vendored
+  `fixtures/core/*.mjs`, which breaks their byte-for-byte digests in
+  `core-pins.test.ts` whenever that test runs (for example with
+  `"vitest": { "related": false }`).
 - Each run writes `reports/mutation/mutation.json` and overwrites the previous
   report; copy it elsewhere to keep it. `reports/` and `.stryker-tmp/` are
   ignored by git.
