@@ -19,6 +19,8 @@ tarball (`files` in `package.json`), so a consumer can read it from
 `node_modules` without leaving their editor.
 
 ## [Unreleased]
+
+## [0.1.3] - 2026-09-30
 ### Deprecated
 
 - This package is now a compatibility re-export of
