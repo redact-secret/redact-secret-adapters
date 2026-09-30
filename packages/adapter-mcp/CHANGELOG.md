@@ -27,6 +27,16 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
   `range-endpoints`. 1.26.0 negotiates protocol 2025-11-25, so 2025-06-18 is
   no longer negotiated at a tested endpoint (#83).
 
+### Fixed
+- With `binaryContent: "pass"`, a binary field (an image or audio block's
+  `data`, a resource's `blob`) is read once. Before, the boundary checked that
+  the value was a string and then read it again while rebuilding the result.
+  A getter could return a non-string, unscanned value on the second read, and
+  it went out as `ok`. A getter that threw on the second read escaped
+  `sanitizeToolResult`, `sanitizeResourceResult` and the wrapped handlers as an
+  exception. The boundary now passes on the string it checked. Backed by
+  `test/boundary-edges.test.ts` (#91).
+
 ## [0.1.1] - 2026-09-29
 ### Fixed
 - The package README no longer calls the package a prerelease or tells the
