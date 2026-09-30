@@ -9,7 +9,7 @@ A fail-closed check that can be deleted without a test failing is not protected.
 
 ## Setup
 
-- Use `@stryker-mutator/core` with `@stryker-mutator/vitest-runner` and the TypeScript checker, as exact-pinned devDependencies, matching the repo's exact-pinning of `@biomejs/biome` and `fast-check`. Put config in `stryker.config.json`. Ask before committing new files, and keep `.stryker-tmp/` and `reports/` out of git.
+- The setup is committed: `@stryker-mutator/core` and `@stryker-mutator/vitest-runner` as exact-pinned devDependencies, config in `stryker.config.json`, and `.stryker-tmp/` and `reports/` ignored. There is no TypeScript checker: it needs the TypeScript JS API, which the native TypeScript 7 compiler lacks. See [CONTRIBUTING.md § Mutation testing](../../../CONTRIBUTING.md#mutation-testing).
 - The test runner is Vitest. `vitest.global-setup.ts` builds every package first, so point Stryker's `vitest.configFile` at `vitest.config.ts` and mutate one package at a time to keep runs short. Set `vitest.related: true` if supported.
 - Mutate only security-relevant source, or the file given as an argument:
   - `packages/adapter/src/`: `mask-leaf.ts`, `walk.ts`, `walk-strict.ts`, `outcome.ts`, `activation.ts`
@@ -21,7 +21,7 @@ A fail-closed check that can be deleted without a test failing is not protected.
 
 ## Run
 
-`npx stryker run --concurrency 4`. Record Stryker's version and the mutation score.
+`npx stryker run --mutate 'packages/<pkg>/src/<file>.ts'` (one package or file per run; lower workers with `--concurrency <n>`). The report lands in `reports/mutation/mutation.json` and is overwritten by the next run. Record Stryker's version and the mutation score.
 
 ## Triage survivors
 

@@ -93,6 +93,32 @@ For the Python package, install the test requirements used by CI and run
 range endpoints, pack contents, install smoke tests) runs in
 [CI](./.github/workflows/ci.yml).
 
+## Mutation testing
+
+[Stryker](https://stryker-mutator.io/) is configured in `stryker.config.json`
+and runs Vitest against mutated source. It is not part of CI. Mutate one
+package, or one file, per run:
+
+```sh
+npm ci
+npx stryker run --mutate 'packages/<pkg>/src/**/*.ts'
+npx stryker run --mutate 'packages/adapter/src/walk.ts' --concurrency 2
+```
+
+- Each run writes `reports/mutation/mutation.json` and overwrites the previous
+  report; copy it elsewhere to keep it. `reports/` and `.stryker-tmp/` are
+  ignored by git.
+- The config uses 4 workers; lower it with `--concurrency <n>`. Two runs in the
+  same checkout share `.stryker-tmp/` and the report file, so run concurrent
+  jobs from separate worktrees.
+- No type checker runs (`"checkers": []`). `@stryker-mutator/typescript-checker`
+  needs the TypeScript JS API, which the native TypeScript 7 compiler used here
+  does not provide, so mutants that would not type-check still run (Vitest
+  strips types) instead of being skipped.
+- `@stryker-mutator/core` 10.0.0 pins `typed-rest-client`, which pins a `qs`
+  version with two moderate advisories. They appear in `npm audit` but not in
+  `npm audit --omit=dev`: the dependency is dev-only and never ships.
+
 ## Static analysis and dependencies
 
 CodeQL analyzes JavaScript/TypeScript and Python on every push and pull request,
