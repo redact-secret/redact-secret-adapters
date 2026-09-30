@@ -7,7 +7,7 @@
   "coverageAnalysis": "perTest",
   "reporters": ["clear-text", "json"],
   "jsonReporter": {
-    "fileName": "reports/mutation/adapter-ai-context.json"
+    "fileName": "reports/mutation/mutation.json"
   },
   "tempDirName": ".stryker-tmp",
   "cleanTempDir": true,
