@@ -204,6 +204,47 @@ class RedactSecretFilterTest(unittest.TestCase):
         self.assertEqual(captured[0].tags, ["ok", "<SECRET_1> x"])
         self.assertEqual(headers["authorization"], "Bearer SECRET_TOKEN_1")
 
+    def test_a_non_container_object_extra_fails_closed_for_str_and_json_formatters(self) -> None:
+        # #85: a set, bytes, or arbitrary instance extra would otherwise
+        # reach `%(ctx)s` or a `default=str` JSON formatter unscanned.
+        class Leaky:
+            def __str__(self) -> str:
+                return "ctx " + _SECRET
+
+        for ctx in ({_SECRET}, _SECRET.encode(), Leaky()):
+            with self.subTest(ctx=type(ctx).__name__):
+                handler = ListHandler()
+                handler.setFormatter(logging.Formatter("%(message)s %(ctx)s"))
+                handler.addFilter(RedactSecretFilter(fake_scan_and_redact, extra_fields=["ctx"]))
+                record = logging.makeLogRecord({"msg": "request", "ctx": ctx})
+                handler.handle(record)
+                self.assertEqual(handler.lines, ["request " + ERROR_MARKER])
+                self.assertNotIn(_SECRET, json.dumps(record.__dict__, default=str))
+
+    def test_an_extra_whose_read_raises_never_raises_into_the_logging_call(self) -> None:
+        class Unreadable(dict):
+            def __getitem__(self, key):
+                raise RuntimeError("unreadable")
+
+        class Unsliceable(list):
+            def __getitem__(self, index):
+                raise RuntimeError("unreadable")
+
+        logger, handler = make_logger("logging-redaction.extra-raising", extra_fields=("headers", "tags"))
+        handler.setFormatter(logging.Formatter("%(message)s %(headers)s %(tags)s"))
+        logger.info("request", extra={"headers": Unreadable(k=_SECRET), "tags": Unsliceable([_SECRET])})
+        self.assertEqual(handler.lines, [f"request {{'k': '{ERROR_MARKER}'}} {ERROR_MARKER}"])
+
+    def test_invalid_limits_fall_back_to_the_defaults_instead_of_raising(self) -> None:
+        for bad in (None, float("nan"), -1, "5", True):
+            with self.subTest(limit=repr(bad)):
+                handler = ListHandler()
+                handler.setFormatter(logging.Formatter("%(message)s %(tags)s"))
+                limits = {"max_depth": bad, "max_array_length": bad, "max_total_leaves": bad, "max_string_length": bad}
+                handler.addFilter(RedactSecretFilter(fake_scan_and_redact, extra_fields=["tags"], limits=limits))
+                handler.handle(logging.makeLogRecord({"msg": "token %s", "args": (_SECRET,), "tags": [_SECRET, "b"]}))
+                self.assertEqual(handler.lines, ["token <SECRET_1> ['<SECRET_1>', 'b']"])
+
     def test_unconfigured_extra_field_is_left_untouched(self) -> None:
         logger, handler = make_logger("logging-redaction.extra-unconfigured", extra_fields=())
         captured = []

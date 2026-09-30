@@ -7,23 +7,46 @@ Walked: ``str`` leaves; ``dict`` and its subclasses (``OrderedDict``,
 subclasses, returned as a plain ``list``; tuples, returned as a plain
 ``tuple``; and exceptions, returned as a ``{"type", "message", "stack",
 "cause"}`` mapping plus one key per attribute in the exception's
-``__dict__``. Everything else is returned unchanged.
+``__dict__``. ``int``, ``float``, ``bool`` and ``None`` are returned
+unchanged.
+
+Anything else -- a ``set``, ``bytes``, a dataclass, a ``datetime``, any
+other instance -- fails closed to ``ERROR_MARKER``: the walker cannot know
+what a host serializer would print for it (``%(ctx)s``, a JSON formatter's
+``default=str``), so it never passes one through unscanned. This is where
+the Python walker differs from the TS one, which serializes an instance the
+way ``JSON.stringify`` would; Python has no single serialization to mirror.
+
+Never raises for any input value: a container whose read raises (a
+``__getitem__``, ``keys()`` or slice that raises) becomes ``ERROR_MARKER``,
+for that key or element alone when only reading it raised.
 """
 
 from __future__ import annotations
 
+import math
 import traceback
 from typing import Any, Callable, Optional
 
 from .mask_leaf import (
     CYCLE_MARKER,
-    DEFAULT_LIMITS,
     ERROR_MARKER,
     LIMIT_MARKER,
     count_leaf,
     mask_leaf_outcome_with,
+    resolve_limits,
 )
 from .outcome import OutcomeCounter
+
+# Passed through unchanged, like numbers, booleans and null in the TS walker.
+# ``bool`` is a subclass of ``int``.
+_PRIMITIVES = (int, float, type(None))
+
+
+def _slice_bound(limit: Any) -> Optional[int]:
+    """A resolved limit as a slice bound: ``inf`` is no bound, and a
+    fraction truncates, like ``Array.prototype.slice`` in the TS walker."""
+    return None if math.isinf(limit) else int(limit)
 
 
 class _Walk:
@@ -38,7 +61,7 @@ class _Walk:
     ) -> None:
         self.scan_and_redact = scan_and_redact
         self.policy = policy
-        self.limits = {**DEFAULT_LIMITS, **(limits or {})}
+        self.limits = resolve_limits(limits)
         self.leaves = self.limits["max_total_leaves"]
         self.seen: set[int] = set()
         # Caller-owned; see ``outcome.py``. ``None`` means nothing is counted.
@@ -75,6 +98,16 @@ class _Walk:
             return self.marker(ERROR_MARKER)
         return self.string(formatted)
 
+    def entry(self, container: Any, key: Any, depth: int) -> Any:
+        """One key's or element's masked value. A read that raises becomes
+        ``ERROR_MARKER`` for that entry alone, like the per-key guard in
+        ``walk.ts``."""
+        try:
+            item = container[key]
+        except Exception:
+            return self.marker(ERROR_MARKER)
+        return self.value(item, depth + 1)
+
     def exception(self, exc: BaseException, depth: int) -> dict[str, Any]:
         try:
             message = str(exc)
@@ -89,9 +122,9 @@ class _Walk:
         # The exception's own attributes (``exc.status = ...``, ``__notes__``),
         # like the TS walker's own enumerable properties of an Error.
         own = getattr(exc, "__dict__", None) or {}
-        for key in list(own)[: self.limits["max_object_keys"]]:
+        for key in list(own)[: _slice_bound(self.limits["max_object_keys"])]:
             if key not in out:
-                out[key] = self.value(own[key], depth + 1)
+                out[key] = self.entry(own, key, depth)
         if exc.__cause__ is not None:
             out["cause"] = self.value(exc.__cause__, depth + 1)
         return out
@@ -99,10 +132,13 @@ class _Walk:
     def value(self, value: Any, depth: int) -> Any:
         if isinstance(value, str):
             return self.string(value)
-        if not isinstance(value, (BaseException, list, tuple, dict)):
-            # Numbers, booleans, None, and other objects (sets, dataclasses,
-            # datetimes, ...) are returned unchanged.
+        if isinstance(value, _PRIMITIVES):
             return value
+        if not isinstance(value, (BaseException, list, tuple, dict)):
+            # Fail closed: an object the walker cannot see into (a set,
+            # bytes, a dataclass, any other instance) is never passed
+            # through to a serializer that would print it.
+            return self.marker(ERROR_MARKER)
 
         if depth >= self.limits["max_depth"]:
             return self.marker(LIMIT_MARKER)
@@ -114,11 +150,16 @@ class _Walk:
                 return self.exception(value, depth)
             if isinstance(value, dict):
                 # Keys beyond the limit are dropped, never passed through unmasked.
-                keys = list(value.keys())[: self.limits["max_object_keys"]]
-                return {key: self.value(value[key], depth + 1) for key in keys}
+                keys = list(value.keys())[: _slice_bound(self.limits["max_object_keys"])]
+                return {key: self.entry(value, key, depth) for key in keys}
             # Elements beyond the limit are dropped, never passed through unmasked.
-            masked = [self.value(item, depth + 1) for item in value[: self.limits["max_array_length"]]]
+            items = value[: _slice_bound(self.limits["max_array_length"])]
+            masked = [self.value(item, depth + 1) for item in items]
             return tuple(masked) if isinstance(value, tuple) else masked
+        except Exception:
+            # A container whose keys(), slice, or iteration raises cannot be
+            # read, so it cannot be scanned.
+            return self.marker(ERROR_MARKER)
         finally:
             self.seen.discard(id(value))
 
@@ -131,6 +172,8 @@ def walk(
     limits: Optional[dict[str, int]],
     counter: Optional[OutcomeCounter] = None,
 ) -> Any:
+    """Masks every string reachable in ``data``. Never raises for any
+    input value; see the module docstring for what each kind becomes."""
     return _Walk(scan_and_redact, policy, limits, counter).value(data, 0)
 
 
