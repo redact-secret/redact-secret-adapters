@@ -650,8 +650,18 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
           stream.abort();
           return TOOL_ERROR;
         }
-        if (step.done) break;
-        stream.append(step.value as string);
+        let chunk: unknown;
+        try {
+          if (step.done) break;
+          chunk = step.value;
+        } catch {
+          // A step whose fields cannot be read is the producer's error, and
+          // like it is never read.
+          stream.abort();
+          close(iterator, chunks);
+          return TOOL_ERROR;
+        }
+        stream.append(chunk as string);
         if (stream.accepting !== true) {
           close(iterator, chunks);
           break;

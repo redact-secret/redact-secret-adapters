@@ -2,9 +2,11 @@
  * Edge cases of the MCP boundary that the everyday tests never reach: the
  * block-level key-context backstop in isolation, results without `content`,
  * throwing getters partway through a copy, unreadable signals, and the
- * one-parameter handler form. Each case pins a fail-closed branch that
- * mutation testing showed to be unprotected
- * (redact-secret/redact-secret-adapters#91). Every value is synthetic.
+ * one-parameter handler form (redact-secret/redact-secret-adapters#91), and
+ * the streamed-result path: malformed steps, rejections after the outcome
+ * is decided, and closing the producer (#92). Each case pins a fail-closed
+ * branch that mutation testing showed to be unprotected. Every value is
+ * synthetic.
  */
 
 import {
@@ -15,21 +17,21 @@ import {
 } from "@redact-secret/adapter-ai-context";
 import { describe, expect, test } from "vitest";
 
-import { createFakeCore, LIMITS } from "../../adapter-ai-context/test/fake-core.js";
+import { createFakeCore, FakeScanError, LIMITS } from "../../adapter-ai-context/test/fake-core.js";
 import { createMcpBoundaryWith, type McpAuditRecord, type McpBoundaryOptions, mcpBlockedResult } from "../src/index.js";
 
 const SECRET = "SECRET_TOKEN_7";
 const UNSUPPORTED = { outcome: "blocked", reason: "unsupported_value" };
 const POLICY = { outcome: "blocked", reason: "policy" };
 
-function setup(options: McpBoundaryOptions = {}) {
+function setup(options: McpBoundaryOptions = {}, fake = createFakeCore()) {
   const audits: McpAuditRecord[] = [];
-  const ai = createAiContextBoundaryWith(createFakeCore().core, {
+  const ai = createAiContextBoundaryWith(fake.core, {
     ...LIMITS,
     traversalLimits: { maxDepth: 6, maxNodes: 64 },
   });
   const mcp = createMcpBoundaryWith(ai, { onAudit: (record) => audits.push(record), ...options });
-  return { mcp, audits };
+  return { mcp, audits, calls: fake.calls };
 }
 
 /** A property whose getter throws, as a data-shaped own enumerable property. */
@@ -344,5 +346,230 @@ describe("a one-parameter handler with sanitizeArguments", () => {
     );
     expect(await handler({ signal: { aborted: true } })).toEqual(mcpBlockedResult());
     expect(called).toBe(false);
+  });
+});
+
+const TOOL_ERROR = { outcome: "tool_error" };
+
+/** Collects `unhandledRejection` events while `run` executes and a few macrotasks after it. */
+async function unhandledDuring(run: () => Promise<void>): Promise<unknown[]> {
+  const seen: unknown[] = [];
+  const listener = (reason: unknown) => seen.push(reason);
+  process.on("unhandledRejection", listener);
+  try {
+    await run();
+    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 2));
+  } finally {
+    process.off("unhandledRejection", listener);
+  }
+  return seen;
+}
+
+/** An async iterable over scripted `next()` results, recording `return()` and `destroy()`. */
+function scripted(steps: (() => unknown)[], { onReturn }: { onReturn?: () => unknown } = {}) {
+  const state = { pulled: 0, returned: 0, destroyed: 0 };
+  const iterator = {
+    next: () => {
+      const step = steps[state.pulled] ?? (() => ({ done: true, value: undefined }));
+      state.pulled += 1;
+      return step();
+    },
+    return: () => {
+      state.returned += 1;
+      return onReturn ? onReturn() : { done: true, value: undefined };
+    },
+  };
+  const iterable = {
+    [Symbol.asyncIterator]: () => iterator,
+    destroy: () => {
+      state.destroyed += 1;
+    },
+  };
+  return { iterable, state };
+}
+
+describe("a streamed result whose producer misbehaves", () => {
+  test.each([
+    ["null", null],
+    ["undefined", undefined],
+    ["a number", 42],
+    ["a string", "done"],
+  ])("a step that is %s is tool_error and aborts the session", async (_name, step) => {
+    const { mcp, calls } = setup();
+    const { iterable } = scripted([() => Promise.resolve(step)]);
+    expect(await mcp.sanitizeStreamedToolResult(iterable)).toEqual(TOOL_ERROR);
+    expect(calls.sessions[0]?.aborted).toBe(true);
+  });
+
+  test("a sync iterator returning null is tool_error", async () => {
+    const { mcp } = setup();
+    const iterable = { [Symbol.iterator]: () => ({ next: () => null }) };
+    expect(await mcp.sanitizeStreamedToolResult(iterable)).toEqual(TOOL_ERROR);
+  });
+
+  test.each([
+    ["done", { value: "chunk" }],
+    ["value", { done: false }],
+  ])("a step whose %s getter throws is tool_error, never an exception", async (key, base) => {
+    const { mcp, calls, audits } = setup();
+    const step = throwingGetter({ ...base }, key);
+    const { iterable, state } = scripted([() => Promise.resolve(step)]);
+    await expect(mcp.sanitizeStreamedToolResult(iterable)).resolves.toEqual(TOOL_ERROR);
+    expect(calls.sessions[0]?.aborted).toBe(true);
+    expect(state.returned).toBe(1);
+    expect(audits).toEqual([{ stage: "result", outcome: "tool_error" }]);
+  });
+
+  test("the wrapped handler returns the fixed tool-error result for a step whose done getter throws", async () => {
+    const { mcp } = setup();
+    const { iterable } = scripted([() => Promise.resolve(throwingGetter({}, "done"))]);
+    const handler = mcp.wrapStreamedToolHandler(() => iterable);
+    const result = await handler({}, {});
+    expect(result).toMatchObject({ isError: true });
+    expect(JSON.stringify(result)).not.toContain(SECRET);
+  });
+
+  test.each([
+    [Symbol.asyncIterator, "asyncIterator"],
+    [Symbol.iterator, "iterator"],
+  ])("a throwing Symbol.%s getter is tool_error", async (symbol) => {
+    const { mcp, calls } = setup();
+    const chunks = Object.defineProperty({}, symbol, {
+      get() {
+        throw new Error(`getter saw ${SECRET}`);
+      },
+    });
+    expect(await mcp.sanitizeStreamedToolResult(chunks)).toEqual(TOOL_ERROR);
+    expect(calls.sessions).toEqual([]);
+  });
+
+  test("a function carrying Symbol.asyncIterator is a producer", async () => {
+    const { mcp } = setup();
+    const { iterable } = scripted([() => Promise.resolve({ done: false, value: `a ${SECRET}` })]);
+    const chunks = Object.assign(() => undefined, { [Symbol.asyncIterator]: iterable[Symbol.asyncIterator] });
+    expect(await mcp.sanitizeStreamedToolResult(chunks)).toMatchObject({
+      outcome: "ok",
+      value: { content: [{ type: "text", text: "a <SECRET_1>" }] },
+    });
+  });
+
+  test("a producer error aborts the session", async () => {
+    const { mcp, calls } = setup();
+    const { iterable } = scripted([
+      () => Promise.resolve({ done: false, value: "a" }),
+      () => Promise.reject(new Error(`producer saw ${SECRET}`)),
+    ]);
+    expect(await mcp.sanitizeStreamedToolResult(iterable)).toEqual(TOOL_ERROR);
+    expect(calls.sessions[0]?.aborted).toBe(true);
+  });
+
+  test("a producer error after a polled signal fired is aborted", async () => {
+    const { mcp, calls } = setup();
+    const signal = { aborted: false };
+    const { iterable } = scripted([
+      () => {
+        signal.aborted = true;
+        return Promise.reject(new Error(`producer saw ${SECRET}`));
+      },
+    ]);
+    expect(await mcp.sanitizeStreamedToolResult(iterable, { signal })).toEqual({ outcome: "aborted" });
+    expect(calls.sessions[0]?.aborted).toBe(true);
+  });
+});
+
+describe("a streamed result never leaves a rejection unhandled", () => {
+  test("a next() that rejects after the abort race was lost", async () => {
+    const { mcp, calls } = setup();
+    const controller = new AbortController();
+    let reject: (error: Error) => void = () => undefined;
+    const { iterable, state } = scripted([() => new Promise((_resolve, fail) => (reject = fail))]);
+    const seen = await unhandledDuring(async () => {
+      const pending = mcp.sanitizeStreamedToolResult(iterable, { signal: controller.signal });
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      controller.abort();
+      expect(await pending).toEqual({ outcome: "aborted" });
+      reject(new Error(`late failure ${SECRET}`));
+    });
+    expect(seen).toEqual([]);
+    expect(state.returned).toBe(1);
+    expect(state.destroyed).toBe(1);
+    expect(calls.sessions[0]?.aborted).toBe(true);
+  });
+
+  test("a return() that rejects after the abort race", async () => {
+    const { mcp } = setup();
+    const controller = new AbortController();
+    const { iterable, state } = scripted([() => new Promise(() => undefined)], {
+      onReturn: () => Promise.reject(new Error(`close failure ${SECRET}`)),
+    });
+    const seen = await unhandledDuring(async () => {
+      const pending = mcp.sanitizeStreamedToolResult(iterable, { signal: controller.signal });
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      controller.abort();
+      expect(await pending).toEqual({ outcome: "aborted" });
+    });
+    expect(seen).toEqual([]);
+    expect(state.returned).toBe(1);
+  });
+
+  test("a return() that rejects after a block finding", async () => {
+    const { mcp } = setup({}, createFakeCore({ emitOnAppend: true }));
+    const { iterable, state } = scripted([() => Promise.resolve({ done: false, value: "BLOCK_ME" })], {
+      onReturn: () => Promise.reject(new Error(`close failure ${SECRET}`)),
+    });
+    const seen = await unhandledDuring(async () => {
+      expect(await mcp.sanitizeStreamedToolResult(iterable)).toEqual(POLICY);
+    });
+    expect(seen).toEqual([]);
+    expect(state.returned).toBe(1);
+  });
+
+  test.each([
+    ["null", () => null],
+    ["a primitive", () => 1],
+    ["an object that is not a promise", () => ({ done: true })],
+    [
+      "a throwing call",
+      () => {
+        throw new Error(`close failure ${SECRET}`);
+      },
+    ],
+  ])("a return() that gives %s still decides the outcome", async (_name, onReturn) => {
+    const { mcp } = setup({}, createFakeCore({ emitOnAppend: true }));
+    const { iterable, state } = scripted([() => Promise.resolve({ done: false, value: "BLOCK_ME" })], { onReturn });
+    const seen = await unhandledDuring(async () => {
+      expect(await mcp.sanitizeStreamedToolResult(iterable)).toEqual(POLICY);
+    });
+    expect(seen).toEqual([]);
+    expect(state.returned).toBe(1);
+    expect(state.destroyed).toBe(1);
+  });
+});
+
+describe("a stream that cannot start closes the producer", () => {
+  test("a signal that is aborted by the time the session opens", async () => {
+    const { mcp, calls } = setup();
+    let reads = 0;
+    const signal = {
+      get aborted() {
+        reads += 1;
+        return reads > 1;
+      },
+    };
+    const { iterable, state } = scripted([() => Promise.resolve({ done: false, value: "never read" })]);
+    expect(await mcp.sanitizeStreamedToolResult(iterable, { signal })).toEqual({ outcome: "aborted" });
+    expect(state).toEqual({ pulled: 0, returned: 1, destroyed: 1 });
+    expect(calls.sessions).toEqual([]);
+  });
+
+  test("a session the core fails to create", async () => {
+    const { mcp } = setup({}, createFakeCore({ openFailure: new FakeScanError("NOT_INITIALIZED") }));
+    const { iterable, state } = scripted([() => Promise.resolve({ done: false, value: "never read" })]);
+    expect(await mcp.sanitizeStreamedToolResult(iterable)).toEqual({
+      outcome: "blocked",
+      reason: "core_error",
+      code: "NOT_INITIALIZED",
+    });
+    expect(state).toEqual({ pulled: 0, returned: 1, destroyed: 1 });
   });
 });
