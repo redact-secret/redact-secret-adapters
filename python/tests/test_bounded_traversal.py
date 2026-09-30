@@ -56,6 +56,25 @@ def build_shape(shape: dict[str, Any]) -> Any:
     if kind == "shared-reference":
         shared = {"leaf": leaf}
         return {"x": shared, "y": shared}
+    if kind == "opaque-object":
+
+        class Opaque:
+            def __init__(self) -> None:
+                self.token = leaf
+
+            def __str__(self) -> str:
+                return leaf
+
+        return Opaque()
+    if kind == "throwing-entry":
+
+        class ThrowingEntry(dict):
+            def __getitem__(self, key: str) -> Any:
+                if key == "bad":
+                    raise RuntimeError("unreadable")
+                return super().__getitem__(key)
+
+        return ThrowingEntry(ok=leaf, bad=leaf)
     if kind == "long-string":
         return "x" * shape["length"] + " " + leaf
     raise ValueError(f"unknown shape kind: {kind}")
@@ -68,10 +87,13 @@ class BoundedTraversalTest(unittest.TestCase):
                 scanner = RecordingScanner()
                 limits = {_snake(key): value for key, value in case["limits"].items()}
                 result = mask_secrets_with(scanner, build_shape(case["shape"]), limits=limits or None)
-                serialized = json.dumps(result)
+                # default=str, like a JSON log formatter: whatever the walk
+                # passes through unmasked is printed, not rejected.
+                serialized = json.dumps(result, default=str)
                 self.assertLessEqual(len(scanner.calls), case["maxScannerCalls"])
                 self.assertNotIn(case["shape"]["leaf"], serialized)
-                self.assertIn(case["mustContain"], serialized)
+                must_contain = case["mustContain"]
+                self.assertIn(must_contain if isinstance(must_contain, str) else must_contain["python"], serialized)
                 if "mustNotContain" in case:
                     self.assertNotIn(case["mustNotContain"], serialized)
                 if "expected" in case:

@@ -28,7 +28,8 @@ interface BoundedCase {
   readonly shape: Shape;
   readonly limits: Partial<Limits>;
   readonly maxScannerCalls: number;
-  readonly mustContain: string;
+  /** One string for both languages, or each language's own where they differ by design. */
+  readonly mustContain: string | { readonly ts: string; readonly python: string };
   readonly mustNotContain?: string;
   readonly expected?: unknown;
 }
@@ -67,6 +68,23 @@ function buildShape(shape: Shape): unknown {
     const shared = { leaf };
     return { x: shared, y: shared };
   }
+  if (kind === "opaque-object") {
+    class Opaque {
+      readonly token = leaf;
+      toString(): string {
+        return leaf;
+      }
+    }
+    return new Opaque();
+  }
+  if (kind === "throwing-entry") {
+    return Object.defineProperty({ ok: leaf }, "bad", {
+      enumerable: true,
+      get() {
+        throw new Error("unreadable");
+      },
+    });
+  }
   if (kind === "long-string") return `${"x".repeat(shape.length ?? 0)} ${leaf}`;
   throw new Error(`unknown shape kind: ${kind}`);
 }
@@ -83,6 +101,8 @@ test("the shared bounded-traversal cases cover every shape kind", () => {
       "long-string",
       "cause-chain",
       "shared-reference",
+      "opaque-object",
+      "throwing-entry",
     ]),
   );
 });
@@ -98,7 +118,8 @@ for (const boundedCase of cases) {
     const serialized = JSON.stringify(result);
     expect(calls).toBeLessThanOrEqual(boundedCase.maxScannerCalls);
     expect(serialized).not.toContain(boundedCase.shape.leaf);
-    expect(serialized).toContain(boundedCase.mustContain);
+    const { mustContain } = boundedCase;
+    expect(serialized).toContain(typeof mustContain === "string" ? mustContain : mustContain.ts);
     if (boundedCase.mustNotContain !== undefined) expect(serialized).not.toContain(boundedCase.mustNotContain);
     if (boundedCase.expected !== undefined) expect(result).toEqual(boundedCase.expected);
   });

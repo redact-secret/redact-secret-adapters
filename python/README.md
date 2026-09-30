@@ -22,8 +22,23 @@ logging.getLogger().addHandler(handler)
 The filter formats `msg` with `args` before scanning, then clears the
 arguments so a downstream formatter cannot rebuild the original. It replaces
 `exc_info` with redacted traceback text, scans cached `exc_text` and
-`stack_info`, and redacts any `extra_fields=[...]` you name: a string extra is
-masked, and a dict/list/tuple extra is walked and replaced by a masked copy.
+`stack_info`, and redacts any `extra_fields=[...]` you name. What a named extra
+can be:
+
+| Extra value | Becomes |
+| --- | --- |
+| `str` | the masked string |
+| `dict`, `list`, `tuple` (and subclasses), an exception | a masked copy, walked to the limits below; a subclass comes back as the plain container |
+| `int`, `float`, `bool`, `None` | itself, unchanged |
+| anything else: a `set`, `bytes`, a dataclass, a `datetime`, any other object | `[REDACTED:ERROR]` |
+
+The last row fails closed on purpose. The filter cannot know what a `%(ctx)s`
+format or a JSON formatter's `default=str` would print for an arbitrary
+object, so it never hands one over unscanned. Convert such a value to a `dict`
+or a `str` yourself before logging it if you want it kept. A container whose
+read raises (a `__getitem__`, `keys()` or slice that raises) becomes
+`[REDACTED:ERROR]` for that entry, or for the whole container when it cannot be
+listed at all; it never raises into the logging call.
 If the message cannot be formatted (a bad `%` format, a raising `__str__`), it
 becomes `[REDACTED:ERROR]` rather than raising into the logging call.
 
@@ -191,12 +206,23 @@ this case.
 | Marker | When |
 | --- | --- |
 | `[REDACTED:BLOCKED]` | A `block` finding — the **entire** leaf is replaced |
-| `[REDACTED:ERROR]` | Any exception from the core. Never the input, never the exception's message |
+| `[REDACTED:ERROR]` | Any exception from the core; a value that cannot be read (a raising `__str__`, `__getitem__` or `keys()`); any object the walker does not walk (see [`logging`](#logging)). Never the input, never the exception's message |
 | `[REDACTED:LIMIT_EXCEEDED]` | A value past a walk budget; never scanned, never passed through |
 | `[REDACTED:CYCLE]` | A self-referencing object |
 
 `DEFAULT_LIMITS`: `max_depth` 8, `max_array_length` 1000, `max_object_keys` 200,
 `max_string_length` 200000, `max_total_leaves` 5000.
+
+A `limits` override that is not a usable bound (`None`, `NaN`, a negative
+number, a `bool`, or not a number at all) falls back to that key's default,
+like the TypeScript walker's `resolveLimit`, instead of raising or disabling
+the bound. `float("inf")` is a valid bound and means none.
+
+`mask_secrets_with`, `mask_log_value_with` and `extra_fields` share one walker,
+so the table under [`logging`](#logging) holds for all three: any object that
+is not a string, number, boolean, `None`, `dict`, `list`, `tuple` or exception
+becomes `[REDACTED:ERROR]`. The TypeScript walker instead serializes an object
+the way `JSON.stringify` would; Python has no single serialization to mirror.
 
 ## OpenTelemetry (`[otel]` extra)
 
