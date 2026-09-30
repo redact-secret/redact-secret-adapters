@@ -108,6 +108,13 @@ public API and move only in a major version. The reasons behind them:
   message can carry the input.
 - A value past a budget is never sent to the core, and elements or keys past a
   width limit are dropped rather than passed through unmasked.
+- Values are masked; **object keys and attribute names are not scanned** by the
+  logging and tracing adapters (`walkValue`, the Python walker, pino's
+  `streamWrite`, and both span processors). A key is kept as it is so the
+  value keeps its shape, and none of these adapters promises more than that. The
+  AI-context boundary is the exception: `walkStrict` hands every key to its
+  visitor, and that boundary scans keys. Scanning keys in the logging and
+  tracing adapters would be a behavior change with its own changelog entry.
 - Every visit counts against `maxNodes`, not only string leaves. The walk
   tracks only the current path, which is enough to detect a cycle, so a shared
   reference is walked once per path. Budgeting leaves alone would let an

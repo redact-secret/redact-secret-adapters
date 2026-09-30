@@ -186,6 +186,13 @@ every value, a number included, becomes `[REDACTED:LIMIT_EXCEEDED]`. An
 override that is `undefined`, `NaN`, negative, or not a number falls back to
 the default, as for every other limit.
 
+**Object keys and attribute names are not scanned.** `maskSecretsWith` and
+`maskLogValueWith` mask values only. Every key, including the own property
+names copied from an `Error` or a class instance, reaches the host unchanged,
+so `{ [token]: 1 }` keeps `token` in the output. Do not put a secret in a key.
+`walkStrict` differs: it hands every key to the caller's visitor, and the
+AI-context boundary built on it does scan keys.
+
 ## License
 
 MIT
