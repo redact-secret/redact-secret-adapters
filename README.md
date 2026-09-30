@@ -67,8 +67,8 @@ train. A version in the second column exists only here until that train is cut.
 | --- | --- | --- | --- | --- |
 | `@redact-secret/adapter` | npm | — (shared base) | `0.1.5`, beta | `0.1.5` |
 | `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
-| `@redact-secret/adapter-otel-trace` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` (traces only) | — not yet published | `0.1.0`, unreleased (`private` until its first train) |
-| `@redact-secret/adapter-otel` | npm | deprecated name: re-exports `adapter-otel-trace` | `0.1.2`, beta | `0.1.2` (re-export; unreleased) |
+| `@redact-secret/adapter-otel-trace` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` (traces only) | — not yet published | `0.1.0` |
+| `@redact-secret/adapter-otel` | npm | deprecated name: re-exports `adapter-otel-trace` | `0.1.2`, beta | `0.1.3` (re-export) |
 | `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.2`, beta | `0.1.2` |
 | `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.1`, beta | `0.1.1` |
 | `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.26.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.2`, beta | `0.1.2` |
