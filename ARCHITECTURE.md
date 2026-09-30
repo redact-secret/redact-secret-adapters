@@ -298,7 +298,12 @@ result as one L1 leaf, so a secret split across the format string and an
 argument is still seen whole; the arguments are then cleared. An exception is
 masked as its formatted traceback, also one L1 leaf, and cached `exc_text` and
 `stack_info` likewise. Only the `extra_fields` a caller names go through the L2
-walker.
+walker. Where the TypeScript walker serializes an object the way
+`JSON.stringify` would, the Python walker has no single serialization to
+mirror, so an object it does not walk (anything but a string, number, bool,
+`None`, `dict`, `list`, `tuple` or exception) fails closed to
+`[REDACTED:ERROR]` rather than reaching a `%(ctx)s` format or a `default=str`
+JSON formatter unscanned.
 
 A `logging.Filter` runs only where it is attached, which makes *placement* the
 security decision in any application with more than one handler. On a handler,
