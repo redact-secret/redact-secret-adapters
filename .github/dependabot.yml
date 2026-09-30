@@ -36,6 +36,12 @@ updates:
       - dependency-name: "@types/node"
         update-types:
           - version-update:semver-major
+      # vitest 5 requires Node ^22.12 || ^24 || >=26 and peers @types/node
+      # ^22 || >=24, so it cannot run the Node 20 CI leg that backs engines.
+      # Lift this when Node 20 leaves engines and the CI matrix (#71).
+      - dependency-name: vitest
+        versions:
+          - ">= 5"
 
   # Pinned npm CLI used by the release workflows (see .github/npm-tools).
   # Its bundled dependencies are scanned by Scorecard, so track new npm releases.
