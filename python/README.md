@@ -231,6 +231,13 @@ is not a string, number, boolean, `None`, `dict`, `list`, `tuple` or exception
 becomes `[REDACTED:ERROR]`. The TypeScript walker instead serializes an object
 the way `JSON.stringify` would; Python has no single serialization to mirror.
 
+**Dict keys and attribute names are not scanned.** The walker masks values
+only. Every dict key, and every attribute name copied from an exception's
+`__dict__`, reaches the handler unchanged, and so does the name of an
+`extra_fields` attribute. The OpenTelemetry processor likewise leaves every
+span, event, and link attribute key as it is. Do not put a secret in a key or
+an attribute name.
+
 ## OpenTelemetry (`[otel]` extra)
 
 ```python
@@ -246,7 +253,8 @@ A span's name and status description, every string and string-sequence
 attribute (a `None` inside a sequence stays in place), every event's name and
 attributes, and every link's attributes are redacted before the span reaches
 the next processor, including OpenInference and GenAI semantic-convention
-attributes, without hardcoding either convention's attribute list.
+attributes, without hardcoding either convention's attribute list. Attribute
+names are not scanned (see [Fail-closed markers](#fail-closed-markers)).
 
 `opentelemetry-sdk` has no public way to change a span before export, so the
 adapter writes the private fields behind the read-only accessors (`_name`,
