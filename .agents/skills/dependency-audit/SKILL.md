@@ -21,6 +21,7 @@ Answer one question: does any dependency we ship or build with have a known vuln
 - **Shipped (PyPI)**: `redact-secret` (the core) and the optional `opentelemetry-sdk` extra in `python/pyproject.toml`. The declared ranges are shipped surface, so an advisory inside a range endpoint counts.
 - **Peer and host ranges**: an advisory in the core or a host SDK version inside a declared range is a compatibility finding. Report it, and name the range endpoint tests that cover it.
 - **Build/test only**: typescript, vitest, biome, fast-check, ajv, the MCP and pino and OpenTelemetry host SDKs installed as devDependencies, `.github/npm-tools`, and `.github/requirements` (build, lint, test).
+- **Accepted**: advisories inside npm's own bundle in `.github/npm-tools` that no npm release fixes yet are recorded, with a reachability reason, in `.github/npm-tools/osv-scanner.toml`. OSV-Scanner filters them. List them as accepted, and flag any entry whose `ignoreUntil` has passed or whose fix has since shipped in an npm release.
 - **Reachable?** State whether the vulnerable function is used by our code or tests. Say "not assessed" when unsure; never guess "not reachable".
 
 ## Output

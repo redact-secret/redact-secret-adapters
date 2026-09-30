@@ -1,0 +1,94 @@
+# Accepted advisories in the npm CLI pinned for the release workflows (#84).
+#
+# OSV-Scanner reads this file for .github/npm-tools/package-lock.json. Every
+# entry below is inside npm's own bundle (bundleDependencies), so it cannot be
+# bumped here: the only fix is an npm release that bundles the fixed version.
+# As of 2026-09-30 none does. npm 11.19.1 through 11.21.0 and 12.1.0 through
+# 12.2.0 (latest) all bundle ip-address 10.5.0, undici 6.28.0 and
+# brace-expansion 5.0.9; 12.0.0 bundles older versions of all three.
+#
+# How the pinned npm is used (release.yml, release-rehearsal.yml):
+#   - installed with `npm ci --ignore-scripts`, so no install script runs;
+#   - then runs only `npm publish [--provenance] [--dry-run]` for our own
+#     workspaces, none of which has lifecycle scripts;
+#   - on GitHub-hosted runners with no proxy configured, talking only to
+#     registry.npmjs.org and the sigstore endpoints over HTTPS.
+# This is build tooling. Nothing here ships in a published package.
+#
+# ignoreUntil forces a re-review: when it passes, the scan fails again.
+# Dependabot tracks npm releases for this directory weekly. When a bump
+# bundles a fixed version, delete that entry in the same pull request.
+
+# --- ip-address 10.5.0 (fixed in 10.5.1 / 10.7.1) ---------------------------
+# Only consumer in npm's bundle: `socks` (via socks-proxy-agent, via
+# @npmcli/agent), loaded only when a socks:// proxy is configured. The release
+# workflows configure no proxy. Even then, socks only parses and serializes
+# addresses (Address4/Address6 constructors, fromByteArray, canonicalForm); it
+# never calls the classifiers or subnet checks these advisories concern.
+
+[[IgnoredVulns]]
+id = "GHSA-2vr4-cq9g-pvrc" # CVE-2026-101910, NAT64 local-use range not classified
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles ip-address >=10.5.1. Not reachable: only socks uses ip-address, only behind a socks:// proxy (none configured), and it never calls the Address6 classifiers."
+
+[[IgnoredVulns]]
+id = "GHSA-rpw4-54j3-4h4q" # CVE-2026-101913, isLinkLocal() checks fe80::/64
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles ip-address >=10.5.1. Not reachable: socks never calls isLinkLocal(), and no socks:// proxy is configured in the release workflows."
+
+[[IgnoredVulns]]
+id = "GHSA-j6r3-76f7-8jcv" # CVE-2026-101912, isInSubnet() mixes address families
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles ip-address >=10.7.1. Not reachable: socks never calls isInSubnet()/isHostInSubnet(), and no socks:// proxy is configured in the release workflows."
+
+[[IgnoredVulns]]
+id = "GHSA-h3mg-xc3c-68pw" # CVE-2026-101911, unbounded Address6 parse diagnostic
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles ip-address >=10.7.1. Not reachable: Address6 parsing happens only inside socks behind a socks:// proxy (none configured), and its input is the proxy's own reply, not attacker-sized text."
+
+# --- undici 6.28.0 (fixed in 6.28.1) ----------------------------------------
+# Only consumer in npm's bundle: node-gyp's lib/download.js (fetch through
+# Agent/EnvHttpProxyAgent/RetryAgent), which downloads Node headers to build
+# a native addon. npm publish never builds native addons, the pinned npm is
+# installed with --ignore-scripts, and our packages have no install or
+# lifecycle scripts. npm's registry traffic (publish, provenance/sigstore,
+# audit signatures) goes through make-fetch-happen, not undici. node-gyp never
+# opens a WebSocket.
+
+[[IgnoredVulns]]
+id = "GHSA-3wwx-pv8p-q78v" # CVE-2026-85024, WebSocket permessage-deflate DoS
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles undici >=6.28.1. Not reachable: nothing in npm opens a WebSocket; undici is used only by node-gyp's header download, which publish never runs."
+
+[[IgnoredVulns]]
+id = "GHSA-rfgv-xxqx-mfg5" # CVE-2026-19534, unrequested WebSocket subprotocol DoS
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles undici >=6.28.1. Not reachable: nothing in npm opens a WebSocket; undici is used only by node-gyp's header download, which publish never runs."
+
+[[IgnoredVulns]]
+id = "GHSA-r53p-7pc4-xj5r" # CVE-2026-18540, retry interceptor response splitting
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles undici >=6.28.1. Not reachable: node-gyp's RetryAgent is the only user and runs only for native addon builds, which never happen in the release workflows; it also never forwards a response downstream."
+
+# --- brace-expansion 5.0.9 (fixed in 5.0.10 / 5.0.11 / 5.0.12) ---------------
+# Used by minimatch, which npm-packlist runs during `npm publish` to apply the
+# `files` globs and ignore rules. Reachable, but the only patterns it expands
+# are the ones this repository writes: each package's `files` list (four
+# short literals) and npm's built-in ignore list. No untrusted pattern reaches
+# it, and the worst outcome of a hostile pattern is a crashed or slow publish
+# job, not a changed tarball.
+
+[[IgnoredVulns]]
+id = "GHSA-6j4f-fj2g-mc7p" # CVE-2026-102276, parseCommaParts stack exhaustion
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles brace-expansion >=5.0.10. Reachable via npm-packlist, but only with repository-authored patterns (package.json files, npm's defaults); impact is limited to a failed publish job."
+
+[[IgnoredVulns]]
+id = "GHSA-qhr7-859c-m2p7" # CVE-2026-102278, nested brace group stack exhaustion
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles brace-expansion >=5.0.11. Reachable via npm-packlist, but only with repository-authored patterns (package.json files, npm's defaults); impact is limited to a failed publish job."
+
+[[IgnoredVulns]]
+id = "GHSA-q2hr-2g5m-vwhr" # CVE-2026-102277, quadratic {a},b} expansion
+ignoreUntil = 2026-12-31
+reason = "Bundled in npm; no npm release bundles brace-expansion >=5.0.12. Reachable via npm-packlist, but only with repository-authored patterns (package.json files, npm's defaults); impact is limited to a slow publish job."
