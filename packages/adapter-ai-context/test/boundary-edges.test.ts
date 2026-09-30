@@ -245,3 +245,51 @@ describe("the core error-code registry", () => {
     expect(outcomeFor(error)).toEqual({ outcome: "blocked", reason: "core_error" });
   });
 });
+
+describe("stream lifecycle", () => {
+  // redact-secret/redact-secret-adapters#90
+  test("the first failure wins: a block, then abort, then finalize is blocked / policy", () => {
+    const fake = createFakeCore({ emitOnAppend: true });
+    const stream = boundaryOver(fake.core).openStream();
+    stream.append("BLOCK_ME");
+    stream.abort();
+    expect(stream.finalize()).toEqual({ outcome: "blocked", reason: "policy" });
+  });
+
+  test("the first failure wins: a core error, then abort, then finalize keeps the error", () => {
+    const fake = createFakeCore({ appendFailures: { OVER: "BUFFER_LIMIT_EXCEEDED" } });
+    const stream = boundaryOver(fake.core).openStream();
+    stream.append("OVER");
+    stream.abort();
+    expect(stream.finalize()).toEqual({ outcome: "blocked", reason: "limit_exceeded", code: "BUFFER_LIMIT_EXCEEDED" });
+  });
+
+  test("the first failure wins over a signal that fires later", () => {
+    const controller = new AbortController();
+    const fake = createFakeCore({ emitOnAppend: true });
+    const stream = boundaryOver(fake.core).openStream({ signal: controller.signal });
+    stream.append("BLOCK_ME");
+    controller.abort();
+    expect(stream.finalize()).toEqual({ outcome: "blocked", reason: "policy" });
+  });
+
+  test("finalize polls a signal that has no addEventListener: aborted, and staged text is never released", () => {
+    let aborted = false;
+    const signal = {
+      get aborted() {
+        return aborted;
+      },
+    };
+    const fake = createFakeCore();
+    const stream = boundaryOver(fake.core).openStream({ signal });
+    stream.append("staged ");
+    stream.append(`text ${SECRET}`);
+    aborted = true;
+    const outcome = stream.finalize();
+    expect(outcome).toEqual({ outcome: "aborted" });
+    expect(Object.keys(outcome)).toEqual(["outcome"]);
+    expect(fake.calls.sessions[0]?.finalized).toBe(false);
+    expect(fake.calls.sessions[0]?.aborted).toBe(true);
+    expect(stream.accepting).toBe(false);
+  });
+});
