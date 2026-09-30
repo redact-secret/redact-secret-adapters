@@ -13,6 +13,19 @@ dist-tag `alpha` (install it as `@alpha` or by exact version); `latest` is
 not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../../RELEASING.md#prereleases-and-npm-dist-tags)).
 
 ## [Unreleased]
+### Changed
+- The optional peer `@modelcontextprotocol/sdk` range is raised from
+  `>=1.13.0 <=1.30.1` to `>=1.26.0 <=1.30.1`. Every 1.x release before 1.26.0
+  carries at least one of three high-severity SDK advisories:
+  GHSA-w48q-cv73-mx4w (DNS rebinding protection off by default, fixed in
+  1.24.0), GHSA-8r9q-7v3j-jr4g (ReDoS in `UriTemplate`, fixed in 1.25.2) and
+  GHSA-345p-7cg4-v4c7 (cross-client data leak on server or transport reuse,
+  fixed in 1.26.0). None is reachable from this adapter's own code. With the
+  SDK installed, npm now refuses an older one with ERESOLVE. The new range is
+  backed by `test/transport.test.ts`, `test/resources-transport.test.ts` and
+  `test/e2e.test.ts`, run at both endpoints (1.26.0 and 1.30.1) by CI
+  `range-endpoints`. 1.26.0 negotiates protocol 2025-11-25, so 2025-06-18 is
+  no longer negotiated at a tested endpoint (#83).
 
 ## [0.1.1] - 2026-09-29
 ### Fixed

@@ -313,9 +313,9 @@ never read, and it never changes an outcome.
 
 | Surface | Supported, and tested at both endpoints in CI |
 | --- | --- |
-| TypeScript SDK, 1.x | `@modelcontextprotocol/sdk` `>=1.13.0 <=1.30.1` (optional peer) |
+| TypeScript SDK, 1.x | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.30.1` (optional peer) |
 | TypeScript SDK, 2.x | `@modelcontextprotocol/client` and `@modelcontextprotocol/server` `>=2.0.0 <=2.1.0` (optional peers) |
-| Protocol revisions | `2025-06-18` (negotiated by 1.13.0) and `2025-11-25` (1.30.1, 2.0.0, 2.1.0) |
+| Protocol revisions | `2025-11-25` (negotiated by 1.26.0, 1.30.1, 2.0.0, 2.1.0) |
 | Transports | stdio and Streamable HTTP |
 | MCP messages | `tools/call` and `resources/read`, over every line, protocol, and transport above |
 | Core | `@redact-secret/core ^0.1.0-beta.6` (required peer) |
@@ -323,6 +323,18 @@ never read, and it never changes an outcome.
 
 The SDK peer ranges are capped at the highest tested version, so npm refuses
 an untested SDK instead of installing it.
+
+The 1.x floor is 1.26.0, the first release clear of three high-severity SDK
+advisories: DNS rebinding protection off by default
+([GHSA-w48q-cv73-mx4w](https://github.com/advisories/GHSA-w48q-cv73-mx4w)), a
+ReDoS in `UriTemplate`
+([GHSA-8r9q-7v3j-jr4g](https://github.com/advisories/GHSA-8r9q-7v3j-jr4g)), and
+a cross-client data leak when a server or transport is reused
+([GHSA-345p-7cg4-v4c7](https://github.com/advisories/GHSA-345p-7cg4-v4c7)).
+None of them is in code this adapter runs, since it only wraps handlers the
+host registers. They are in the SDK the host deploys around it, though, and
+this package does not qualify a version that carries them. Protocol
+`2025-06-18` is therefore no longer negotiated at any tested endpoint.
 
 Both server SDK lines validate a tool's result before sending it. An
 unwrapped server that returns an unknown block type, a non-object block, a

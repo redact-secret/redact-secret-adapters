@@ -140,9 +140,9 @@
         },
         {
           "name": "@modelcontextprotocol/sdk",
-          "range": ">=1.13.0 <=1.30.1",
+          "range": ">=1.26.0 <=1.30.1",
           "kind": "peerDependency (optional)",
-          "endpoints": { "lowest": "1.13.0", "highest": "1.30.1" }
+          "endpoints": { "lowest": "1.26.0", "highest": "1.30.1" }
         },
         {
           "name": "@modelcontextprotocol/server",
@@ -159,7 +159,7 @@
       ],
       "lifecycle": [
         "the core's mcp-boundary conformance fixture and runner, vendored at a pinned core commit, replayed through the public API on the real core before and after initialize()",
-        "the same fixture carried by real SDK 1.x and 2.x clients and servers over stdio (child process) and Streamable HTTP (127.0.0.1), protocol 2025-06-18 (1.13.0) and 2025-11-25 (1.30.1, 2.0.0, 2.1.0)",
+        "the same fixture carried by real SDK 1.x and 2.x clients and servers over stdio (child process) and Streamable HTTP (127.0.0.1), protocol 2025-11-25 (1.26.0, 1.30.1, 2.0.0, 2.1.0)",
         "resources/read (redact-secret/redact-secret#843): the core's mcp-resources-read fixture and runner, vendored at the same pinned core commit, replayed through the public API before and after initialize(), and carried by real SDK 1.x and 2.x clients and servers over stdio and Streamable HTTP at both endpoints of each line: host placement around client.readResource, and wrapResourceReadHandler on the low-level Server and McpServer.registerResource (fixed URI and URI template) sending exactly the fixed JSON-RPC error",
         "opt-in argument sanitation before dispatch: a blocked argument set never reaches the server",
         "server wrappers on the low-level Server and McpServer.registerTool: a throwing handler caught before the SDK converts its message",
@@ -171,6 +171,7 @@
         "packages/adapter-mcp/test/conformance.test.ts",
         "packages/adapter-mcp/test/conformance-uninitialized.test.ts",
         "packages/adapter-mcp/test/transport.test.ts",
+        "packages/adapter-mcp/test/resources-transport.test.ts",
         "packages/adapter-mcp/test/e2e.test.ts",
         "packages/adapter-mcp/test/boundary.test.ts",
         "packages/adapter-mcp/test/live-init-failure.test.ts",
@@ -243,9 +244,9 @@
     },
     {
       "host": "@modelcontextprotocol/sdk",
-      "versions": "<1.13.0 or >1.30.1",
+      "versions": "<1.26.0 or >1.30.1",
       "enforcement": "refused",
-      "how": "optional peerDependency >=1.13.0 <=1.30.1 on adapter-mcp: when the SDK is installed, npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it. The cap is the highest tested release: a newer one is unqualified until it is added as an endpoint here"
+      "how": "optional peerDependency >=1.26.0 <=1.30.1 on adapter-mcp: when the SDK is installed, npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it. The cap is the highest tested release: a newer one is unqualified until it is added as an endpoint here. The floor is 1.26.0, the first release clear of the high-severity advisories GHSA-w48q-cv73-mx4w, GHSA-8r9q-7v3j-jr4g and GHSA-345p-7cg4-v4c7: an older SDK is refused rather than qualified with them (#83)"
     },
     {
       "host": "@modelcontextprotocol/client and @modelcontextprotocol/server",
