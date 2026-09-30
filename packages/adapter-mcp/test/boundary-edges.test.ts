@@ -462,6 +462,19 @@ describe("a streamed result whose producer misbehaves", () => {
     expect(await mcp.sanitizeStreamedToolResult(iterable)).toEqual(TOOL_ERROR);
     expect(calls.sessions[0]?.aborted).toBe(true);
   });
+
+  test("a producer error after a polled signal fired is aborted", async () => {
+    const { mcp, calls } = setup();
+    const signal = { aborted: false };
+    const { iterable } = scripted([
+      () => {
+        signal.aborted = true;
+        return Promise.reject(new Error(`producer saw ${SECRET}`));
+      },
+    ]);
+    expect(await mcp.sanitizeStreamedToolResult(iterable, { signal })).toEqual({ outcome: "aborted" });
+    expect(calls.sessions[0]?.aborted).toBe(true);
+  });
 });
 
 describe("a streamed result never leaves a rejection unhandled", () => {
