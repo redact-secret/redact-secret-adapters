@@ -196,9 +196,12 @@ Elements and keys beyond a limit are dropped, not passed through. Details:
 
 1. **No finding is not proof.** Detection belongs to the core and is not
    complete. A clean log line does not prove the input held no secret.
-2. **Object keys and attribute names are not scanned** by the logging and
-   tracing adapters. Do not put a secret in a key. (The AI-context and MCP
-   packages do scan keys.)
+2. **Object keys and attribute names are not scanned on their own** by the
+   logging and tracing adapters, and are never rewritten. Do not put a secret
+   in a key. A key is used as *context* for the string directly under it, so a
+   credential whose detection depends on its field name (`api_key`,
+   `password`) is masked; the core decides, and the cost is one more scan for
+   each such string. (The AI-context and MCP packages do scan keys.)
 3. **Placement matters.** An adapter protects only what passes through it: a
    Python handler without the filter, a span processor registered ahead of the
    redacting one, or a pino transport that adds its own text are outside it.

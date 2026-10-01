@@ -76,7 +76,7 @@ bytes.
 | --- | --- |
 | The span name | OpenTelemetry **Logs** (`LogRecord`s from `@opentelemetry/sdk-logs` or a log bridge) |
 | Every string and string-array attribute (a `null` hole in an array stays in place) | Metrics |
-| Every event's name and attributes | Attribute **names**. Do not put a secret in an attribute key |
+| Every event's name and attributes | Attribute **names**, which are never scanned on their own or rewritten (a name is only context for the string value under it). Do not put a secret in an attribute key |
 | The status message | Spans the wrapped processor never receives: sampled out, or handled by a processor registered ahead of this one |
 | Every link's attributes | |
 
@@ -109,15 +109,32 @@ assertion is not optional.
 ## Options
 
 ```js
-await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLength });
+await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLength, operationLimits, scanLimits, ruleset, placeholderFormatter });
 ```
 
 | Option | What it does |
 | --- | --- |
 | `pii` | Turn on PII detection, e.g. `["pii:global"]`. See below |
 | `onOutcome` | A callback with counts per span, for your metrics. See below |
-| `policy` | The core's policy, passed through unchanged |
+| `policy` | The core's policy, passed through unchanged. It replaces the core's built-in policy for every finding, a `ruleset` detector's included |
+| `scanLimits` | The core's whole-input limits, `{ maxInputBytes, maxFindings }`, for every scan. See [Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options) |
+| `ruleset` | A declarative detector ruleset (text or bytes) |
+| `placeholderFormatter` | The core's placeholder formatter |
 | `maxStringLength` | Strings longer than this become `[REDACTED:LIMIT_EXCEEDED]` unscanned |
+| `operationLimits` | Override the aggregate budget of **one span**. See below |
+
+### One budget per span
+
+The span name, every attribute, every event and link, and the status message
+share **one** aggregate budget per span, so a span with many events and links
+cannot multiply the scanning even when each string is within `maxStringLength`.
+Past a bound every string not yet inspected becomes
+`[REDACTED:LIMIT_EXCEEDED]` unscanned and the span is still forwarded, never with
+text the budget did not allow to be inspected; nothing in `onOutcome` carries
+input. A key-context scan counts as a scan, and attribute names count as keys.
+A span ended re-entrantly inside the next processor has its own budget. Units,
+defaults and the caveat that this is a work counter and not a timeout are in
+[`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#aggregate-operation-budget).
 
 ### PII detection
 

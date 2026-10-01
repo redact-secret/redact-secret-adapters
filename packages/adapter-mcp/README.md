@@ -87,7 +87,7 @@ CI runs this block verbatim from a clean install outside the repository
 - **A structured result can be blocked rather than redacted** when only a
   sibling or parent key identifies the secret. See
   [What is scanned](#what-is-scanned).
-- **`ok` with no findings is not proof** the result held no secret.
+- **`ok` with no findings is not proof** the result held no secret. `findingOccurrences(outcome)` from `@redact-secret/adapter-ai-context` also works on an MCP `ok` outcome and says which part and leaf each finding came from; the ordinals are those of the serialized result view the boundary scans.
 - **Do not log a raw `McpError` from `callTool`.** Its message can quote parts
   of the result.
 
@@ -181,6 +181,14 @@ Those values *are* `AI_CONTEXT_DEFAULT_LIMITS`, re-exported from
 [`@redact-secret/adapter-ai-context`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-ai-context#limits),
 which documents each one. **There is no unbounded mode**: every one of them
 fails an oversized result closed as `blocked` / `limit_exceeded`.
+
+### Operation limits
+
+`operationLimits` passes through to the AI-context boundary
+([Operation limits](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-ai-context#operation-limits)):
+one tool result, whole or in parts, is one operation with an aggregate budget, and
+a result over it is the boundary's fixed `blocked` / `limit_exceeded` outcome,
+never a partly sanitized result.
 
 ### PII detection is opt-in
 

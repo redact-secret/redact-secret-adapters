@@ -389,7 +389,8 @@ class RedactSecretFilterTest(unittest.TestCase):
             }
         )
         handler.handle(record)
-        self.assertEqual(len(scanner.calls), 4)
+        # message, stack text, stack_info, and the payload value alone and in key context
+        self.assertEqual(len(scanner.calls), 5)
         self.assertTrue(all(called_policy is policy for _, called_policy in scanner.calls))
 
     def test_name_is_deprecated_and_never_drops_or_skips_a_record(self) -> None:

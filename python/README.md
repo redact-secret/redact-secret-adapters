@@ -104,7 +104,7 @@ one.
 | --- | --- |
 | The message, formatted with its `args` before scanning | Record attributes you did not name in `extra_fields` |
 | `exc_info` (replaced with redacted traceback text), cached `exc_text`, `stack_info` | Anything a custom formatter adds after the filter runs |
-| Every attribute you name: `RedactSecretFilter(extra_fields=["user"])` | Dict keys and attribute names. Do not put a secret in a key |
+| Every attribute you name: `RedactSecretFilter(extra_fields=["user"])` | Dict keys and attribute names, never scanned on their own or rewritten (a key is only context for the string under it). Do not put a secret in a key |
 
 After formatting the message the filter clears `args`, so a downstream
 formatter cannot rebuild the original. A record with no finding is formatted
@@ -134,7 +134,14 @@ becomes `[REDACTED:ERROR]`.
 ### Filter options
 
 ```python
-RedactSecretFilter(extra_fields=["user"], on_outcome=observe, policy=policy, limits={"max_depth": 4})
+RedactSecretFilter(
+    extra_fields=["user"],
+    on_outcome=observe,
+    policy=policy,
+    limits={"max_depth": 4},
+    operation_limits={"max_leaves": 1000},
+    ruleset=ruleset,
+)
 ```
 
 | Option | What it does |
@@ -143,6 +150,8 @@ RedactSecretFilter(extra_fields=["user"], on_outcome=observe, policy=policy, lim
 | `on_outcome` | A callback with counts per record. See [Counting what happened](#counting-what-happened) |
 | `policy` | The core's policy, passed through unchanged |
 | `limits` | Override the walk limits. See [Fail-closed markers](#fail-closed-markers) |
+| `scan_limits`, `ruleset`, `placeholder_formatter` | The core's whole-input limits, declarative ruleset and placeholder formatter, passed through. See [Core scan options](#core-scan-options) |
+| `operation_limits` | Override the aggregate budget of **one `filter()` call**. See [Aggregate operation budget](#aggregate-operation-budget) |
 | `scan_and_redact` (first positional) | An injected scanner. With no argument it uses `redact_secret.scan_and_redact` |
 
 ## OpenTelemetry (`[otel]` extra)
@@ -162,7 +171,7 @@ Wrap the processor you already have. It takes `policy`, `limits` and
 | Covered | Not covered |
 | --- | --- |
 | The span name and status description | OpenTelemetry **Logs** and metrics |
-| Every string and string-sequence attribute (a `None` inside a sequence stays in place) | Attribute **names**. Do not put a secret in an attribute key |
+| Every string and string-sequence attribute (a `None` inside a sequence stays in place) | Attribute **names**, never scanned on their own or rewritten (a name is only context for the string value under it). Do not put a secret in an attribute key |
 | Every event's name and attributes | Spans the wrapped processor never receives |
 | Every link's attributes | |
 
@@ -351,12 +360,88 @@ for all three: any object that is not a string, number, boolean, `None`,
 TypeScript walker instead serializes an object the way `JSON.stringify` would;
 Python has no single serialization to mirror.
 
-**Dict keys and attribute names are not scanned.** The walker masks values
-only. Every dict key, and every attribute name copied from an exception's
+**Dict keys and attribute names are not scanned on their own.** The walker
+masks values only; a string directly under a key is also scanned in its
+key-context view `{"<key>":"<value>"}` (the core decides; a finding outside the
+value blocks the value and keeps the key), the way the JavaScript walker does. Every dict key, and every attribute name copied from an exception's
 `__dict__`, reaches the handler unchanged, and so does the name of an
 `extra_fields` attribute. The OpenTelemetry processor likewise leaves every
 span, event, and link attribute key as it is. Do not put a secret in a key or
 an attribute name.
+
+## Core scan options
+
+`RedactSecretFilter`, `RedactingSpanProcessorWith`, `create_redacting_span_processor`,
+`redact_attributes_with`, `mask_secrets_with` and `mask_log_value_with` pass three
+more core options through, unchanged, on every scan, beside `policy`:
+
+| Option | Core argument | What it is |
+| --- | --- | --- |
+| `scan_limits` | `limits` | The core's whole-input limits: a mapping with `max_input_bytes` and `max_findings` (or an object with those attributes). Named `scan_limits` because `limits` is this package's *walk* limits |
+| `ruleset` | `ruleset` | A declarative detector ruleset as `str`, `bytes` or `bytearray` |
+| `placeholder_formatter` | `formatter` | The core's placeholder formatter, `(finding, context) -> str` |
+
+**Policy precedence.** There is one policy and the adapter never combines two:
+your `policy` replaces the core's built-in policy for every finding, including those
+a `ruleset` detector adds. Under the core's default policy a ruleset finding is
+`Medium` confidence and only *warns*, which leaves the text alone, so supply a
+`policy` that returns `redact` or `block` for it. A `block` finding still replaces
+the whole leaf, and a `warn` still leaves the text alone, on top of what the policy
+returned.
+
+The options are validated and snapshotted once, when the filter or processor is
+built (`resolve_scan_config`; per call for `mask_secrets_with`): a `scan_limits`
+mapping is copied and a `bytearray` ruleset becomes `bytes`, so mutating yours
+afterwards changes nothing; a malformed option is a `TypeError` with a fixed
+message. With the real core (the filter built with no scanner argument, and
+`create_redacting_span_processor`) a `scan_limits` mapping becomes
+`redact_secret.WholeInputLimits`; give `mask_secrets_with` and the other
+`*_with` functions a `WholeInputLimits` when the scanner you inject is the real
+core. A leaf the core refuses is `[REDACTED:ERROR]`, never the input or the
+exception's message. A keyed leaf is also scanned in its key-context view, so under
+a byte ceiling its usable size is `max_input_bytes` minus the key and punctuation.
+
+An installed core that cannot honor a requested option is rejected, not ignored:
+the live constructors check `redact_secret.VERSION` against
+`SCAN_OPTION_CORE_FLOORS` (every option is available from the declared floor,
+`0.1.0-beta.6`) and probe with one scan of the empty text, so an older core or a
+ruleset or limits it refuses raises `CoreOptionsError` with a fixed message and
+`code` (`CORE_OPTION_UNSUPPORTED` / `CORE_OPTION_REJECTED`), the option names,
+and the core's own `core_code` (`INVALID_RULESET`, ...), never a value or the core's
+message. A core that omits every new option is untouched. All of this is
+whole-input; the core has no ruleset for an incremental session.
+
+## Aggregate operation budget
+
+`limits` bound one walk and `max_string_length` one string. A log record is
+masked as a message, an exception text, a stack and several extra fields, and a
+span has many attributes, events and links, so many individually valid fields
+could multiply the total work. An **operation** is one `filter()` call, one span
+ending or one `mask_secrets_with` call, and it owns one
+`redact_secret_adapters.budget.OperationBudget` that every pass and field of it
+shares; each call gets a fresh one, so two threads never share a budget.
+
+| Limit | Default | Counts | Unit |
+| --- | --- | --- | --- |
+| `max_bytes` | 16777216 | UTF-8 bytes of every text handed to `scan_and_redact`, key-context views included | actual calls |
+| `max_scans` | 50000 | every `scan_and_redact` call, views included | actual calls |
+| `max_nodes` | 100000 | every value visited | occurrences |
+| `max_keys` | 100000 | every mapping key or attribute name visited | occurrences |
+| `max_leaves` | 25000 | every string leaf handed to a scan | occurrences |
+| `max_findings` | 100000 | every finding the core reported, summed | occurrences |
+
+*Occurrences* are counted where a value is visited (a shared reference reached by
+two paths counts twice); *actual calls* where work is done. Bytes are UTF-8. The
+outcome counters keep their meaning (`scanned` counts leaves), and the per-walk
+`limits` still apply. Exhaustion is sticky and deterministic: past a bound every
+string not yet inspected becomes `[REDACTED:LIMIT_EXCEEDED]` unscanned (counted
+as `limited`), mapping keys past it are dropped, and the record or span is still
+delivered, never with text the budget did not allow to be inspected. It is a work
+counter, not a wall-clock timeout: it is checked between scans, and a
+`scan_and_redact` call or a host callback that never returns is not interrupted.
+The same options are accepted by `mask_secrets_with`, `mask_log_value_with`,
+`RedactingSpanProcessorWith`, `create_redacting_span_processor` and
+`redact_attributes_with` as `operation_limits`.
 
 ## Development
 

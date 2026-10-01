@@ -177,7 +177,8 @@ test("the policy option reaches scanAndRedact for every field", () => {
   };
   const processor = new RedactingSpanProcessorWith(fakeNextProcessor([]).next, spy, { policy });
   processor.onEnd(asSpan({ name: "n", attributes: { a: "x" }, events: [{ name: "e", attributes: { b: "y" } }] }));
-  expect(seen).toEqual([policy, policy, policy, policy]);
+  // name, attribute (alone + key context), event name, event attribute (alone + key context)
+  expect(seen).toEqual([policy, policy, policy, policy, policy, policy]);
 });
 
 test("onStart, shutdown, and forceFlush delegate to the wrapped processor", async () => {

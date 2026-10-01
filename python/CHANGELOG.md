@@ -19,6 +19,7 @@ package whose declared version isn't on its registry yet — see
 can read it without leaving their environment.
 
 ## [Unreleased]
+
 ### Added
 
 - **Explicit PII activation on the live factories**
@@ -37,6 +38,19 @@ can read it without leaving their environment.
   by `test_pii_factories.py` (real-core subprocess cases for adapter-first,
   application-first, repeated and conflicting selections, the unsupported
   floor and failure before the first event, for both factories).
+
+- **`redact_secret_adapters.key_context`**: the shared key-context scan primitive (`scan_leaf_in_key_context`, `key_context_view`, `key_context_prefix`, `KeyContextFailure`), the Python twin of the JavaScript primitive in redact-secret/redact-secret-adapters#172. `mask_leaf_with` and `mask_leaf_outcome_with` take `key=`.
+
+- **`redact_secret_adapters.budget.OperationBudget`: an aggregate budget per operation** (redact-secret/redact-secret-adapters#173), accepted as `operation_limits` by `RedactSecretFilter` (one `filter()` call: message, exception text, stack and every extra field), `RedactingSpanProcessorWith` / `create_redacting_span_processor` (one span), `redact_attributes_with`, `mask_secrets_with` and `mask_log_value_with`. It counts UTF-8 bytes and `scan_and_redact` calls as actual calls and nodes, mapping keys, leaves and findings as occurrences (key-context scans and keys explicitly). Defaults: 16 MiB, 50,000 scans, 100,000 nodes, 100,000 keys, 25,000 leaves, 100,000 findings. Each call has a fresh budget, so threads and re-entrant calls never share one. It is a work counter, not a wall-clock interrupt.
+
+- **Verified core scan options** (redact-secret/redact-secret-adapters#175): `scan_limits` (the core's whole-input limits, a mapping with `max_input_bytes` and `max_findings`), `ruleset` (`str`, `bytes` or `bytearray`) and `placeholder_formatter` (the core's `formatter`), beside `policy`, on `RedactSecretFilter`, `RedactingSpanProcessorWith`, `create_redacting_span_processor`, `redact_attributes_with`, `mask_secrets_with` and `mask_log_value_with`. They are validated and snapshotted once (`resolve_scan_config`) and passed to every scan as `scan_and_redact(text, policy, **requested)`; with none asked the call is exactly `scan_and_redact(text, policy)`. The caller's `policy` replaces the core's built-in policy for every finding and is never combined with another. The live constructors convert a `scan_limits` mapping to `redact_secret.WholeInputLimits`, check `redact_secret.VERSION` against `SCAN_OPTION_CORE_FLOORS` and probe the options with one scan of the empty text, raising a fixed-message `CoreOptionsError` for an unsupported core or a ruleset or limits the core refuses.
+- No range change: verified from the declared floor `0.1.0b6` through `0.1.0b12` by `tests/test_scan_options.py`, which CI runs at both Python range endpoints.
+
+### Changed
+
+- **Key-aware detection** (redact-secret/redact-secret-adapters#172). A string directly under a mapping key is now scanned with that key as detection context, so a context-dependent credential (`{"api_key": "..."}`) is masked by `mask_secrets_with`, `mask_log_value_with`, `RedactSecretFilter` (inside `extra_fields` values, and the extra field's own name for a plain string), and `RedactingSpanProcessorWith` / `redact_attributes_with` (the attribute name). The core alone decides; keys are never scanned, rewritten or returned, and sequence elements, messages, tracebacks, span names, event names and status descriptions have no key. A keyed string costs one extra `scan_and_redact` call unless its own scan already redacted or blocked it; the `scanned` outcome counter still counts leaves. A key-context finding outside the leaf (it would rewrite the key) replaces the leaf with `[REDACTED:BLOCKED]`; a key longer than `max_string_length` makes the leaf `[REDACTED:LIMIT_EXCEEDED]`.
+
+- **Behavior change with defaults:** a record, span or call that inspects more than the default budget now has the rest replaced by `[REDACTED:LIMIT_EXCEEDED]` (and mapping keys past it dropped); the outcome counters keep their meaning (`limited` counts them).
 
 ## [0.1.3] - 2026-10-01
 ### Changed

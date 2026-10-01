@@ -20,6 +20,16 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Added
+
+- Re-exports `@redact-secret/adapter-otel-trace`'s per-span aggregate budget (`operationLimits`; redact-secret/redact-secret-adapters#173).
+
+- Re-exports `@redact-secret/adapter-otel-trace`'s verified core scan options (`scanLimits`, `ruleset`, `placeholderFormatter`; redact-secret/redact-secret-adapters#175).
+
+### Changed
+
+- Re-exports `@redact-secret/adapter-otel-trace`, which now gives attribute values their attribute name as detection context (redact-secret/redact-secret-adapters#172).
+
 ## [0.1.4] - 2026-10-01
 ### Changed
 

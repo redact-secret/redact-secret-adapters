@@ -53,25 +53,54 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only, no runtime dependenc
     from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor
 
 from ._activation import resolve_live_scan_and_redact
-from .mask_leaf import ERROR_MARKER, count_leaf, mask_leaf_outcome_with
+from .budget import OperationBudget
+from .mask_leaf import ERROR_MARKER, LIMIT_MARKER, count_leaf, mask_leaf_outcome_with
 from .outcome import OutcomeCounter, SpanOutcome, ValueCounts, notify
+from .scan_options import ScanConfig, resolve_scan_config, verify_scan_options
 
 __all__ = ["RedactingSpanProcessorWith", "create_redacting_span_processor", "redact_attributes_with"]
 
 
-def _mask_attribute_value(scan_and_redact, value, *, policy, max_string_length, counter=None):
-    def mask(text):
-        leaf = mask_leaf_outcome_with(scan_and_redact, text, policy=policy, max_string_length=max_string_length)
+def _mask_attribute_value(
+    scan_and_redact, value, *, policy, max_string_length, counter=None, key=None, budget=None, scan_config=None
+):
+    # ``key`` is the attribute name a plain string sits directly under (#172).
+    # A sequence element is not directly under it, so it is masked without
+    # key context, as an array element is everywhere else. ``budget`` is the
+    # span's aggregate budget (#173): every value, key and string leaf is
+    # charged to it, and past it a string is ``LIMIT_MARKER`` and uninspected.
+    def mask(text, text_key=None):
+        if budget is not None and not budget.charge_leaf():
+            if counter is not None:
+                counter.limited += 1
+            return LIMIT_MARKER
+        leaf = mask_leaf_outcome_with(
+            scan_and_redact,
+            text,
+            policy=policy,
+            max_string_length=max_string_length,
+            key=text_key,
+            budget=budget,
+            scan_config=scan_config,
+        )
         count_leaf(counter, leaf)
         return leaf.text
 
     try:
+        if budget is not None:
+            budget.charge_node()
+            if key is not None:
+                budget.charge_key()
         if isinstance(value, str):
-            return mask(value)
+            return mask(value, key)
         if isinstance(value, (list, tuple)) and any(isinstance(item, str) for item in value):
             # The SDK accepts None inside a sequence, so mask each str
             # element and keep everything else in place.
-            masked = [mask(item) if isinstance(item, str) else item for item in value]
+            masked = []
+            for item in value:
+                if budget is not None:
+                    budget.charge_node()
+                masked.append(mask(item) if isinstance(item, str) else item)
             return tuple(masked) if isinstance(value, tuple) else masked
     except Exception:
         if counter is not None:
@@ -89,6 +118,10 @@ def redact_attributes_with(
     *,
     policy: Optional[Any] = None,
     limits: Optional[dict] = None,
+    operation_limits: Optional[dict] = None,
+    scan_limits: Optional[Any] = None,
+    ruleset: Optional[Any] = None,
+    placeholder_formatter: Optional[Callable[..., Any]] = None,
 ) -> None:
     """Mutates `attributes` in place. A no-op for `None`.
 
@@ -99,13 +132,23 @@ def redact_attributes_with(
     has run, from opentelemetry-sdk 1.43). Writing through its backing `_dict` -- present only on that real type --
     bypasses that guard instead of tripping it."""
     max_string_length = (limits or {}).get("max_string_length")
+    budget = OperationBudget(operation_limits)
+    config = resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter)
     _redact_bag(
         attributes,
-        lambda value: _mask_attribute_value(scan_and_redact, value, policy=policy, max_string_length=max_string_length),
+        lambda value, key=None: _mask_attribute_value(
+            scan_and_redact,
+            value,
+            policy=policy,
+            max_string_length=max_string_length,
+            key=key,
+            budget=budget,
+            scan_config=config,
+        ),
     )
 
 
-def _redact_bag(attributes: Optional[dict], mask: Callable[[Any], Any]) -> None:
+def _redact_bag(attributes: Optional[dict], mask: Callable[..., Any]) -> None:
     """Mutates an attribute mapping in place through ``mask``. Shared by
     :func:`redact_attributes_with` and the processor, so the processor's own
     masker -- the one that feeds its per-span counter -- is what runs."""
@@ -113,7 +156,7 @@ def _redact_bag(attributes: Optional[dict], mask: Callable[[Any], Any]) -> None:
         return
     target = getattr(attributes, "_dict", attributes)
     for key in list(target.keys()):
-        target[key] = mask(target[key])
+        target[key] = mask(target[key], key)
 
 
 class _Unredactable(Exception):
@@ -151,6 +194,11 @@ class RedactingSpanProcessorWith:
         *,
         policy: Optional[Any] = None,
         limits: Optional[dict] = None,
+        operation_limits: Optional[dict] = None,
+        scan_limits: Optional[Any] = None,
+        ruleset: Optional[Any] = None,
+        placeholder_formatter: Optional[Callable[..., Any]] = None,
+        scan_config: Optional[ScanConfig] = None,
         on_outcome: Optional[Callable[[SpanOutcome], None]] = None,
     ) -> None:
         if not callable(getattr(next_processor, "on_end", None)):
@@ -162,7 +210,19 @@ class RedactingSpanProcessorWith:
         self._next = next_processor
         self._scan_and_redact = scan_and_redact
         self._policy = policy
+        # The core's whole-input limits, ruleset and placeholder formatter,
+        # validated and snapshotted once (see ``scan_options.py``). A
+        # ``scan_config`` built by the live factory wins.
+        self._config = (
+            scan_config
+            if scan_config is not None
+            else resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter)
+        )
         self._limits = limits
+        # The aggregate budget of one span (see ``budget.py``), shared by its
+        # name, every attribute, event and link, and its status. Each span gets
+        # a fresh one, held on the thread-local state beside the counter.
+        self._operation_limits = operation_limits
         self._on_outcome = on_outcome
         # Thread-local, so one thread reporting never suppresses another's
         # outcome and an observer that traces cannot recurse. The per-span
@@ -183,7 +243,7 @@ class RedactingSpanProcessorWith:
         if callable(on_ending):
             on_ending(span)
 
-    def _mask_text(self, value: Any) -> Any:
+    def _mask_text(self, value: Any, key: Optional[str] = None) -> Any:
         max_string_length = (self._limits or {}).get("max_string_length")
         return _mask_attribute_value(
             self._scan_and_redact,
@@ -191,7 +251,15 @@ class RedactingSpanProcessorWith:
             policy=self._policy,
             max_string_length=max_string_length,
             counter=getattr(self._state, "counter", None),
+            key=key if isinstance(key, str) else None,
+            budget=getattr(self._state, "budget", None),
+            scan_config=self._config,
         )
+
+    def _charge_node(self) -> None:
+        budget = getattr(self._state, "budget", None)
+        if budget is not None:
+            budget.charge_node()
 
     def _redact_name(self, obj: Any) -> None:
         name = _private(obj, "_name", "name")
@@ -232,9 +300,11 @@ class RedactingSpanProcessorWith:
         self._redact_attributes_of(span)
         self._redact_status(span)
         for event in getattr(span, "events", None) or ():
+            self._charge_node()
             self._redact_name(event)
             self._redact_attributes_of(event)
         for link in getattr(span, "links", None) or ():
+            self._charge_node()
             self._redact_attributes_of(link)
 
     def on_end(self, span: "ReadableSpan") -> None:
@@ -244,8 +314,10 @@ class RedactingSpanProcessorWith:
         # ``self._next.on_end`` below, which re-enters this method.
         counting = self._on_outcome is not None
         outer = getattr(self._state, "counter", None)
+        outer_budget = getattr(self._state, "budget", None)
         if counting:
             self._state.counter = OutcomeCounter()
+        self._state.budget = OperationBudget(self._operation_limits)
         dropped = False
         values = None
         try:
@@ -269,6 +341,7 @@ class RedactingSpanProcessorWith:
             if counting:
                 values = (getattr(self._state, "counter", None) or OutcomeCounter()).snapshot()
             self._state.counter = outer
+            self._state.budget = outer_budget
 
         try:
             if not dropped:
@@ -302,6 +375,10 @@ def create_redacting_span_processor(
     *,
     policy: Optional[Any] = None,
     limits: Optional[dict] = None,
+    operation_limits: Optional[dict] = None,
+    scan_limits: Optional[Any] = None,
+    ruleset: Optional[Any] = None,
+    placeholder_formatter: Optional[Callable[..., Any]] = None,
     on_outcome: Optional[Callable[[SpanOutcome], None]] = None,
     pii: Optional[Sequence[str]] = None,
 ) -> RedactingSpanProcessorWith:
@@ -327,6 +404,22 @@ def create_redacting_span_processor(
     the core's default policy `High`-confidence PII redacts while `Medium`
     and `Low` resolve to `warn`, and a `warn` finding leaves the text alone.
     Pass your own `policy` if you need those masked."""
+    scan_and_redact = resolve_live_scan_and_redact(pii)
+    import redact_secret
+
+    # A ``scan_limits`` mapping becomes the core's own limits object, and the
+    # installed core must honor every requested option or this raises a fixed
+    # ``CoreOptionsError`` (see ``scan_options.py``).
+    config = resolve_scan_config(
+        policy, scan_limits, ruleset, placeholder_formatter, limits_type=redact_secret.WholeInputLimits
+    )
+    verify_scan_options(redact_secret, config)
     return RedactingSpanProcessorWith(
-        next_processor, resolve_live_scan_and_redact(pii), policy=policy, limits=limits, on_outcome=on_outcome
+        next_processor,
+        scan_and_redact,
+        policy=policy,
+        limits=limits,
+        operation_limits=operation_limits,
+        scan_config=config,
+        on_outcome=on_outcome,
     )

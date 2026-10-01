@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "description": "Synthetic key/value pairs shared by every adapter's key-context tests (redact-secret-adapters#172). `masked` is what the REAL core produces for the leaf in its key-context view {\"<key>\":\"<leaf>\"}; null means the leaf is left unchanged. None of the values is a credential.",
+  "cases": [
+    { "id": "api-key", "key": "api_key", "value": "synthetic-example-value-0001", "masked": "<SECRET_1>" },
+    {
+      "id": "password-with-spaces",
+      "key": "password",
+      "value": "synthetic example passphrase 1",
+      "masked": "<SECRET_1>"
+    },
+    {
+      "id": "client-secret-korean",
+      "key": "client_secret",
+      "value": "한국어-가짜-비밀번호-1234",
+      "masked": "<SECRET_1>"
+    },
+    { "id": "password-emoji", "key": "password", "value": "😀synthetic-example-0001", "masked": "<SECRET_1>" },
+    { "id": "benign-sibling-name", "key": "name", "value": "synthetic-example-value-0001", "masked": null },
+    { "id": "benign-sibling-note", "key": "note", "value": "synthetic-example-value-0001", "masked": null },
+    { "id": "benign-quotes-and-backslash", "key": "note", "value": "say \"hi\" \\ back", "masked": null },
+    { "id": "key-with-a-quote", "key": "a\"b", "value": "synthetic-example-value-0001", "masked": null },
+    { "id": "short-password", "key": "password", "value": "short", "masked": null }
+  ]
+}

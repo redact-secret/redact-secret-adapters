@@ -8,7 +8,25 @@ export {
   PII_ACTIVATION_CONFLICT,
   readPiiActivation,
 } from "./activation.js";
+export {
+  createOperationBudget,
+  DEFAULT_OPERATION_LIMITS,
+  type OperationBudget,
+  type OperationLimits,
+  type OperationUsage,
+  resolveOperationLimits,
+  utf8ByteLength,
+} from "./budget.js";
 export { type CreateMaskSecretsOptions, createMaskSecrets } from "./create-mask-secrets.js";
+export {
+  KEY_CONTEXT_SUFFIX,
+  type KeyContextFailures,
+  type KeyContextFinding,
+  type KeyContextScanned,
+  keyContextPrefix,
+  keyContextView,
+  scanLeafInKeyContext,
+} from "./key-context.js";
 export {
   BLOCK_MARKER,
   CYCLE_MARKER,
@@ -20,7 +38,7 @@ export {
   maskLeafOutcomeWith,
   maskLeafWith,
 } from "./mask-leaf.js";
-export { maskLogValueWith, maskSecretsWith } from "./mask-secrets.js";
+export { maskKeyedLeavesWith, maskLogValueWith, maskSecretsWith } from "./mask-secrets.js";
 export {
   addCounts,
   createOutcomeCounter,
@@ -30,6 +48,19 @@ export {
   toValueCounts,
   type ValueCounts,
 } from "./outcome.js";
+export {
+  CoreOptionsError,
+  type CoreOptionsErrorCode,
+  coreVersionAtLeast,
+  resolveScanConfig,
+  SCAN_OPTION_CORE_FLOORS,
+  type ScanConfig,
+  type ScanOptionName,
+  type ScanOptionsCore,
+  type ScanOptionsInput,
+  verifyScanOptions,
+  withResolvedScanConfig,
+} from "./scan-options.js";
 export type {
   CoreActivation,
   InitializableCore,

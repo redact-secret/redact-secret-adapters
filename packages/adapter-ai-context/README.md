@@ -158,6 +158,41 @@ Two things to know:
   key and its JSON punctuation. With the default 64 KiB that is noise; with a
   small override it is what binds first.
 
+### Options it does not take
+
+`ruleset` and `scanLimits` are rejected by name (a `TypeError`), never ignored. The
+core has no ruleset for an incremental session, so one boundary cannot offer it on
+`sanitizeText` and not on `openStream`; and the boundary's whole-input limits are
+`wholeInputLimits`, beside `incrementalLimits`. `placeholderFormatter` and `policy`
+reach both the whole-input and the incremental path. The logging and tracing
+adapters take `ruleset`, `scanLimits` and `placeholderFormatter` on whole-input scans
+([Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options)).
+
+### Operation limits
+
+```js
+const boundary = await createAiContextBoundary({
+  operationLimits: { maxBytes: 4_194_304, maxScans: 2000, maxLeaves: 1000, maxNodes: 8000, maxKeys: 8000, maxFindings: 1000 },
+});
+```
+
+The three limit sets bound one scan, one stream and one value. **One
+operation**, a `sanitizeText`, a `sanitizeValue` or a `buildContext` (every part
+together), also has an aggregate budget, so many parts that each fit cannot
+multiply the work. It counts every value visited, every object key, every string
+leaf, every `scanAndRedact` call and its UTF-8 bytes (key-context views and key
+scans included; a memoized repeat is not a call), and every finding summed over
+occurrences. Every key is optional and defaults to `DEFAULT_OPERATION_LIMITS`
+(see [`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#aggregate-operation-budget)),
+except that `maxBytes` is never below four times `wholeInputLimits.maxInputBytes`,
+so one text the core accepts always fits.
+
+A bound reached is a `blocked` / `limit_exceeded` outcome with **no value and no
+findings**, never a partly approved context. The per-operation memo holds at most
+1024 results. An open stream is bounded by `incrementalLimits`, and by this
+budget's `maxFindings` alone. Like every bound here it is checked between scans:
+a work counter, not a wall-clock timeout; use the `AbortSignal` for cancellation.
+
 `createAiContextBoundaryWith`, the injected API, requires all three sets
 explicitly; pass `withDefaultLimits()` to hand it the preset.
 `test/defaults.test.ts` asserts against the real core that each preset bound
@@ -202,6 +237,63 @@ exactly `id`, `type`, `detector`, `confidence`, `action`, `obfuscation`,
 reach a host. Offsets are UTF-16 code units, relative to the string that was
 scanned (for `sanitizeValue`, each leaf is its own string). They reveal where
 a secret sat and how long it was, never what it was.
+
+### Where a finding came from: occurrences
+
+`start` and `end` index into one scanned string, and a flattened `ok.findings`
+holds findings from many scans, each with the core's per-scan id (`finding-1`,
+`finding-1`, ...). To place a finding, ask for its **occurrence**, additive
+provenance that never reinterprets `start` and `end`:
+
+```js
+import { findingOccurrences } from "@redact-secret/adapter-ai-context";
+
+const outcome = boundary.buildContext([
+  { role: "user", text: `use ${token}` },
+  { role: "tool", value: { a: token, list: ["x", token] } },
+]);
+if (outcome.outcome === "ok") {
+  const occurrences = findingOccurrences(outcome); // same length and order as outcome.findings
+  outcome.findings.forEach((finding, index) => {
+    const where = occurrences[index];
+    // where.rangeScope: "text" | "leaf" | "stream"  (what start/end index into)
+    // where.partIndex, and where.leafOrdinal for a leaf
+  });
+}
+```
+
+| `rangeScope` | `start`/`end` index into | Other fields |
+| --- | --- | --- |
+| `"text"` | the whole string given to `sanitizeText`, or a text part of `buildContext` | `partIndex` |
+| `"leaf"` | one string leaf of a structured value (`sanitizeValue`, a value part). A key-context finding is already mapped back to the leaf; the key is never in the range | `partIndex`, `leafOrdinal` |
+| `"stream"` | the logical text of an open stream: **absolute** offsets over all chunks, not per chunk | `partIndex` (0) |
+| `"key"` | one object key scanned on its own. `onFinding` only: a redacted or blocked key blocks the value, so none is in `ok.findings` | `partIndex`, `keyOrdinal` |
+
+Every occurrence also carries `rangeUnit: "utf16-code-units"`. Nothing in an
+occurrence is sensitive: no key, no field path, no value, no identifier derived
+from a secret, no score. The fields are `FINDING_OCCURRENCE_FIELDS`.
+
+- **`partIndex`** is the index in `parts` for `buildContext` and `0` for every
+  other operation. **`leafOrdinal`** and **`keyOrdinal`** are zero-based and
+  count in document order within a part. `leafOrdinal` counts every string leaf
+  visited, with or without a finding; a value reached by two paths is a leaf at
+  each; object keys are not leaves. They advance per *visit*, so a memoized
+  repeat of a string (scanned once) still has its own ordinal.
+- **Uniqueness.** `finding.id` is unique within one scan only. Within one
+  operation, (`partIndex`, `rangeScope`, `leafOrdinal` or `keyOrdinal`, `finding.id`)
+  is unique; across operations nothing is. Do not use any of it as a stable
+  identifier of a secret.
+- **`onFinding(finding, context, occurrence)`** receives the same occurrence as a
+  third argument. For every finding in `ok.findings` it is called with that
+  finding and the occurrence at the same index, in the same order; key scans add
+  events with `rangeScope: "key"`. `context` is still exactly `{ boundary }`.
+- **Compatibility.** It is additive: the outcome's JSON is still
+  `{ outcome, value, findings }` (the occurrences are kept beside the outcome, so
+  a serialized outcome does not carry them), `start`/`end` are unchanged, and
+  `SAFE_FINDING_FIELDS` is the same eight fields. `findingOccurrences` returns
+  `undefined` for an outcome that is not `ok` or was not produced by this package.
+  New fields would be added, never changed; `adapter-mcp` forwards them for the
+  findings it carries.
 
 ## Reference
 
