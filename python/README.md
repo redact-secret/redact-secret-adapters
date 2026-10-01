@@ -204,14 +204,42 @@ import redact_secret
 redact_secret.initialize(pii=["pii:global"])  # before the first record or span
 ```
 
-**Placement is the whole rule.** Handlers are attached and tracer providers
-built at import time, so a module imported earlier can emit *before* the line
-above runs. Those records are scanned with PII off and report nothing: no
-exception, no warning, and no counter that tells them apart from a record that
-genuinely held nothing. These adapters cannot close that window, because the
-process, not the filter, owns the activation. It is pinned as a known
-limitation in `python/tests/test_pii_activation.py`. Enable PII first, then
-attach handlers and build providers.
+**Or let the factory do it.** Pass `pii=` to the live constructor or factory
+and it initializes the core and verifies the selection is active before it
+returns, so there is no silent window:
+
+```python
+import logging
+from redact_secret_adapters.logging_filter import RedactSecretFilter
+from redact_secret_adapters.otel import create_redacting_span_processor
+
+handler = logging.StreamHandler()
+handler.addFilter(RedactSecretFilter(pii=["pii:global"]))          # adapter first
+
+provider.add_span_processor(
+    create_redacting_span_processor(exporter_processor, pii=["pii:global"])  # same contract
+)
+```
+
+Logging and OpenTelemetry share one implementation. An equivalent selection
+that is already active is accepted, so application-first plus `pii=` works.
+Anything else raises `redact_secret_adapters.CoreActivationError` at
+construction, before any record or span: `.code` is
+`PII_ACTIVATION_NOT_ACTIVE` (a different selection won the race),
+`PII_ACTIVATION_UNAVAILABLE` (the core does not offer a selector) or
+`PII_ACTIVATION_UNSUPPORTED` (a core too old to report an activation). The
+message is fixed and never carries a selector, an input or the core's own text;
+other initialization failures propagate unchanged. `pii=` cannot be combined
+with an injected `scan_and_redact`, which never imports or initializes the real
+core. `pii=[]` asks for PII off explicitly, which is also one-shot.
+
+**Without `pii=`, placement is the whole rule.** Handlers are attached and
+tracer providers built at import time, so a module imported earlier can emit
+*before* the `initialize` line runs. Those records are scanned with PII off and
+report nothing: no exception, no warning, and no counter that tells them apart
+from a record that genuinely held nothing. Omitting `pii=` leaves activation to
+the application and keeps that window, pinned as a known limitation in
+`python/tests/test_pii_activation.py`. Enable PII first, or pass `pii=`.
 
 The selection is one-shot: a later *different* one raises
 `redact_secret.PiiActivationConflictError`, and an empty selection is a

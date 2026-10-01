@@ -19,6 +19,24 @@ package whose declared version isn't on its registry yet — see
 can read it without leaving their environment.
 
 ## [Unreleased]
+### Added
+
+- **Explicit PII activation on the live factories**
+  (redact-secret/redact-secret-adapters#176). `RedactSecretFilter(pii=[...])`
+  and `create_redacting_span_processor(next, pii=[...])` initialize the core
+  with that selection and verify `pii_activation()` reflects it before
+  returning, closing the silent PII-off window of the application-first order.
+  Both share one implementation (`_activation.py`). Omitting `pii` is
+  unchanged: `initialize` is never called. An equivalent active selection is
+  accepted; anything else raises the new `CoreActivationError` with a fixed,
+  input-free `code` (`PII_ACTIVATION_NOT_ACTIVE`, `PII_ACTIVATION_UNAVAILABLE`,
+  `PII_ACTIVATION_UNSUPPORTED`), and unrelated initialization failures
+  propagate. `pii` with an injected `scan_and_redact` raises `TypeError`;
+  injected paths still never import the real core. Passing `pii` needs
+  `redact-secret` 0.1.0b10 or later; the declared floor is unchanged. Tested
+  by `test_pii_factories.py` (real-core subprocess cases for adapter-first,
+  application-first, repeated and conflicting selections, the unsupported
+  floor and failure before the first event, for both factories).
 
 ## [0.1.3] - 2026-10-01
 ### Changed

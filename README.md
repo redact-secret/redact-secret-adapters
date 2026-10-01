@@ -219,7 +219,8 @@ import redact_secret
 redact_secret.initialize(pii=["pii:global"])  # before the first record or span
 ```
 
-The pino, OpenTelemetry, AI-context and MCP factories take `pii`. It is
+The pino, OpenTelemetry, AI-context and MCP factories take `pii`, and so do the
+Python `RedactSecretFilter` and `create_redacting_span_processor`. It is
 process-wide and can be set once.
 Under the core's default policy only high-confidence PII is redacted; pass your
 own `policy` to mask the rest. [PII guide](./docs/pii.md).

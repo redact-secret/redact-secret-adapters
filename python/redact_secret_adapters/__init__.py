@@ -8,6 +8,7 @@ needs them.
 
 from importlib.metadata import PackageNotFoundError, version
 
+from ._activation import CoreActivationError
 from .mask_leaf import (
     BLOCK_MARKER,
     CYCLE_MARKER,
@@ -32,6 +33,7 @@ except PackageNotFoundError:  # imported from a source tree that was never insta
 __all__ = [
     "BLOCK_MARKER",
     "CYCLE_MARKER",
+    "CoreActivationError",
     "DEFAULT_LIMITS",
     "ERROR_MARKER",
     "LIMIT_MARKER",

@@ -46,12 +46,13 @@ from __future__ import annotations
 
 import threading
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only, no runtime dependency
     from opentelemetry.context import Context
     from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor
 
+from ._activation import resolve_live_scan_and_redact
 from .mask_leaf import ERROR_MARKER, count_leaf, mask_leaf_outcome_with
 from .outcome import OutcomeCounter, SpanOutcome, ValueCounts, notify
 
@@ -302,30 +303,30 @@ def create_redacting_span_processor(
     policy: Optional[Any] = None,
     limits: Optional[dict] = None,
     on_outcome: Optional[Callable[[SpanOutcome], None]] = None,
+    pii: Optional[Sequence[str]] = None,
 ) -> RedactingSpanProcessorWith:
     """The live wrapper: wraps `next_processor` with the real
     `redact_secret.scan_and_redact`.
 
-    Credential detection needs no init step -- the native extension loads on
-    `import redact_secret`, unlike the JS package's mandatory
-    `await initialize()`. **PII detection does**: it is opt-in, process-wide
-    and one-shot, and the application turns it on with
-    `redact_secret.initialize(pii=[...])` **before the first span ends**.
+    PII detection is opt-in, process-wide and one-shot. Either the
+    application calls `redact_secret.initialize(pii=[...])` **before the first
+    span ends** and this is called without `pii` (the default), or pass
+    `pii=[...]` here and the core is initialized and the selection verified
+    before the processor is returned, so no span is scanned with PII off. The
+    same contract as `RedactSecretFilter(pii=...)`, from one shared
+    implementation: an equivalent active selection is accepted, and a
+    conflicting one, a core without a PII activation report, or an unavailable
+    selector raises `CoreActivationError` with a fixed, input-free message.
 
-    Placement is easy to get wrong here, because a tracer provider is
-    usually built at import time and can export a span before the line that
-    enables PII has run. Python's binding raises no conflict for a late call,
-    so there is no error to catch -- only a silent window in which spans are
-    scanned with PII off and report nothing. Enable PII first, then build
-    the provider. See `python/tests/test_pii_activation.py`, which pins the
-    window as a known limitation.
+    Omitting `pii` keeps the application-owned behavior and its silent window:
+    Python's binding raises no conflict for a late call, so spans ended before
+    the application enables PII are scanned with PII off and report nothing.
+    See `python/tests/test_pii_activation.py`, which pins the window.
 
     Activating PII is not the same as masking every PII value either: under
     the core's default policy `High`-confidence PII redacts while `Medium`
     and `Low` resolve to `warn`, and a `warn` finding leaves the text alone.
     Pass your own `policy` if you need those masked."""
-    import redact_secret
-
     return RedactingSpanProcessorWith(
-        next_processor, redact_secret.scan_and_redact, policy=policy, limits=limits, on_outcome=on_outcome
+        next_processor, resolve_live_scan_and_redact(pii), policy=policy, limits=limits, on_outcome=on_outcome
     )

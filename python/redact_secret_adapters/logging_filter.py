@@ -9,11 +9,14 @@ Attach the filter to each emitting handler. Ancestor logger filters do not
 run for propagated child records; mutations to a record are shared by its
 handlers. Custom formatters must not add unscanned fields afterward.
 
-**If you want PII, enable it before the first record.** Credential detection
-needs no init step -- the native extension loads on ``import redact_secret``,
-unlike the JS package's mandatory ``await initialize()``. PII detection is
-opt-in, process-wide and one-shot, and the application turns it on with
-``redact_secret.initialize(pii=[...])``::
+**PII is opt-in and process-wide.** Credential detection needs no init step --
+the native extension loads on ``import redact_secret``, unlike the JS package's
+mandatory ``await initialize()``. PII detection is one-shot: the first
+selection in the process wins and a later different one raises
+``PiiActivationConflictError``. There are two correct orders.
+
+*Application first* (the default, unchanged): the application enables PII
+before any record, and the filter is built without ``pii``::
 
     import logging
     import redact_secret
@@ -25,14 +28,25 @@ opt-in, process-wide and one-shot, and the application turns it on with
     handler.addFilter(RedactSecretFilter())
     logging.getLogger().addHandler(handler)
 
-The order matters and is easy to get wrong, because handlers are usually
-attached at import time and a module imported earlier can log before the
-line that enables PII has run. Python's binding raises no conflict for a late
-call -- it locks nothing that ``active_pii_selection()`` reads -- so there is
-no error to catch, only a **silent window** in which records are scanned with
-PII off and report nothing. This filter cannot close it: it never learns when
-the process decided to enable PII. ``python/tests/test_pii_activation.py``
-pins the window as a known limitation rather than hiding it.
+*Adapter first*: pass ``pii=`` and the constructor initializes the core and
+verifies the selection is active before it returns, so there is no silent
+window and a wrong setup fails at construction, not at the first record::
+
+    handler.addFilter(RedactSecretFilter(pii=["pii:global"]))
+
+An equivalent selection that is already active is accepted (application-first
+plus ``pii=`` works, and so do repeated equivalent selections). A conflicting
+one, a core too old to report a PII activation, or a selection the core does
+not offer raises :class:`~redact_secret_adapters.CoreActivationError` with a
+fixed code and message -- never the selector, an input, or the core's own text.
+Other initialization failures propagate unchanged. ``pii=[]`` asks for PII off
+explicitly, which is also one-shot.
+
+Omitting ``pii`` keeps the application-owned behavior, and with it the
+**silent window**: a record scanned before the application enables PII is
+scanned with PII off and reports nothing, because Python's binding raises no
+conflict for a late call. ``python/tests/test_pii_activation.py`` pins the
+window as a known limitation; ``pii=`` is how to close it.
 
 Activating PII is also not the same as masking every PII value. Under the
 core's default policy PII types are confidence-gated: ``High`` redacts, while
@@ -51,6 +65,7 @@ import threading
 import warnings
 from typing import Any, Callable, Optional, Sequence
 
+from ._activation import resolve_live_scan_and_redact
 from ._walk import mask_exception_text_with, walk
 from .mask_leaf import ERROR_MARKER, count_leaf, mask_leaf_outcome_with
 from .outcome import LogRecordOutcome, OutcomeCounter, notify
@@ -72,7 +87,10 @@ class RedactSecretFilter(logging.Filter):
     ``scan_and_redact`` is injected -- omit it for the live integration,
     which resolves ``redact_secret.scan_and_redact`` on construction, or
     pass a fake for tests (this module is testable without the built
-    native extension). ``extra_fields`` names attributes set via a log
+    native extension). ``pii`` optionally names the PII selectors to
+    activate and verify on the live core before the filter is returned
+    (see "Explicit PII activation" above); it cannot be combined with an
+    injected scanner. ``extra_fields`` names attributes set via a log
     call's ``extra={...}`` kwarg to also redact: a string is masked, and a
     dict/list/tuple/exception is walked like ``mask_log_value_with`` and
     replaced by its masked copy; a number, bool or ``None`` is kept, and any
@@ -91,6 +109,7 @@ class RedactSecretFilter(logging.Filter):
         extra_fields: Sequence[str] = (),
         limits: Optional[dict[str, int]] = None,
         on_outcome: Optional[Callable[[LogRecordOutcome], None]] = None,
+        pii: Optional[Sequence[str]] = None,
     ) -> None:
         if name:
             # logging.Filter's name would drop records from other loggers,
@@ -104,10 +123,13 @@ class RedactSecretFilter(logging.Filter):
             )
         super().__init__(name)
         if scan_and_redact is _LIVE:
-            # The live wrapper: the only place this module touches the core.
-            import redact_secret
-
-            scan_and_redact = redact_secret.scan_and_redact
+            # The live wrapper: the only path that touches the core. ``pii``
+            # is activated and verified here, before any record is filtered.
+            scan_and_redact = resolve_live_scan_and_redact(pii)
+        elif pii is not None:
+            # An injected scanner never imports or initializes the real core,
+            # so a selection there could only be silently ignored.
+            raise TypeError("RedactSecretFilter: pii requires the live scanner; omit scan_and_redact")
         if not callable(scan_and_redact):
             raise TypeError("RedactSecretFilter: scan_and_redact must be callable")
         self._scan_and_redact = scan_and_redact
