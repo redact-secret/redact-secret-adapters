@@ -69,3 +69,48 @@ disclosure timeline once the issue is confirmed. Fixed response or
 remediation times beyond that acknowledgement are not promised. Please do
 not publicly disclose the issue until a fix and disclosure timeline have
 been coordinated with the maintainers.
+
+## How reports are handled
+
+The project has a small maintainer team ([GOVERNANCE.md](./GOVERNANCE.md#roles)),
+so the times below are targets, not guarantees.
+
+1. **Acknowledge** the report in the advisory thread within 5 business days.
+2. **Triage**: reproduce it with synthetic input and decide whether it is in
+   [scope](#scope). A detection issue is moved to the core repository's
+   advisory form with the reporter's agreement. The reporter is told the
+   outcome either way.
+3. **Fix** in a private fork of the advisory, with a test that fails without
+   the fix ([CONTRIBUTING.md](./CONTRIBUTING.md#requirements-for-acceptable-contributions)).
+4. **Release** the fix in the next release train ([RELEASING.md](./RELEASING.md)),
+   and request a CVE through the GitHub advisory when a published version is
+   affected.
+5. **Disclose** by publishing the advisory and an entry in the affected
+   package's `CHANGELOG.md`. The target is public disclosure within 90 days of
+   the report, sooner once a fix is released, or later only by agreement with
+   the reporter.
+
+## Credit
+
+Reporters are credited by name or handle in the published advisory and its
+changelog entry unless they ask to stay anonymous. The
+[security advisories page](https://github.com/redact-secret/redact-secret-adapters/security/advisories)
+records every credited report.
+
+## Verifying releases
+
+Releases are signed by the registries' keyless signing through Trusted
+Publishing, not by a long-lived project key, so there is no public key to
+download:
+
+- **npm**: every `@redact-secret/adapter*` package is published from
+  `release.yml` with `--provenance`, a Sigstore-signed attestation bound to
+  the workflow's GitHub OIDC identity. After installing, run
+  `npm audit signatures` to verify registry signatures and provenance; the
+  package page on npmjs.com links the exact workflow run and commit.
+- **PyPI**: `redact-secret-adapters` is uploaded with Trusted Publishing,
+  which attaches PEP 740 attestations signed with the same workflow identity.
+  They are shown on each file's page on pypi.org and can be checked with
+  `pypi-attestations verify pypi --repository https://github.com/redact-secret/redact-secret-adapters <file-url>`.
+- Every release train is tagged, and its GitHub Release names the exact
+  source commit.

@@ -36,3 +36,4 @@ python/dist/
 .stryker-tmp/
 reports/
 out/
+.coverage

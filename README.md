@@ -636,6 +636,17 @@ every change must hold to its
 [Security boundary](./ARCHITECTURE.md#security-boundary). Report suspected
 vulnerabilities privately as described in [SECURITY.md](./SECURITY.md).
 
+## Project governance
+
+- [GOVERNANCE.md](./GOVERNANCE.md): roles, how decisions are made, and access
+  continuity.
+- [ROADMAP.md](./ROADMAP.md): what the next year is expected to bring, and
+  what is out of scope.
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md): expected behavior in every
+  project space.
+- [Security assurance case](./docs/assurance-case.md): why the security
+  requirements are met, with evidence.
+
 ## License
 
 MIT
