@@ -139,6 +139,11 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run smoke-test
+      # adapter-otel-logs (#178) is private until released, so its tarball and
+      # README example are checked from a clean install at both ends of the
+      # sdk-logs range here, outside the checkout.
+      - run: npm run smoke-test:otel-logs -- highest
+      - run: npm run smoke-test:otel-logs -- lowest
 
   published-combination:
     # The smoke test pairs every tarball with its siblings' tarballs. A

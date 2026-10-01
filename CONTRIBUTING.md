@@ -38,6 +38,7 @@ packages/
   adapter-pino/         pino hooks
   adapter-otel-trace/   OpenTelemetry JS span processor
   adapter-otel/         deprecated name, re-exports adapter-otel-trace
+  adapter-otel-logs/    OpenTelemetry JS log record processor (unreleased)
   adapter-ai-context/   AI-context boundary
   adapter-mcp/          MCP boundary, built on adapter-ai-context
 python/                 the PyPI package: logging filter, OpenTelemetry, walker

@@ -21,9 +21,10 @@ tracking; this page is reviewed with every release train. Last reviewed:
 
 - **Keep host ranges current**: qualify new pino, OpenTelemetry, and MCP SDK
   releases as they ship; a range only widens when CI tests it.
-- **OpenTelemetry logs**: design and qualify `adapter-otel-logs` as a
-  `LogRecordProcessor` (reserved, not implemented;
-  [ARCHITECTURE.md](ARCHITECTURE.md#deliberate-exclusions)).
+- **OpenTelemetry logs**: `adapter-otel-logs`, a `LogRecordProcessor`, is
+  implemented and qualified against a real SDK on `develop` but unreleased;
+  releasing it (and a Python equivalent, which is a separate scope) is the
+  remaining work ([#178](https://github.com/redact-secret/redact-secret-adapters/issues/178)).
 - **MCP beyond `tools/call` and `resources/read`**, as the core's MCP
   contract grows to cover more message types.
 - **Python**: track the core's Python binding and keep `logging` parity with

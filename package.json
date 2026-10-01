@@ -17,6 +17,7 @@
     "packages/adapter-pino",
     "packages/adapter-otel-trace",
     "packages/adapter-otel",
+    "packages/adapter-otel-logs",
     "packages/adapter-ai-context",
     "packages/adapter-mcp"
   ],
@@ -30,6 +31,7 @@
     "range-endpoint": "node scripts/install-range-endpoint.mjs",
     "verify-pack-contents": "node scripts/verify-pack-contents.mjs",
     "smoke-test": "node scripts/smoke-test-npm-packages.mjs",
+    "smoke-test:otel-logs": "node scripts/smoke-test-otel-logs.mjs",
     "published-combination": "node scripts/check-published-combination.mjs",
     "compat:check": "node scripts/check-compatibility-record.mjs",
     "overhead": "node scripts/measure-overhead.mjs",

@@ -266,9 +266,11 @@ took a test that logs from a getter to catch it.
 never reach it. The package was published as `@redact-secret/adapter-otel`
 up to `0.1.2`; that name is now a compatibility package that re-exports
 `adapter-otel-trace` unchanged and marks every export `@deprecated`, so
-existing imports keep working. `adapter-otel-logs` is reserved for a Logs
-integration once a `LogRecordProcessor` boundary has been designed and
-qualified against a real SDK; nothing implements it yet. The choice and its
+existing imports keep working. Logs have their own package,
+`adapter-otel-logs` (below): a `LogRecordProcessor`, a separate peer
+(`@opentelemetry/sdk-logs`) and a separate qualification. It is on `develop`
+unreleased (`"private": true`, absent from the release plan), so nothing
+installable protects Logs yet. The choice and its
 release consequences are recorded in
 [docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md](docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md).
 
@@ -300,6 +302,36 @@ fields are private, every write is read back through the public accessor; a
 missing field or a write that does not show through drops the span with a
 one-time `RuntimeWarning` rather than exporting it unredacted. The real-host
 test checks all of this at both ends of the Python SDK's declared range.
+
+### OpenTelemetry Logs
+
+`@redact-secret/adapter-otel-logs` is a **log** integration: a
+`LogRecordProcessor` over `@opentelemetry/sdk-logs`, a separate package with
+its own peer range (`>=0.200.0 <=0.222.0`, an explicit span because the SDK is
+`0.x`) and its own qualification. It is on `develop` unreleased
+(`"private": true`, absent from the release plan). The SDK probe, the chosen
+endpoints and the alternatives are in
+[docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md](docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md).
+
+The SDK documents that a processor "may freely modify logRecord for the
+duration of the OnEmit call", and makes the record read-only once `emit`
+returns; a `BatchLogRecordProcessor` keeps the very object it is given. The
+processor therefore redacts in `onEmit`, before delegating, and is registered
+around the processor that owns the exporter. It redacts the body (a string, a
+structured value, bytes), the severity text, the event name and every
+attribute value. It does not touch the resource, the instrumentation scope,
+attribute keys, or spans and metrics.
+
+Writes use the record's own setters (`setBody`, `setSeverityText`,
+`setEventName`) and its public `attributes` bag; `setAttribute` is not used to
+rewrite, because at the low end of the range it would count the call as a
+further attribute and report a spurious `droppedAttributesCount`. Every write
+is read back (allowing the shorter string an SDK attribute-length limit
+leaves). A record that will not take a write is dropped with a one-time warning
+and never forwarded, as for spans. A scanner failure or a `block` finding is a
+fixed marker on that value, not a dropped record. The walk budgets are per
+record and shared by the body and every attribute, and a value past one is
+`[REDACTED:LIMIT_EXCEEDED]`, never passed through.
 
 ### AI context
 
@@ -524,9 +556,9 @@ so that is a test, not an assumption.
   never patches a client.
 - **LangChain**, and any other framework integration whose host contract has not
   been read and tested here.
-- **OpenTelemetry Logs and metrics.** `adapter-otel-trace` is a span
-  processor. A `LogRecordProcessor` needs its own design and real-SDK
-  qualification; `adapter-otel-logs` is reserved for it, not implemented.
+- **OpenTelemetry metrics.** Neither OpenTelemetry package touches them.
+  (Logs are covered by `adapter-otel-logs`, unreleased; `adapter-otel-trace`
+  is a span processor and never sees a log record.)
 - **A Langfuse package.** Masking-callback hosts need the shared walker and one
   line of user code; a package would add a release surface and change nothing.
 
@@ -538,6 +570,7 @@ packages/
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
   adapter-otel-trace/   @redact-secret/adapter-otel-trace  L3 + live wrapper, traces only
   adapter-otel/         @redact-secret/adapter-otel     deprecated name: re-exports adapter-otel-trace
+  adapter-otel-logs/    @redact-secret/adapter-otel-logs  LogRecordProcessor + live wrapper, logs only; unreleased (private)
   adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper
   adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context
 python/

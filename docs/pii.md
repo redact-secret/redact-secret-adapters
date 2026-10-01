@@ -68,7 +68,8 @@ application, as above.
 - **A factory given `pii` checks that it took effect.** It reads the core's
   `piiActivation()` afterwards and refuses if the active selection is not the
   one you asked for, instead of running with PII silently off.
-  - `adapter-pino` and `adapter-otel-trace` reject, with a fixed code:
+  - `adapter-pino`, `adapter-otel-trace` and `adapter-otel-logs` (unreleased)
+    reject, with a fixed code:
     `PII_ACTIVATION_NOT_ACTIVE`, or `PII_ACTIVATION_UNSUPPORTED` against a core
     too old to report an activation.
   - `adapter-ai-context` and `adapter-mcp` never reject. Every operation fails
