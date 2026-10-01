@@ -54,8 +54,9 @@ checked in review.
   (pytest) for the PyPI package. A bug fix adds a test that fails without the fix.
   A pull request that changes behavior without a test is not ready to merge.
   New functionality is accepted only with tests that exercise it, and
-  statement coverage of `packages/*/src` must stay at or above 80%
-  (`npm run coverage`, enforced in CI).
+  statement coverage of `packages/*/src` and of the Python package
+  `redact_secret_adapters` must each stay at or above 80% (`npm run coverage`
+  and `pytest --cov`, enforced in CI).
 - **Security boundary.** Every change must hold to the
   [Security boundary](./ARCHITECTURE.md#security-boundary): the core stays side
   effect free; an adapter performs no network, filesystem, environment, or
@@ -98,7 +99,9 @@ npm run feed:check
 ```
 
 For the Python package, install the test requirements used by CI and run
-`pytest` from the repository root; CI runs `ruff check python` and
+`pytest` from the repository root (add
+`--cov=redact_secret_adapters --cov-report=term-missing --cov-fail-under=80`
+for the 80% statement-coverage floor CI enforces on one Python version); CI runs `ruff check python` and
 `ruff format --check python` as well. The full matrix (supported host and core
 range endpoints, pack contents, install smoke tests) runs in
 [CI](./.github/workflows/ci.yml).

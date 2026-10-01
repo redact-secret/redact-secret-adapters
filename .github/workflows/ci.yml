@@ -91,6 +91,10 @@ jobs:
           python -m pip install --require-hashes -r .github/requirements/python-test.txt
           python -m pip install --no-deps --no-build-isolation -e ./python
       - run: pytest
+        if: matrix.python != '3.13'
+      # One leg measures statement coverage and fails below 80%.
+      - run: pytest --cov=redact_secret_adapters --cov-report=term-missing --cov-fail-under=80
+        if: matrix.python == '3.13'
 
   pack-contents:
     # CI's own tests import every package from inside the workspace, which
