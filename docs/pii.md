@@ -42,10 +42,22 @@ on `import redact_secret`. PII does, and **where you put that line is the whole
 rule**. Handlers are attached and tracer providers are built at import time, so
 a module imported earlier can emit before the line runs. Those records are
 scanned with PII off and report nothing: no exception, no warning, and no
-counter that tells them apart from a record that held nothing. The adapters
-cannot close that window, because the process owns the activation. It is
+counter that tells them apart from a record that held nothing. That window is
 pinned as a known limitation in `python/tests/test_pii_activation.py`. Enable
-PII first, then attach handlers and build providers.
+PII first, then attach handlers and build providers, or let the factory do it:
+
+```python
+handler.addFilter(RedactSecretFilter(pii=["pii:global"]))
+processor = create_redacting_span_processor(next_processor, pii=["pii:global"])
+```
+
+`pii=` initializes the core and checks `pii_activation()` before the object is
+returned. It accepts an equivalent selection that is already active and
+otherwise raises `redact_secret_adapters.CoreActivationError` with a fixed code
+(`PII_ACTIVATION_NOT_ACTIVE`, `PII_ACTIVATION_UNAVAILABLE` or
+`PII_ACTIVATION_UNSUPPORTED`) and no selector, input or core text. It cannot be
+combined with an injected scanner. Omitting it leaves activation to the
+application, as above.
 
 ## The rules
 
