@@ -25,23 +25,17 @@ version numbers start again here, at `0.1.0`, and do not follow the old name's.
 
 ## [Unreleased]
 
-### Changed
-
-- **Key-aware detection** (redact-secret/redact-secret-adapters#172). A string attribute value on a span, event or link is now scanned with its attribute name as detection context, through the shared primitive in `@redact-secret/adapter`, so a context-dependent credential (`api_key`, `password`) is masked. The attribute name is never rewritten or output; string-array elements, the span name, event names and the status message have no direct key and are scanned as before. Cost: a string attribute is scanned twice unless its own scan already redacted or blocked it.
-
 ### Added
 
 - **One aggregate budget per span** (redact-secret/redact-secret-adapters#173), shared by the span name, every attribute, event and link and the status message. `operationLimits` overrides it (defaults as in `@redact-secret/adapter`); `redactAttributesWith` takes it for its one bag. A span ended re-entrantly inside the next processor has its own budget.
 
-### Changed
-
-- **Behavior change with defaults:** a span that inspects more than the default budget now has every string not yet inspected replaced by `[REDACTED:LIMIT_EXCEEDED]` (counted as `limited`), and is still forwarded. Before, a span's only bound was `maxStringLength` per string.
-
-### Added
-
 - **Verified core scan options** (redact-secret/redact-secret-adapters#175): `createRedactingSpanProcessor`, `RedactingSpanProcessorWith` and `redactAttributesWith` take `scanLimits`, `ruleset` and `placeholderFormatter` (and still `policy`), validated and snapshotted once. The live factory rejects an unsupported core, or a ruleset or limits the core refuses, with a fixed `CoreOptionsError`. Available from the declared core floor, verified at both endpoints by `test/scan-options-live.test.ts`. Omit them and nothing changes.
 
 ### Changed
+
+- **Key-aware detection** (redact-secret/redact-secret-adapters#172). A string attribute value on a span, event or link is now scanned with its attribute name as detection context, through the shared primitive in `@redact-secret/adapter`, so a context-dependent credential (`api_key`, `password`) is masked. The attribute name is never rewritten or output; string-array elements, the span name, event names and the status message have no direct key and are scanned as before. Cost: a string attribute is scanned twice unless its own scan already redacted or blocked it.
+
+- **Behavior change with defaults:** a span that inspects more than the default budget now has every string not yet inspected replaced by `[REDACTED:LIMIT_EXCEEDED]` (counted as `limited`), and is still forwarded. Before, a span's only bound was `maxStringLength` per string.
 
 - **Dependency range raised: `@redact-secret/adapter` `^0.1.3` -> `^0.1.7`** (redact-secret/redact-secret-adapters#172, #173, #175). This release needs the key-context primitive, the operation budget and the scan options that `@redact-secret/adapter` 0.1.7 introduces, which no earlier published version has; against `0.1.3` the package fails to import. Backed by the `published-combination` CI job (`scripts/check-published-combination.mjs`), which installs this package with the lowest published sibling its range admits (and this checkout's tarball for a sibling not yet published). No `@redact-secret/core` range change.
 

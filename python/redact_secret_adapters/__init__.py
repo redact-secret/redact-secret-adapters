@@ -8,6 +8,7 @@ needs them.
 
 from importlib.metadata import PackageNotFoundError, version
 
+from ._activation import CoreActivationError
 from .budget import DEFAULT_OPERATION_LIMITS, OperationBudget
 from .key_context import KeyContextFailure, scan_leaf_in_key_context
 from .mask_leaf import (
@@ -35,6 +36,7 @@ except PackageNotFoundError:  # imported from a source tree that was never insta
 __all__ = [
     "BLOCK_MARKER",
     "CYCLE_MARKER",
+    "CoreActivationError",
     "DEFAULT_LIMITS",
     "DEFAULT_OPERATION_LIMITS",
     "ERROR_MARKER",
