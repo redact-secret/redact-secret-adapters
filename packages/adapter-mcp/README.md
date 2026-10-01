@@ -1,34 +1,43 @@
 # @redact-secret/adapter-mcp
 
-The supported Model Context Protocol (MCP) redaction boundary over the
-[Redact Secret](https://github.com/redact-secret/redact-secret) core. It
-sanitizes a tool's result, on opt-in its arguments, and the contents a
-client reads with `resources/read`, **before** they are logged, persisted, or
-placed into model context.
+[![npm version](https://img.shields.io/npm/v/@redact-secret/adapter-mcp)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/@redact-secret/adapter-mcp)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
+[![MCP SDK peer range](https://img.shields.io/npm/dependency-version/@redact-secret/adapter-mcp/peer/@modelcontextprotocol/sdk)](https://www.npmjs.com/package/@redact-secret/adapter-mcp?activeTab=dependencies)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/adapter-mcp)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
+[![types included](https://img.shields.io/npm/types/@redact-secret/adapter-mcp)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
+[![CI](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-adapters/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-adapters)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/adapter-mcp)](https://github.com/redact-secret/redact-secret-adapters/blob/main/LICENSE)
 
-It implements the core's
-[MCP boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/mcp-boundary.md)
-(redact-secret/redact-secret#612), and it is a thin specialization of
-[`@redact-secret/adapter-ai-context`](../adapter-ai-context#readme). Every scan,
-nested-value walk, policy decision, limit, and core-error mapping comes from
-that package. This one adds only the MCP shape. It qualifies by replaying the
-core's own MCP fixture with the core's own runner, both vendored
-byte-for-byte at a pinned core commit
-([`fixtures/core/pins.json`](../../fixtures/core/pins.json)), through this
-package's public API. It is exercised with real MCP SDK instances at both
-endpoints of every supported line, over stdio and Streamable HTTP.
+Remove secrets from Model Context Protocol (MCP) tool results and resource
+reads **before** they are logged, stored, or placed into model context.
 
-It imports no MCP SDK at runtime or for types. A `CallToolResult` is a
-structural shape, as it is on the wire.
+Wrap the tool call. You get back a sanitized result, a fixed error result, or
+nothing. Built on the
+[Redact Secret](https://github.com/redact-secret/redact-secret) core, which
+does the detection.
 
-> **Install.** It pulls in `@redact-secret/adapter-ai-context`; the core is a
-> required peer, and the MCP SDK line you use is an optional one:
->
-> ```bash
-> npm install @redact-secret/adapter-mcp @redact-secret/core
-> ```
+## Install
 
-## Example
+```bash
+npm install @redact-secret/adapter-mcp @redact-secret/core
+```
+
+Needs Node.js 20, 22 or 24. ESM only. The core is a required peer. The MCP SDK
+you already use is an optional peer: this package imports no MCP SDK, at
+runtime or for types.
+
+## Quick start
+
+In your MCP host, wrap the call:
+
+```js
+const mcp = await createMcpBoundary();
+const outcome = await mcp.sanitizeToolCall(({ signal }) => client.callTool(params, undefined, { signal }));
+const safe = toCallToolResult(outcome); // use only this
+```
+
+A complete, runnable example:
 
 <!-- smoke-test:example -->
 ```js
@@ -53,19 +62,103 @@ if (safe !== null) console.log(JSON.stringify(safe)); // log it, store it, put i
 // {"content":[{"type":"text","text":"deploy ok\nAPI_KEY=<SECRET_1>"}],"structuredContent":{"env":["API_KEY=<SECRET_1>"]}}
 ```
 
-The clean-install smoke test (`npm run smoke-test`) runs this block verbatim
-from a throwaway project outside the repository.
+CI runs this block verbatim from a clean install outside the repository
+(`npm run smoke-test`).
 
-Three things next to that example, because refusing is the point rather than a
-rough edge. A **binary payload** (`image`, `audio`, a base64 `blob`) cannot be
-scanned, so by default it blocks the whole result as `unsupported_value`; pass
-`binaryContent: "pass"` to let a string payload through **unscanned** at its
-original key position, with every other field of the block still scanned. A
-**content type or shape** no qualified protocol revision defines also blocks,
-so a later revision fails closed rather than passing something unscanned. A
-**cancelled** call is `aborted`, and `toCallToolResult` returns `null` for it —
-there is nothing safe to deliver. And an `ok` outcome with no findings is not
-proof the result held no secret.
+## What `toCallToolResult` gives you
+
+| Outcome | You get |
+| --- | --- |
+| `ok` | the sanitized result, and nothing else |
+| `blocked` | a fixed `isError` result saying the call was blocked |
+| `tool_error` (the tool or `callTool` threw; the error is never read) | a fixed `isError` result saying the call failed |
+| `aborted` (cancelled) | `null`. There is nothing safe to deliver |
+
+## Things that surprise people
+
+- **Binary content blocks the whole result by default.** An `image`, `audio`
+  or base64 `blob` cannot be scanned. Pass `binaryContent: "pass"` to let a
+  string payload through **unscanned** at its original position, with every
+  other field of the block still scanned.
+- **An unknown content type blocks.** A content type or shape no qualified
+  protocol revision defines fails closed rather than passing unscanned.
+- **Limits are always on.** An oversized result is `blocked` /
+  `limit_exceeded`, never truncated. See [Limits](#limits).
+- **A structured result can be blocked rather than redacted** when only a
+  sibling or parent key identifies the secret. See
+  [What is scanned](#what-is-scanned).
+- **`ok` with no findings is not proof** the result held no secret.
+- **Do not log a raw `McpError` from `callTool`.** Its message can quote parts
+  of the result.
+
+## Where to put it
+
+**The authoritative boundary is the MCP host**: the process that receives a
+`CallToolResult` from an MCP client and builds model context from it. Apply
+it after the SDK has parsed the result and before any of these:
+
+1. writing the result, or anything derived from it, to a log or a trace;
+2. persisting it (conversation history, caches, databases);
+3. placing it into model context.
+
+Deliver only `toCallToolResult(outcome)`. The raw result should exist only
+inside `sanitizeToolCall`.
+
+A server can also wrap its own tool handlers. That is **preventive**: the host
+cannot verify it, so the host applies the boundary again to every result it
+receives, including results marked `isError: true`.
+
+```js
+// Server side, either SDK line. Both handler shapes work: (args, ctx) and (ctx).
+server.registerTool("deploy", { inputSchema }, mcp.wrapToolHandler(deployHandler, { sanitizeArguments: true }));
+```
+
+## Operations
+
+| Operation | Use it for |
+| --- | --- |
+| `sanitizeToolCall(invoke, { signal, arguments? })` | **Host.** Run a tool call and sanitize its result. Pass `arguments` to sanitize those first |
+| `sanitizeToolResult(result, { signal })` | **Host.** Sanitize a `CallToolResult` you already have |
+| `sanitizeToolArguments(args, { signal })` | **Host.** Sanitize `params.arguments` on their own |
+| `sanitizeStreamedToolResult(chunks, { signal })` | **Host.** An iterable or async iterable of string chunks of one text |
+| `sanitizeResourceRead(invoke, { signal })` | **Host.** Run a `resources/read` and sanitize what comes back |
+| `sanitizeResourceResult(result, { signal })` | **Host.** Sanitize a `ReadResourceResult` you already have |
+| `wrapToolHandler(handler, { sanitizeArguments })` | **Server.** Wrap a tool handler, either SDK line |
+| `wrapStreamedToolHandler(handler, { sanitizeArguments })` | **Server.** Wrap a handler that returns chunks |
+| `wrapResourceReadHandler(handler)` | **Server.** Wrap a read callback: `(uri, extra)`, `(uri, variables, extra)`, or a low-level `(request, extra)` |
+
+When you pass `arguments` to `sanitizeToolCall`, they are sanitized first. On
+any non-`ok` outcome `invoke` is never called, and `invoke` receives only the
+sanitized copy. The tool name and the request's `_meta` are not scanned: the
+name is matched against your tool list, and `_meta` is protocol metadata your
+host generated.
+
+The server wrappers read the cancellation signal from `extra.signal` (SDK 1.x)
+or `ctx.mcpReq.signal` (SDK 2.x).
+
+Helpers: `toCallToolResult(outcome)`, `mcpBlockedResult()`,
+`mcpToolErrorResult()`, `toReadResourceResponse(outcome)`,
+`mcpResourceBlockedError()`, `mcpResourceReadError()`, the `McpResourceError`
+class, `mcpAuditRecord(outcome, stage)`, and the constants `MCP_BLOCKED_TEXT`,
+`MCP_TOOL_ERROR_TEXT`, `MCP_RESOURCE_ERROR_CODE`,
+`MCP_RESOURCE_BLOCKED_MESSAGE`, `MCP_RESOURCE_READ_ERROR_MESSAGE`,
+`MCP_CONTENT_TYPES`, `MCP_BOUNDARY_LABELS`, `MCP_OUTCOMES`,
+`MCP_RESOURCE_OUTCOMES`, `MCP_AUDIT_FIELDS`.
+
+## Options
+
+```js
+await createMcpBoundary({
+  binaryContent, onAudit, onFinding, pii, policy, placeholderFormatter,
+  wholeInputLimits, incrementalLimits, traversalLimits,
+});
+```
+
+`createMcpBoundary(options)` loads and initializes the core through
+[`createAiContextBoundary`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-ai-context#readme)
+and takes its options, plus `binaryContent` and `onAudit`.
+`createMcpBoundaryWith(aiContextBoundary, { binaryContent, onAudit })` takes
+an AI-context boundary you already built.
 
 ### Limits
 
@@ -85,98 +178,45 @@ const mcp = await createMcpBoundary({
 ```
 
 Those values *are* `AI_CONTEXT_DEFAULT_LIMITS`, re-exported from
-[`@redact-secret/adapter-ai-context`](../adapter-ai-context#limits), which
-documents each one. **There is no unbounded mode**: the preset names the bounds
-so you do not have to invent them, and every one of them still fails an
-oversized result closed as `blocked` / `limit_exceeded`. `createMcpBoundaryWith`,
-over a boundary you built yourself, is unchanged.
+[`@redact-secret/adapter-ai-context`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-ai-context#limits),
+which documents each one. **There is no unbounded mode**: every one of them
+fails an oversized result closed as `blocked` / `limit_exceeded`.
 
 ### PII detection is opt-in
-
-**Unreleased.** `createMcpBoundary` takes `pii` and forwards it to
-[`createAiContextBoundary`](../adapter-ai-context#pii-detection-is-opt-in), the
-way it forwards the limits:
 
 ```js
 const mcp = await createMcpBoundary({ pii: ["pii:global"] });
 ```
 
-PII detection in the core is opt-in, process-wide and one-shot — the first
-selection wins, and a later *different* one fails with
-`PII_ACTIVATION_CONFLICT`. With `pii` omitted, an activation the application
-already made is accepted rather than fought over, so building the boundary
-after `initialize({ pii })` no longer fails. With `pii` given, a selection that
-is not the one actually active fails every operation closed as `blocked` /
-`core_error` — this factory still never rejects — instead of quietly
-sanitizing with PII off. Omitting `pii` needs no newer core: the declared
-`@redact-secret/core` range is unchanged.
+`pii` is forwarded to `createAiContextBoundary`. PII detection in the core is
+opt-in, process-wide and one-shot. With `pii` omitted, an activation the
+application already made is accepted. With `pii` given, a selection that is
+not the one actually active fails every operation closed as `blocked` /
+`core_error` (this factory never rejects) instead of quietly sanitizing with
+PII off.
 
-**Activation is not masking.** Under the core's default policy, PII types are
-confidence-gated rather than always redacted: a `High`-confidence finding
-redacts, while `Medium` and `Low` resolve to `warn`, and a `warn` finding
-leaves the text alone. An `ok` outcome can therefore carry findings whose text
-was not changed, and lower-confidence PII reaches the model as plaintext. Pass
-your own `policy` mapping those findings to `redact` if you need them masked;
-this package decides nothing about policy.
+**Activation is not masking.** Under the core's default policy only
+`High`-confidence PII is redacted; `Medium` and `Low` resolve to `warn`, which
+leaves the text alone. Pass your own `policy` if you need those masked.
 
-## Where to put it
+Full rules:
+[PII guide](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/pii.md).
 
-**The authoritative boundary is the MCP host**: the process that receives a
-`CallToolResult` from an MCP client and builds model context from it. Apply
-it after the SDK has parsed the result and before any of these:
+### Audit metadata
 
-1. writing the result, or anything derived from it, to a log or a trace;
-2. persisting it (conversation history, caches, databases);
-3. placing it into model context.
+Two callbacks, and nothing else is emitted:
 
-Deliver only `toCallToolResult(outcome)`. The raw result should exist only
-inside `sanitizeToolCall`.
+- **`onFinding(finding, { boundary })`**: exactly the eight allowlisted
+  finding fields, with `boundary` set to `tool-result`, `tool-arguments`, or
+  `resource`.
+- **`onAudit(record)`**: one record per crossing,
+  `{ stage, outcome, reason?, code? }`. `stage` is `arguments`, `result`, or
+  `resource`; `reason` appears only for `blocked`, and `code` only when the
+  core raised a registered error. The record holds no count, size, offset, or
+  text derived from input.
 
-A server can wrap its own tool handlers (`wrapToolHandler`,
-`wrapStreamedToolHandler`). That is **preventive**: the host cannot verify
-it, so the host applies the boundary again to every result it receives,
-including results marked `isError: true`.
-
-```js
-// Server side, either SDK line. Both handler shapes work: (args, ctx) and (ctx).
-server.registerTool("deploy", { inputSchema }, mcp.wrapToolHandler(deployHandler, { sanitizeArguments: true }));
-```
-
-## Operations
-
-`createMcpBoundary(options)` loads and initializes the core through
-`createAiContextBoundary` and returns the boundary. `options` are the
-AI-context options (all three limit sets are required, plus an optional
-`policy`, `placeholderFormatter`, and `onFinding`), plus `binaryContent` and
-`onAudit`. `createMcpBoundaryWith(aiContextBoundary, { binaryContent, onAudit })`
-takes an AI-context boundary you already built.
-
-| Operation | Input | AI-context path |
-| --- | --- | --- |
-| `sanitizeToolResult(result, { signal })` | one `CallToolResult` | one `sanitizeValue` of the whole result, label `tool-result`, then the key-context backstop |
-| `sanitizeToolArguments(args, { signal })` | `params.arguments` (opt-in) | one `sanitizeValue`, label `tool-arguments`, then the key-context backstop |
-| `sanitizeToolCall(invoke, { signal, arguments? })` | the host's invocation (`({ signal, arguments }) => client.callTool(...)`) | optional argument sanitation, then run it: a throw or rejection is `tool_error`; otherwise `sanitizeToolResult` |
-| `sanitizeStreamedToolResult(chunks, { signal })` | an iterable or async iterable of string chunks of one text | one staged `openStream`, label `tool-result`, released as `{ content: [{ type: "text", text }] }` |
-| `wrapToolHandler(handler, { sanitizeArguments })` | a server tool handler, either SDK line | reads `extra.signal` (1.x) or `ctx.mcpReq.signal` (2.x); returns the sanitized result or a fixed result |
-| `wrapStreamedToolHandler(handler, { sanitizeArguments })` | a server handler that returns chunks | as above, over `sanitizeStreamedToolResult` |
-| `sanitizeResourceResult(result, { signal })` | one `ReadResourceResult` (`resources/read`) | one `sanitizeValue` of the whole result, label `resource`, then the key-context backstop |
-| `sanitizeResourceRead(invoke, { signal })` | the host's read (`({ signal }) => client.readResource({ uri }, { signal })`) | run it: a throw or rejection is `read_error`; otherwise `sanitizeResourceResult` |
-| `wrapResourceReadHandler(handler)` | a server read callback, either SDK line (`(uri, extra)`, `(uri, variables, extra)`, or a low-level `(request, extra)`) | reads the signal from the last parameter; resolves to the sanitized result or throws the fixed JSON-RPC error |
-
-Pass `arguments` to `sanitizeToolCall` to opt into argument sanitation. The
-arguments are then sanitized first, and on any non-`ok` outcome `invoke` is
-never called. `invoke` receives only the sanitized copy. The tool name and the
-request's `_meta` are not scanned: the name is matched against your tool list,
-and `_meta` is protocol metadata your host generated.
-
-Helpers: `toCallToolResult(outcome)`, `mcpBlockedResult()`,
-`mcpToolErrorResult()`, `toReadResourceResponse(outcome)`,
-`mcpResourceBlockedError()`, `mcpResourceReadError()`, the
-`McpResourceError` class, `mcpAuditRecord(outcome, stage)`, and the constants
-`MCP_BLOCKED_TEXT`, `MCP_TOOL_ERROR_TEXT`, `MCP_RESOURCE_ERROR_CODE`,
-`MCP_RESOURCE_BLOCKED_MESSAGE`, `MCP_RESOURCE_READ_ERROR_MESSAGE`,
-`MCP_CONTENT_TYPES`, `MCP_BOUNDARY_LABELS`, `MCP_OUTCOMES`,
-`MCP_RESOURCE_OUTCOMES`, `MCP_AUDIT_FIELDS`.
+Both are observational. An exception they throw is swallowed and never read,
+and it never changes an outcome.
 
 ## What is scanned
 
@@ -191,7 +231,7 @@ contract does not name, so a future field fails closed.
 | `resource_link` block | every field scanned; a token in a URL query is caught |
 | `image` / `audio` `data`, `resource.blob` | base64, never decoded. **Default: the whole result is `blocked` / `unsupported_value`.** With `binaryContent: "pass"`, a string payload passes unchanged and unscanned at its original key position; every other field of the block is still scanned. A non-string payload always blocks. |
 | any other block type, a non-object block, a non-array `content`, a non-object result | `blocked` / `unsupported_value` |
-| `structuredContent`, `_meta` (result and block), `annotations`, unknown fields | scanned as values, keys included; each string leaf with its immediate key (key-aware `sanitizeValue`) |
+| `structuredContent`, `_meta` (result and block), `annotations`, unknown fields | scanned as values, keys included; each string leaf with its immediate key |
 
 **Key-context backstop.** The AI-context `sanitizeValue` is key-aware
 (redact-secret/redact-secret#842): each string leaf is scanned with the key
@@ -222,6 +262,17 @@ the producer: `return()` on its iterator, and `destroy()` when the source
 has one, as a Node.js `Readable` does. It never waits on either. A real
 `AbortSignal` ends a producer that is still pending. Nothing is released
 before a successful finalize.
+
+How each operation maps onto the AI-context boundary:
+
+| Operation | AI-context path |
+| --- | --- |
+| `sanitizeToolResult` | one `sanitizeValue` of the whole result, label `tool-result`, then the key-context backstop |
+| `sanitizeToolArguments` | one `sanitizeValue`, label `tool-arguments`, then the key-context backstop |
+| `sanitizeToolCall` | optional argument sanitation, then run it: a throw or rejection is `tool_error`; otherwise `sanitizeToolResult` |
+| `sanitizeStreamedToolResult` | one staged `openStream`, label `tool-result`, released as `{ content: [{ type: "text", text }] }` |
+| `sanitizeResourceResult` | one `sanitizeValue` of the whole result, label `resource`, then the key-context backstop |
+| `sanitizeResourceRead` | run it: a throw or rejection is `read_error`; otherwise `sanitizeResourceResult` |
 
 ## Outcomes and fixed results
 
@@ -291,23 +342,6 @@ const response = toReadResourceResponse(outcome); // { result } | { error } | nu
   of an entry that also has `text`, and they reject a malformed result
   (`read_error` here). That only removes content; the boundary still scans
   everything the host receives.
-
-## Audit metadata
-
-Two things, and nothing else:
-
-- **Findings**, through the AI-context `onFinding(finding, { boundary })`:
-  exactly the eight allowlisted fields, with `boundary` set to `tool-result`,
-  `tool-arguments`, or `resource`.
-- **One record per crossing**, through `onAudit(record)`:
-  `{ stage, outcome, reason?, code? }`. `stage` is `arguments`, `result`, or
-  `resource`,
-  `reason` appears only for `blocked`, and `code` only when the core raised a
-  registered error. The record holds no count, size, offset, or text derived
-  from input.
-
-Both callbacks are observational. An exception they throw is swallowed and
-never read, and it never changes an outcome.
 
 ## Supported range
 
@@ -389,3 +423,28 @@ It also does not cover:
   detection (an `ok` with no findings is not proof that no secret was
   present), plaintext in process memory, and your own callbacks, which are
   trusted code.
+
+## How it is verified
+
+It implements the core's
+[MCP boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/mcp-boundary.md)
+(redact-secret/redact-secret#612) as a thin specialization of
+`@redact-secret/adapter-ai-context`: every scan, nested-value walk, policy
+decision, limit, and core-error mapping comes from that package, and this one
+adds only the MCP shape. It qualifies by replaying the core's own MCP fixture
+with the core's own runner, both vendored byte-for-byte at a pinned core
+commit
+([`fixtures/core/pins.json`](https://github.com/redact-secret/redact-secret-adapters/blob/main/fixtures/core/pins.json)),
+through this package's public API, and it is exercised with real MCP SDK
+instances at both endpoints of every supported line, over stdio and Streamable
+HTTP.
+
+## Contributing
+
+Issues and pull requests are welcome:
+[CONTRIBUTING.md](https://github.com/redact-secret/redact-secret-adapters/blob/main/CONTRIBUTING.md).
+Changes are listed in this package's `CHANGELOG.md`.
+
+## License
+
+MIT

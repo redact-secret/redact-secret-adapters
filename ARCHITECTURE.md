@@ -469,10 +469,10 @@ so that is a test, not an assumption.
 packages/
   adapter/              @redact-secret/adapter          shared L1 + L2, TypeScript
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
-  adapter-otel-trace/   @redact-secret/adapter-otel-trace  L3 + live wrapper, traces only (unreleased)
+  adapter-otel-trace/   @redact-secret/adapter-otel-trace  L3 + live wrapper, traces only
   adapter-otel/         @redact-secret/adapter-otel     deprecated name: re-exports adapter-otel-trace
-  adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper (unreleased)
-  adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context (unreleased)
+  adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper
+  adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context
 python/
   redact_secret_adapters/                               shared + logging + otel extra
 fixtures/                                               cross-language contract, shared

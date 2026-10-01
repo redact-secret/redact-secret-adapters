@@ -1,10 +1,35 @@
 # @redact-secret/adapter-otel
 
+[![npm version](https://img.shields.io/npm/v/@redact-secret/adapter-otel)](https://www.npmjs.com/package/@redact-secret/adapter-otel)
+[![deprecated](https://img.shields.io/badge/status-deprecated-orange)](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace)
+[![npm downloads](https://img.shields.io/npm/dm/@redact-secret/adapter-otel)](https://www.npmjs.com/package/@redact-secret/adapter-otel)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/adapter-otel)](https://www.npmjs.com/package/@redact-secret/adapter-otel)
+[![types included](https://img.shields.io/npm/types/@redact-secret/adapter-otel)](https://www.npmjs.com/package/@redact-secret/adapter-otel)
+[![CI](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-adapters/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-adapters)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/adapter-otel)](https://github.com/redact-secret/redact-secret-adapters/blob/main/LICENSE)
+
 > **Deprecated name.** This package is now
 > [`@redact-secret/adapter-otel-trace`](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace).
-> It only ever covered OpenTelemetry **traces**; it does not protect
-> OpenTelemetry Logs. Existing imports keep working — this package re-exports
-> the new one unchanged — but new code should use the new name.
+> Existing imports keep working, because this package re-exports the new one
+> unchanged. New code should use the new name.
+
+It only ever covered OpenTelemetry **traces**. It does not protect
+OpenTelemetry Logs, under either name.
+
+## Switch in two steps
+
+```sh
+npm uninstall @redact-secret/adapter-otel
+npm install @redact-secret/adapter-otel-trace
+```
+
+```diff
+-import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel";
++import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel-trace";
+```
+
+Nothing else changes. Usage stays the same:
 
 ```js
 import { NodeTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-node";
@@ -24,18 +49,7 @@ The new package's `0.1.0` is the code this package shipped as `0.1.2`: the same
 `createRedactingSpanProcessor`, `RedactingSpanProcessorWith`,
 `redactAttributesWith`, options, outcome shape, fail-closed markers and peer
 ranges (`@opentelemetry/sdk-trace-base ^2.0.0`, `@redact-secret/core
-^0.1.0-beta.6`). Swap the dependency and the import specifier; nothing else
-changes.
-
-```sh
-npm uninstall @redact-secret/adapter-otel
-npm install @redact-secret/adapter-otel-trace
-```
-
-```diff
--import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel";
-+import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel-trace";
-```
+^0.1.0-beta.6`). Swap the dependency and the import specifier as shown above.
 
 ## What this package still does
 
