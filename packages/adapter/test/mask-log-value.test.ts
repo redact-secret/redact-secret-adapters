@@ -54,7 +54,9 @@ test("an Error's own type/message/stack properties never override the masked fix
 });
 
 test("rejects a non-function scanAndRedact", () => {
-  expect(() => maskLogValueWith(null as unknown as ScanAndRedact, {})).toThrow(TypeError);
+  expect(() => maskLogValueWith(null as unknown as ScanAndRedact, {})).toThrowError(
+    new TypeError("maskLogValueWith: scanAndRedact must be a function"),
+  );
 });
 
 test("preserves prototype-named JSON keys as redacted own data", () => {
