@@ -237,7 +237,9 @@ test("the policy option reaches scanAndRedact for every leaf", () => {
 });
 
 test("rejects a non-function scanAndRedact", () => {
-  expect(() => maskSecretsWith(null as unknown as ScanAndRedact, {})).toThrow(TypeError);
+  expect(() => maskSecretsWith(null as unknown as ScanAndRedact, {})).toThrowError(
+    new TypeError("maskSecretsWith: scanAndRedact must be a function"),
+  );
 });
 
 test("preserves prototype-named JSON keys as redacted own data", () => {

@@ -18,10 +18,10 @@
       "id": "adapter",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter@0.1.5",
+      "gitTag": "adapter@0.1.6",
       "sourcePath": "packages/adapter",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter",
       "runtime": {
@@ -40,7 +40,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [],
@@ -50,10 +50,10 @@
       "id": "adapter-pino",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-pino",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-pino@0.1.2",
+      "gitTag": "adapter-pino@0.1.3",
       "sourcePath": "packages/adapter-pino",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-pino",
       "runtime": {
@@ -72,7 +72,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [
@@ -98,10 +98,10 @@
       "id": "adapter-otel-trace",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-otel-trace",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-otel-trace@0.1.0",
+      "gitTag": "adapter-otel-trace@0.1.1",
       "sourcePath": "packages/adapter-otel-trace",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-otel-trace",
       "runtime": {
@@ -120,7 +120,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [
@@ -146,10 +146,10 @@
       "id": "adapter-otel",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-otel",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-otel@0.1.3",
+      "gitTag": "adapter-otel@0.1.4",
       "sourcePath": "packages/adapter-otel",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-otel",
       "runtime": {
@@ -168,7 +168,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [
@@ -194,10 +194,10 @@
       "id": "adapter-ai-context",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-ai-context",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-ai-context@0.1.1",
+      "gitTag": "adapter-ai-context@0.1.2",
       "sourcePath": "packages/adapter-ai-context",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-ai-context",
       "runtime": {
@@ -216,7 +216,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [],
@@ -231,10 +231,10 @@
       "id": "adapter-mcp",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-mcp",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-mcp@0.1.2",
+      "gitTag": "adapter-mcp@0.1.3",
       "sourcePath": "packages/adapter-mcp",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-mcp",
       "runtime": {
@@ -253,7 +253,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [
@@ -299,10 +299,10 @@
       "id": "redact-secret-adapters",
       "ecosystem": "pypi",
       "name": "redact-secret-adapters",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "redact-secret-adapters@0.1.2",
+      "gitTag": "redact-secret-adapters@0.1.3",
       "sourcePath": "python",
       "registryUrl": "https://pypi.org/project/redact-secret-adapters/",
       "runtime": {
@@ -323,7 +323,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0b6",
-          "highest": "0.1.0b11"
+          "highest": "0.1.0b12"
         }
       },
       "hosts": [
