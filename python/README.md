@@ -214,7 +214,7 @@ from redact_secret_adapters.logging_filter import RedactSecretFilter
 from redact_secret_adapters.otel import create_redacting_span_processor
 
 handler = logging.StreamHandler()
-handler.addFilter(RedactSecretFilter(pii=["pii:global"]))          # adapter first
+handler.addFilter(RedactSecretFilter(pii=["pii:global"]))  # adapter first
 
 provider.add_span_processor(
     create_redacting_span_processor(exporter_processor, pii=["pii:global"])  # same contract
