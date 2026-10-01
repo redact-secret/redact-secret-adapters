@@ -41,6 +41,10 @@ version numbers start again here, at `0.1.0`, and do not follow the old name's.
 
 - **Verified core scan options** (redact-secret/redact-secret-adapters#175): `createRedactingSpanProcessor`, `RedactingSpanProcessorWith` and `redactAttributesWith` take `scanLimits`, `ruleset` and `placeholderFormatter` (and still `policy`), validated and snapshotted once. The live factory rejects an unsupported core, or a ruleset or limits the core refuses, with a fixed `CoreOptionsError`. Available from the declared core floor, verified at both endpoints by `test/scan-options-live.test.ts`. Omit them and nothing changes.
 
+### Changed
+
+- **Dependency range raised: `@redact-secret/adapter` `^0.1.3` -> `^0.1.7`** (redact-secret/redact-secret-adapters#172, #173, #175). This release needs the key-context primitive, the operation budget and the scan options that `@redact-secret/adapter` 0.1.7 introduces, which no earlier published version has; against `0.1.3` the package fails to import. Backed by the `published-combination` CI job (`scripts/check-published-combination.mjs`), which installs this package with the lowest published sibling its range admits (and this checkout's tarball for a sibling not yet published). No `@redact-secret/core` range change.
+
 ## [0.1.1] - 2026-10-01
 ### Changed
 

@@ -47,6 +47,10 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 - Internal: the walker resolves its scan options once per walk instead of building `{ policy }` per leaf.
 
+### Changed
+
+- Version bumped to `0.1.7` on `develop` ahead of the next train, so `adapter-pino`, `adapter-otel-trace` and `adapter-ai-context` can raise their dependency range to the version that carries the new APIs (`published-combination` requires it). The entries above are `0.1.7`'s and move under its heading when the train is cut.
+
 ## [0.1.6] - 2026-10-01
 ### Changed
 
