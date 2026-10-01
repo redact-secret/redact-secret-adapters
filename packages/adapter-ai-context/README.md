@@ -158,6 +158,16 @@ Two things to know:
   key and its JSON punctuation. With the default 64 KiB that is noise; with a
   small override it is what binds first.
 
+### Options it does not take
+
+`ruleset` and `scanLimits` are rejected by name (a `TypeError`), never ignored. The
+core has no ruleset for an incremental session, so one boundary cannot offer it on
+`sanitizeText` and not on `openStream`; and the boundary's whole-input limits are
+`wholeInputLimits`, beside `incrementalLimits`. `placeholderFormatter` and `policy`
+reach both the whole-input and the incremental path. The logging and tracing
+adapters take `ruleset`, `scanLimits` and `placeholderFormatter` on whole-input scans
+([Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options)).
+
 ### Operation limits
 
 ```js

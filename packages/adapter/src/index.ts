@@ -48,6 +48,19 @@ export {
   toValueCounts,
   type ValueCounts,
 } from "./outcome.js";
+export {
+  CoreOptionsError,
+  type CoreOptionsErrorCode,
+  coreVersionAtLeast,
+  resolveScanConfig,
+  SCAN_OPTION_CORE_FLOORS,
+  type ScanConfig,
+  type ScanOptionName,
+  type ScanOptionsCore,
+  type ScanOptionsInput,
+  verifyScanOptions,
+  withResolvedScanConfig,
+} from "./scan-options.js";
 export type {
   CoreActivation,
   InitializableCore,

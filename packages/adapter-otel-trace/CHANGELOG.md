@@ -37,6 +37,10 @@ version numbers start again here, at `0.1.0`, and do not follow the old name's.
 
 - **Behavior change with defaults:** a span that inspects more than the default budget now has every string not yet inspected replaced by `[REDACTED:LIMIT_EXCEEDED]` (counted as `limited`), and is still forwarded. Before, a span's only bound was `maxStringLength` per string.
 
+### Added
+
+- **Verified core scan options** (redact-secret/redact-secret-adapters#175): `createRedactingSpanProcessor`, `RedactingSpanProcessorWith` and `redactAttributesWith` take `scanLimits`, `ruleset` and `placeholderFormatter` (and still `policy`), validated and snapshotted once. The live factory rejects an unsupported core, or a ruleset or limits the core refuses, with a fixed `CoreOptionsError`. Available from the declared core floor, verified at both endpoints by `test/scan-options-live.test.ts`. Omit them and nothing changes.
+
 ## [0.1.1] - 2026-10-01
 ### Changed
 

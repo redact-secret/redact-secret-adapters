@@ -109,14 +109,17 @@ assertion is not optional.
 ## Options
 
 ```js
-await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLength, operationLimits });
+await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLength, operationLimits, scanLimits, ruleset, placeholderFormatter });
 ```
 
 | Option | What it does |
 | --- | --- |
 | `pii` | Turn on PII detection, e.g. `["pii:global"]`. See below |
 | `onOutcome` | A callback with counts per span, for your metrics. See below |
-| `policy` | The core's policy, passed through unchanged |
+| `policy` | The core's policy, passed through unchanged. It replaces the core's built-in policy for every finding, a `ruleset` detector's included |
+| `scanLimits` | The core's whole-input limits, `{ maxInputBytes, maxFindings }`, for every scan. See [Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options) |
+| `ruleset` | A declarative detector ruleset (text or bytes) |
+| `placeholderFormatter` | The core's placeholder formatter |
 | `maxStringLength` | Strings longer than this become `[REDACTED:LIMIT_EXCEEDED]` unscanned |
 | `operationLimits` | Override the aggregate budget of **one span**. See below |
 

@@ -15,10 +15,12 @@ import {
   resolveLimit,
 } from "./mask-leaf.js";
 import type { OutcomeCounter } from "./outcome.js";
-import type { Limits, MaskOptions, Policy, ScanAndRedact } from "./types.js";
+import { resolveScanConfig, type ScanConfig } from "./scan-options.js";
+import type { Limits, MaskOptions, ScanAndRedact } from "./types.js";
 
 export interface WalkContext {
-  readonly policy: Policy;
+  /** The validated, snapshotted scan options every leaf of this walk is scanned with. */
+  readonly scanConfig: ScanConfig;
   readonly limits: Limits;
   readonly budget: { leaves: number; nodes: number };
   /** The operation's aggregate budget, shared by every pass of one host operation (`./budget.ts`). */
@@ -46,7 +48,7 @@ export function resolveLimits(overrides: Partial<Limits> | undefined): Limits {
 export function createWalkContext(options: MaskOptions): WalkContext {
   const limits = resolveLimits(options.limits);
   return {
-    policy: options.policy,
+    scanConfig: options.scanConfig ?? resolveScanConfig(options),
     limits,
     budget: { leaves: limits.maxTotalLeaves, nodes: limits.maxNodes },
     operation: options.operation ?? createOperationBudget(options.operationLimits),
@@ -67,7 +69,7 @@ export function maskString(scanAndRedact: ScanAndRedact, value: string, ctx: Wal
   }
   ctx.budget.leaves -= 1;
   const leaf = maskLeafOutcomeWith(scanAndRedact, value, {
-    policy: ctx.policy,
+    scanConfig: ctx.scanConfig,
     maxStringLength: ctx.limits.maxStringLength,
     key,
     budget: ctx.operation,

@@ -43,6 +43,7 @@ import {
   LIMIT_MARKER,
   maskLeafOutcomeWith,
   notify,
+  resolveScanConfig,
   toValueCounts,
 } from "@redact-secret/adapter";
 
@@ -185,9 +186,10 @@ export function redactAttributesWith(
     operationLimits?: Partial<OperationLimits>;
   };
   const budget = createOperationBudget(operationLimits);
+  const resolved = { ...leafOptions, scanConfig: leafOptions.scanConfig ?? resolveScanConfig(leafOptions) };
   try {
     redactBag(
-      maskerFor(scanAndRedact, leafOptions, () => ({ counter: undefined, budget })),
+      maskerFor(scanAndRedact, resolved, () => ({ counter: undefined, budget })),
       budget,
       attributes,
       "attributes",
@@ -246,7 +248,11 @@ export class RedactingSpanProcessorWith implements SpanProcessor {
     if (typeof scanAndRedact !== "function") {
       throw new TypeError("RedactingSpanProcessorWith: scanAndRedact must be a function");
     }
-    const { onOutcome, operationLimits, ...maskOptions } = options;
+    const { onOutcome, operationLimits, ...rawOptions } = options;
+    // Validated and snapshotted once, here: a malformed scan option is a
+    // programming error at construction, and every leaf is scanned with the
+    // one snapshot.
+    const maskOptions = { ...rawOptions, scanConfig: rawOptions.scanConfig ?? resolveScanConfig(rawOptions) };
     if (onOutcome !== undefined && typeof onOutcome !== "function") {
       throw new TypeError("RedactingSpanProcessorWith: onOutcome must be a function");
     }

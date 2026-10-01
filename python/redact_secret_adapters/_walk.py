@@ -39,6 +39,7 @@ from .mask_leaf import (
     resolve_limits,
 )
 from .outcome import OutcomeCounter
+from .scan_options import ScanConfig, resolve_scan_config
 
 # Passed through unchanged, like numbers, booleans and null in the TS walker.
 # ``bool`` is a subclass of ``int``.
@@ -52,7 +53,7 @@ def _slice_bound(limit: Any) -> Optional[int]:
 
 
 class _Walk:
-    __slots__ = ("scan_and_redact", "policy", "limits", "leaves", "nodes", "seen", "counter", "budget")
+    __slots__ = ("scan_and_redact", "config", "limits", "leaves", "nodes", "seen", "counter", "budget")
 
     def __init__(
         self,
@@ -62,9 +63,11 @@ class _Walk:
         counter: Optional[OutcomeCounter] = None,
         budget: Optional[OperationBudget] = None,
         operation_limits: Optional[dict[str, int]] = None,
+        scan_config: Optional[ScanConfig] = None,
     ) -> None:
         self.scan_and_redact = scan_and_redact
-        self.policy = policy
+        # The validated, snapshotted scan options every leaf is scanned with.
+        self.config = scan_config if scan_config is not None else resolve_scan_config(policy)
         self.limits = resolve_limits(limits)
         self.leaves = self.limits["max_total_leaves"]
         self.nodes = self.limits["max_nodes"]
@@ -97,10 +100,10 @@ class _Walk:
         leaf = mask_leaf_outcome_with(
             self.scan_and_redact,
             value,
-            policy=self.policy,
             max_string_length=self.limits["max_string_length"],
             key=key if isinstance(key, str) else None,
             budget=self.budget,
+            scan_config=self.config,
         )
         count_leaf(self.counter, leaf)
         return leaf.text
@@ -204,6 +207,7 @@ def walk(
     key: Optional[str] = None,
     budget: Optional[OperationBudget] = None,
     operation_limits: Optional[dict[str, int]] = None,
+    scan_config: Optional[ScanConfig] = None,
 ) -> Any:
     """Masks every string reachable in ``data``. Never raises for any
     input value; see the module docstring for what each kind becomes.
@@ -211,7 +215,7 @@ def walk(
     ``key`` is the name ``data`` sits directly under, when it is a plain
     string and the host knows one (a log record's ``extra`` field name):
     context for detection only (see ``key_context.py``)."""
-    return _Walk(scan_and_redact, policy, limits, counter, budget, operation_limits).value(data, 0, key)
+    return _Walk(scan_and_redact, policy, limits, counter, budget, operation_limits, scan_config).value(data, 0, key)
 
 
 def mask_exception_text_with(
@@ -223,11 +227,12 @@ def mask_exception_text_with(
     counter: Optional[OutcomeCounter] = None,
     budget: Optional[OperationBudget] = None,
     operation_limits: Optional[dict[str, int]] = None,
+    scan_config: Optional[ScanConfig] = None,
 ) -> str:
     """The masked ``stack`` that walking ``exc`` would produce, without
     scanning the message or cause separately: the formatted traceback
     already contains both, and the logging filter keeps only this text."""
-    state = _Walk(scan_and_redact, policy, limits, counter, budget, operation_limits)
+    state = _Walk(scan_and_redact, policy, limits, counter, budget, operation_limits, scan_config)
     if state.limits["max_depth"] <= 0:
         return state.marker(LIMIT_MARKER)
     return state.stack(exc)

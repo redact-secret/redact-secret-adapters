@@ -140,6 +140,7 @@ RedactSecretFilter(
     policy=policy,
     limits={"max_depth": 4},
     operation_limits={"max_leaves": 1000},
+    ruleset=ruleset,
 )
 ```
 
@@ -149,6 +150,7 @@ RedactSecretFilter(
 | `on_outcome` | A callback with counts per record. See [Counting what happened](#counting-what-happened) |
 | `policy` | The core's policy, passed through unchanged |
 | `limits` | Override the walk limits. See [Fail-closed markers](#fail-closed-markers) |
+| `scan_limits`, `ruleset`, `placeholder_formatter` | The core's whole-input limits, declarative ruleset and placeholder formatter, passed through. See [Core scan options](#core-scan-options) |
 | `operation_limits` | Override the aggregate budget of **one `filter()` call**. See [Aggregate operation budget](#aggregate-operation-budget) |
 | `scan_and_redact` (first positional) | An injected scanner. With no argument it uses `redact_secret.scan_and_redact` |
 
@@ -338,6 +340,48 @@ value blocks the value and keeps the key), the way the JavaScript walker does. E
 `extra_fields` attribute. The OpenTelemetry processor likewise leaves every
 span, event, and link attribute key as it is. Do not put a secret in a key or
 an attribute name.
+
+## Core scan options
+
+`RedactSecretFilter`, `RedactingSpanProcessorWith`, `create_redacting_span_processor`,
+`redact_attributes_with`, `mask_secrets_with` and `mask_log_value_with` pass three
+more core options through, unchanged, on every scan, beside `policy`:
+
+| Option | Core argument | What it is |
+| --- | --- | --- |
+| `scan_limits` | `limits` | The core's whole-input limits: a mapping with `max_input_bytes` and `max_findings` (or an object with those attributes). Named `scan_limits` because `limits` is this package's *walk* limits |
+| `ruleset` | `ruleset` | A declarative detector ruleset as `str`, `bytes` or `bytearray` |
+| `placeholder_formatter` | `formatter` | The core's placeholder formatter, `(finding, context) -> str` |
+
+**Policy precedence.** There is one policy and the adapter never combines two:
+your `policy` replaces the core's built-in policy for every finding, including those
+a `ruleset` detector adds. Under the core's default policy a ruleset finding is
+`Medium` confidence and only *warns*, which leaves the text alone, so supply a
+`policy` that returns `redact` or `block` for it. A `block` finding still replaces
+the whole leaf, and a `warn` still leaves the text alone, on top of what the policy
+returned.
+
+The options are validated and snapshotted once, when the filter or processor is
+built (`resolve_scan_config`; per call for `mask_secrets_with`): a `scan_limits`
+mapping is copied and a `bytearray` ruleset becomes `bytes`, so mutating yours
+afterwards changes nothing; a malformed option is a `TypeError` with a fixed
+message. With the real core (the filter built with no scanner argument, and
+`create_redacting_span_processor`) a `scan_limits` mapping becomes
+`redact_secret.WholeInputLimits`; give `mask_secrets_with` and the other
+`*_with` functions a `WholeInputLimits` when the scanner you inject is the real
+core. A leaf the core refuses is `[REDACTED:ERROR]`, never the input or the
+exception's message. A keyed leaf is also scanned in its key-context view, so under
+a byte ceiling its usable size is `max_input_bytes` minus the key and punctuation.
+
+An installed core that cannot honor a requested option is rejected, not ignored:
+the live constructors check `redact_secret.VERSION` against
+`SCAN_OPTION_CORE_FLOORS` (every option is available from the declared floor,
+`0.1.0-beta.6`) and probe with one scan of the empty text, so an older core or a
+ruleset or limits it refuses raises `CoreOptionsError` with a fixed message and
+`code` (`CORE_OPTION_UNSUPPORTED` / `CORE_OPTION_REJECTED`), the option names,
+and the core's own `core_code` (`INVALID_RULESET`, ...), never a value or the core's
+message. A core that omits every new option is untouched. All of this is
+whole-input; the core has no ruleset for an incremental session.
 
 ## Aggregate operation budget
 

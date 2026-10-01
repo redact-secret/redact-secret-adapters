@@ -215,6 +215,15 @@ function validateOptions(options: AiContextBoundaryOptions): void {
   if (operationLimits !== undefined && (operationLimits === null || typeof operationLimits !== "object")) {
     throw new TypeError("createAiContextBoundary: operationLimits must be an object");
   }
+  // Named, not ignored (redact-secret/redact-secret-adapters#175): the core has
+  // no ruleset for an incremental session, so one boundary cannot offer it on
+  // `sanitizeText` and not on `openStream`; and its whole-input limits are
+  // `wholeInputLimits` here, beside `incrementalLimits`.
+  for (const name of ["ruleset", "scanLimits"] as const) {
+    if (name in options) {
+      throw new TypeError(`createAiContextBoundary: ${name} is not supported by the AI-context boundary`);
+    }
+  }
 }
 
 /**

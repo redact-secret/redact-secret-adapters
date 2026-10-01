@@ -11,7 +11,7 @@
  */
 
 import type { MaskOptions, ScanAndRedact } from "@redact-secret/adapter";
-import { ERROR_MARKER, LIMIT_MARKER, maskKeyedLeavesWith } from "@redact-secret/adapter";
+import { ERROR_MARKER, LIMIT_MARKER, maskKeyedLeavesWith, withResolvedScanConfig } from "@redact-secret/adapter";
 
 /** The exact shape of pino's `hooks.streamWrite`. */
 export type RedactingStreamWrite = (line: string) => string;
@@ -215,19 +215,21 @@ export function createRedactingStreamWriteWith(
     throw new TypeError("createRedactingStreamWriteWith: scanAndRedact must be a function");
   }
   const limits = resolveLineLimits(options.lineLimits);
+  // Validated and snapshotted once: a malformed scan option throws here.
+  const resolved = withResolvedScanConfig(options);
   return function redactingStreamWrite(line) {
     try {
-      return redactLine(scanAndRedact, line, options, limits);
+      return redactLine(scanAndRedact, line, resolved, limits);
     } catch (error) {
       // `line.endsWith` is not read on a non-string: the fixed line has no newline then.
       const newline = typeof line === "string" && line.endsWith("\n") ? "\n" : "";
       if (error instanceof LineLimitExceeded) {
         // The whole line was refused by a ceiling or a budget, not malformed.
-        if (!error.counted && options.counter !== undefined) options.counter.limited += 1;
+        if (!error.counted && resolved.counter !== undefined) resolved.counter.limited += 1;
         return `${PINO_LIMIT_LINE}${newline}`;
       }
       // The whole line is one value the adapter could not represent.
-      if (options.counter !== undefined) options.counter.failed += 1;
+      if (resolved.counter !== undefined) resolved.counter.failed += 1;
       return `${PINO_ERROR_LINE}${newline}`;
     }
   };

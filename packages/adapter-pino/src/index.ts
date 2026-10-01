@@ -34,7 +34,14 @@
  * activation is not the same as masking every PII value.
  */
 
-import { activateCore, type CoreActivation, type MaskOptions, type ScanAndRedact } from "@redact-secret/adapter";
+import {
+  activateCore,
+  type CoreActivation,
+  type MaskOptions,
+  resolveScanConfig,
+  type ScanAndRedact,
+  verifyScanOptions,
+} from "@redact-secret/adapter";
 
 import { createRedactingHooksWith, type RedactingHooks, type RedactingHooksOptions } from "./hooks.js";
 import { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
@@ -81,9 +88,17 @@ function activationOf(options: CoreActivation): CoreActivation {
   return options.pii === undefined ? {} : { pii: options.pii };
 }
 
-async function initializedScanner(activation: CoreActivation): Promise<ScanAndRedact> {
+async function initializedScanner(
+  activation: CoreActivation,
+  scanOptions: Parameters<typeof resolveScanConfig>[0],
+): Promise<ScanAndRedact> {
+  // Validated before the core is touched; then the installed core must honor
+  // any requested scan option (`scanLimits`, `ruleset`, `placeholderFormatter`)
+  // or this rejects with a fixed, input-free `CoreOptionsError`.
+  const config = resolveScanConfig(scanOptions);
   const loaded = await import("@redact-secret/core");
   await activateCore(loaded, activation);
+  verifyScanOptions(loaded, config);
   return loaded.scanAndRedact;
 }
 
@@ -103,7 +118,7 @@ async function initializedScanner(activation: CoreActivation): Promise<ScanAndRe
  * a selector or a core message — rather than run with PII off.
  */
 export async function createRedactingHooks(options: CreateRedactingHooksOptions = {}): Promise<RedactingHooks> {
-  return createRedactingHooksWith(await initializedScanner(activationOf(options)), options);
+  return createRedactingHooksWith(await initializedScanner(activationOf(options), options), options);
 }
 
 /**
@@ -115,7 +130,7 @@ export async function createRedactingHooks(options: CreateRedactingHooksOptions 
  * and for callers migrating from `0.1.0`.
  */
 export async function createRedactingLogMethod(options: CreateRedactingHookOptions = {}): Promise<RedactingLogMethod> {
-  return createRedactingLogMethodWith(await initializedScanner(activationOf(options)), options);
+  return createRedactingLogMethodWith(await initializedScanner(activationOf(options), options), options);
 }
 
 /**
@@ -128,5 +143,5 @@ export async function createRedactingLogMethod(options: CreateRedactingHookOptio
 export async function createRedactingStreamWrite(
   options: CreateRedactingStreamWriteOptions = {},
 ): Promise<RedactingStreamWrite> {
-  return createRedactingStreamWriteWith(await initializedScanner(activationOf(options)), options);
+  return createRedactingStreamWriteWith(await initializedScanner(activationOf(options), options), options);
 }

@@ -55,6 +55,7 @@ from ._walk import mask_exception_text_with, walk
 from .budget import OperationBudget
 from .mask_leaf import ERROR_MARKER, LIMIT_MARKER, count_leaf, mask_leaf_outcome_with
 from .outcome import LogRecordOutcome, OutcomeCounter, notify
+from .scan_options import resolve_scan_config, verify_scan_options
 
 __all__ = ["RedactSecretFilter"]
 
@@ -92,6 +93,9 @@ class RedactSecretFilter(logging.Filter):
         extra_fields: Sequence[str] = (),
         limits: Optional[dict[str, int]] = None,
         operation_limits: Optional[dict[str, int]] = None,
+        scan_limits: Optional[Any] = None,
+        ruleset: Optional[Any] = None,
+        placeholder_formatter: Optional[Callable[..., Any]] = None,
         on_outcome: Optional[Callable[[LogRecordOutcome], None]] = None,
     ) -> None:
         if name:
@@ -105,15 +109,31 @@ class RedactSecretFilter(logging.Filter):
                 stacklevel=2,
             )
         super().__init__(name)
+        live_core = None
         if scan_and_redact is _LIVE:
             # The live wrapper: the only place this module touches the core.
             import redact_secret
 
+            live_core = redact_secret
             scan_and_redact = redact_secret.scan_and_redact
         if not callable(scan_and_redact):
             raise TypeError("RedactSecretFilter: scan_and_redact must be callable")
         self._scan_and_redact = scan_and_redact
         self._policy = policy
+        # The core's whole-input limits, ruleset and placeholder formatter,
+        # validated and snapshotted once (see ``scan_options.py``). With the
+        # live core, a ``scan_limits`` mapping becomes the core's own limits
+        # object, and the installed core must honor every requested option or
+        # construction raises a fixed ``CoreOptionsError``.
+        self._config = resolve_scan_config(
+            policy,
+            scan_limits,
+            ruleset,
+            placeholder_formatter,
+            limits_type=None if live_core is None else live_core.WholeInputLimits,
+        )
+        if live_core is not None:
+            verify_scan_options(live_core, self._config)
         # A bare string names one field; tuple("auth") would name four.
         self._extra_fields = (extra_fields,) if isinstance(extra_fields, str) else tuple(extra_fields)
         self._limits = limits
@@ -139,7 +159,7 @@ class RedactSecretFilter(logging.Filter):
             return LIMIT_MARKER
         max_len = (self._limits or {}).get("max_string_length")
         leaf = mask_leaf_outcome_with(
-            self._scan_and_redact, text, policy=self._policy, max_string_length=max_len, budget=budget
+            self._scan_and_redact, text, max_string_length=max_len, budget=budget, scan_config=self._config
         )
         count_leaf(counter, leaf)
         return leaf.text
@@ -177,6 +197,7 @@ class RedactSecretFilter(logging.Filter):
                 limits=self._limits,
                 counter=counter,
                 budget=budget,
+                scan_config=self._config,
             )
         elif record.exc_text:
             # Also reached with exc_info == (None, None, None): a cached
@@ -198,6 +219,7 @@ class RedactSecretFilter(logging.Filter):
                         counter=counter,
                         key=field,
                         budget=budget,
+                        scan_config=self._config,
                     )
                 except Exception:
                     # walk() degrades per key and element and should never

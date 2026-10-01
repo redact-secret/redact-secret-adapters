@@ -148,6 +148,69 @@ are scanned alone. The cost is one more `scanAndRedact` call per keyed string
 leaf; the `scanned` counter still counts leaves. The primitive is exported as
 `scanLeafInKeyContext` and shared with the AI-context boundary.
 
+## Core scan options
+
+Consumers should not need a hand-written `scanAndRedact` wrapper to use behavior the core
+supports. Besides `policy`, every logging and tracing entry point (and
+`maskSecretsWith`, `maskLogValueWith`, `createMaskSecrets`) passes three more
+core options through, unchanged, on every scan:
+
+| Option | Core option | What it is |
+| --- | --- | --- |
+| `scanLimits` | `limits` | The core's whole-input limits, `{ maxInputBytes, maxFindings }`: the UTF-8 bytes of one scanned text and the findings of one scan. Named `scanLimits` because `limits` is this package's *walk* limits |
+| `ruleset` | `ruleset` | A declarative detector ruleset, as text or UTF-8 bytes ([core guide](https://github.com/redact-secret/redact-secret/blob/main/docs/guides/rulesets.md)). Its detectors add detections; they never outrank a built-in's |
+| `placeholderFormatter` | `placeholderFormatter` | The core's placeholder formatter, `(finding, { placeholderIndex }) => string` |
+
+```js
+const maskSecrets = await createMaskSecrets({
+  ruleset: organizationRuleset,
+  policy: { evaluate: () => "redact" },
+  placeholderFormatter: (finding, { placeholderIndex }) => `[${finding.type}#${placeholderIndex}]`,
+  scanLimits: { maxInputBytes: 1 << 20, maxFindings: 256 },
+});
+```
+
+**Policy precedence.** There is exactly one policy and the adapter never combines
+two. Your `policy` replaces the core's built-in policy for every finding,
+including those a `ruleset` detector adds; omit it and the core's policy decides.
+Under the core's default policy a ruleset detector's `Medium`-confidence finding
+only *warns*, which leaves the text alone, so supply a `policy` that returns
+`redact` (or `block`) for it. The adapter's own rules (a `block` finding replaces
+the whole leaf; a `warn` leaves the text alone) apply on top of the action the
+policy returned and never change it.
+
+**Snapshot and validation.** The options are validated and snapshotted once, when
+the masker, hook or processor is built (`resolveScanConfig`; per call for the
+bare `maskSecretsWith`): `scanLimits` is copied (only the two fields are read) and
+a binary `ruleset` is copied byte for byte, so mutating your object or buffer
+afterwards changes nothing. A `policy` and a `placeholderFormatter` are callbacks,
+held by reference. A malformed option is a `TypeError` with a fixed message that
+never carries the value.
+
+**They are the core's, and separate from this package's limits.** A leaf the core
+refuses (`scanLimits`, an invalid ruleset, a callback that throws) is
+`[REDACTED:ERROR]`, never the input and never the exception's message. The
+traversal limits (`limits`), the aggregate budget (`operationLimits`) and the
+host's own ceilings are separate and unchanged. A keyed leaf is also scanned in
+its key-context view, so under a byte ceiling its usable size is `maxInputBytes`
+minus the key and a few bytes of punctuation.
+
+**Unsupported cores are rejected, not ignored.** The live factories check the
+installed core's `VERSION` against `SCAN_OPTION_CORE_FLOORS` (every option is
+available from the declared floor, `0.1.0-beta.6`) and probe the options with one
+scan of the empty text, so an older core, or a ruleset or limits the core refuses,
+is a `CoreOptionsError` at construction with a fixed message, a fixed `code`
+(`CORE_OPTION_UNSUPPORTED` or `CORE_OPTION_REJECTED`), the option *names*, and, for
+a rejection, one of the core's own codes (`INVALID_RULESET`, `INVALID_LIMITS`, ...) as
+`coreCode`. It never carries an option value, a ruleset or the core's message. A
+core that omits every new option is untouched, so the floor keeps working.
+
+**Operation modes.** All of this is whole-input. The AI-context boundary's
+incremental sessions take `placeholderFormatter` and their own
+`incrementalLimits`, the core has no ruleset for an incremental session, and that
+boundary therefore rejects `ruleset` and `scanLimits` by name rather than ignore
+them (its whole-input limits are `wholeInputLimits`).
+
 ## Aggregate operation budget
 
 `DEFAULT_LIMITS` bound one *walk* and `maxStringLength` one *string*. Neither

@@ -8,6 +8,7 @@ import type { ScanAndRedactOptions, ScanResult } from "@redact-secret/core";
 
 import type { OperationBudget, OperationLimits } from "./budget.js";
 import type { OutcomeCounter } from "./outcome.js";
+import type { ScanConfig, ScanOptionsInput } from "./scan-options.js";
 
 /** The injected scanner: `scanAndRedact` from `@redact-secret/core`, or a fake. */
 export type ScanAndRedact = (text: string, options?: ScanAndRedactOptions) => ScanResult;
@@ -64,8 +65,14 @@ export interface Limits {
   readonly maxNodes: number;
 }
 
-export interface MaskLeafOptions {
-  readonly policy?: Policy;
+export interface MaskLeafOptions extends ScanOptionsInput {
+  /**
+   * A scan configuration already validated and snapshotted by
+   * `resolveScanConfig`, for a host that builds its masker once and masks many
+   * leaves. Wins over `policy`, `scanLimits`, `ruleset` and
+   * `placeholderFormatter` given beside it.
+   */
+  readonly scanConfig?: ScanConfig | undefined;
   readonly maxStringLength?: number | undefined;
   /**
    * The object key (or attribute name) the leaf sits directly under, when the
@@ -83,8 +90,9 @@ export interface MaskLeafOptions {
   readonly budget?: OperationBudget | undefined;
 }
 
-export interface MaskOptions {
-  readonly policy?: Policy;
+export interface MaskOptions extends ScanOptionsInput {
+  /** A validated scan configuration; see {@link MaskLeafOptions.scanConfig}. */
+  readonly scanConfig?: ScanConfig | undefined;
   readonly limits?: Partial<Limits> | undefined;
   /**
    * An optional, caller-owned accumulator the walk adds to while it masks

@@ -62,6 +62,23 @@ If the core renames an action or reshapes a result, these packages fail to
 compile instead of running on while letting a `block`-worthy secret through as
 an inline placeholder.
 
+The list is about what an adapter *reads from a result*, and it does not grow.
+What an adapter may *pass in* is the options the core's own `scanAndRedact`
+documents, and only when the caller asked (#175): `policy` always, and
+`scanLimits` (the core's `limits`), `ruleset` and `placeholderFormatter` when
+given, validated and snapshotted once by `resolveScanConfig`
+(`packages/adapter/src/scan-options.ts`; Python: `scan_options.py`). Asking for
+one adds the only other read of the core, its `VERSION`, in the live factories,
+which check it against `SCAN_OPTION_CORE_FLOORS` and probe the options with one
+scan of the empty text, so an older core or a rejected ruleset is a fixed,
+input-free `CoreOptionsError` at construction rather than an option the core
+silently ignores. With none of them asked, nothing is read and nothing extra is
+passed, so the declared floor keeps working. They are whole-input options: the
+core has no ruleset for an incremental session, so `adapter-ai-context` rejects
+`ruleset` and `scanLimits` by name instead of claiming them. One policy decides:
+the caller's `policy` replaces the core's built-in policy, ruleset findings
+included, and is never combined with another.
+
 **The one exception: `@redact-secret/adapter-ai-context`.** The core's
 [AI-context boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/ai-context-boundary.md)
 (redact-secret/redact-secret#610) deliberately widens the surface for that

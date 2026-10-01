@@ -111,7 +111,13 @@ restored value to a log or span):
 
 The logging and tracing packages depend on a deliberately small part of the
 core: `initialize()`, `scanAndRedact()` and its result shape, and whether a
-finding's action is `block` or `warn`. The AI-context package also uses the
+finding's action is `block` or `warn`. They also pass through, only when the
+caller asks, the core's own `scanAndRedact` options `limits` (as `scanLimits`),
+`ruleset` and `placeholderFormatter`, and in that case read the core's
+`VERSION` once to check it against the version each option was verified against
+(`0.1.0-beta.6` for all three, the declared floor), so an older core rejects
+the option instead of ignoring it; with none of them asked, nothing extra is read
+or passed. The AI-context package also uses the
 whole-input `policy`/`limits` options, the incremental session,
 `SecretScanError.code`, and the safe finding fields
 ([ARCHITECTURE.md § The core contract](../ARCHITECTURE.md#the-core-contract)).

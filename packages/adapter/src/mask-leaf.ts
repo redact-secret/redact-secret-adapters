@@ -10,6 +10,7 @@ import { utf8ByteLength } from "./budget.js";
 import { type KeyContextScanned, scanLeafInKeyContext } from "./key-context.js";
 import { resolveLimit } from "./limit.js";
 import type { LeafOutcome, OutcomeCounter } from "./outcome.js";
+import { resolveScanConfig } from "./scan-options.js";
 import type { Limits, MaskLeafOptions, ScanAndRedact } from "./types.js";
 
 export const BLOCK_MARKER = "[REDACTED:BLOCKED]";
@@ -79,11 +80,16 @@ export interface MaskedLeaf {
 export function maskLeafOutcomeWith(
   scanAndRedact: ScanAndRedact,
   text: string,
-  { policy, maxStringLength, key, budget }: MaskLeafOptions = {},
+  options: MaskLeafOptions = {},
 ): MaskedLeaf {
+  const { maxStringLength, key, budget } = options;
   if (typeof text !== "string") {
     throw new TypeError("maskLeafWith: text must be a string");
   }
+  // Validated and snapshotted once per call, or once per host when the caller
+  // passes the `scanConfig` it built (see `./scan-options.ts`). A malformed
+  // option throws here, as a programming error, before any scan.
+  const scanOptions = (options.scanConfig ?? resolveScanConfig(options)).options;
   if (text.length > resolveLimit(maxStringLength, DEFAULT_LIMITS.maxStringLength)) {
     return { text: LIMIT_MARKER, outcome: "limited", findings: 0 };
   }
@@ -99,7 +105,7 @@ export function maskLeafOutcomeWith(
     // the core; the scan and its findings are charged as actual calls.
     if (budget !== undefined && !budget.chargeScan(utf8ByteLength(input))) return { failure: "limit" };
     try {
-      const result = scanAndRedact(input, { policy });
+      const result = scanAndRedact(input, scanOptions);
       if (typeof result?.text !== "string" || !Array.isArray(result.findings)) return { failure: "error" };
       if (budget !== undefined && !budget.chargeFindings(result.findings.length)) return { failure: "limit" };
       return result;

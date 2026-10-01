@@ -90,7 +90,7 @@ limits:
 ## Options
 
 ```js
-await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLimits, lineLimits });
+await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLimits, lineLimits, scanLimits, ruleset, placeholderFormatter });
 ```
 
 | Option | What it does |
@@ -98,7 +98,10 @@ await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLim
 | `hooks` | Your own pino hooks, to compose with rather than replace. See below |
 | `pii` | Turn on PII detection, e.g. `["pii:global"]`. See below |
 | `onOutcome` | A callback with counts per log record, for your metrics. See below |
-| `policy` | The core's policy, passed through unchanged |
+| `policy` | The core's policy, passed through unchanged. It replaces the core's built-in policy for every finding, a `ruleset` detector's included |
+| `scanLimits` | The core's whole-input limits, `{ maxInputBytes, maxFindings }`, for every scan of both hooks. See [Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options) |
+| `ruleset` | A declarative detector ruleset (text or bytes), whole-input scans |
+| `placeholderFormatter` | The core's placeholder formatter |
 | `limits` | Override the walk limits (`DEFAULT_LIMITS` in `@redact-secret/adapter`) |
 | `operationLimits` | Override the aggregate budget of **one log record**, shared by both hooks. See below |
 | `lineLimits` | Override the pre-processing ceilings `streamWrite` applies to the finished line. See below |

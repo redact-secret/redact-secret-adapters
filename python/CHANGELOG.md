@@ -36,6 +36,11 @@ can read it without leaving their environment.
 
 - **Behavior change with defaults:** a record, span or call that inspects more than the default budget now has the rest replaced by `[REDACTED:LIMIT_EXCEEDED]` (and mapping keys past it dropped); the outcome counters keep their meaning (`limited` counts them).
 
+### Added
+
+- **Verified core scan options** (redact-secret/redact-secret-adapters#175): `scan_limits` (the core's whole-input limits, a mapping with `max_input_bytes` and `max_findings`), `ruleset` (`str`, `bytes` or `bytearray`) and `placeholder_formatter` (the core's `formatter`), beside `policy`, on `RedactSecretFilter`, `RedactingSpanProcessorWith`, `create_redacting_span_processor`, `redact_attributes_with`, `mask_secrets_with` and `mask_log_value_with`. They are validated and snapshotted once (`resolve_scan_config`) and passed to every scan as `scan_and_redact(text, policy, **requested)`; with none asked the call is exactly `scan_and_redact(text, policy)`. The caller's `policy` replaces the core's built-in policy for every finding and is never combined with another. The live constructors convert a `scan_limits` mapping to `redact_secret.WholeInputLimits`, check `redact_secret.VERSION` against `SCAN_OPTION_CORE_FLOORS` and probe the options with one scan of the empty text, raising a fixed-message `CoreOptionsError` for an unsupported core or a ruleset or limits the core refuses.
+- No range change: verified from the declared floor `0.1.0b6` through `0.1.0b12` by `tests/test_scan_options.py`, which CI runs at both Python range endpoints.
+
 ## [0.1.3] - 2026-10-01
 ### Changed
 

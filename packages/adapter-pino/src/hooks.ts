@@ -34,7 +34,14 @@
  */
 
 import type { MaskOptions, OperationBudget, OutcomeCounter, ScanAndRedact, ValueCounts } from "@redact-secret/adapter";
-import { addCounts, createOperationBudget, createOutcomeCounter, notify, toValueCounts } from "@redact-secret/adapter";
+import {
+  addCounts,
+  createOperationBudget,
+  createOutcomeCounter,
+  notify,
+  resolveScanConfig,
+  toValueCounts,
+} from "@redact-secret/adapter";
 import type { LogFn, Logger } from "pino";
 
 import { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
@@ -350,7 +357,7 @@ function observed(
  */
 export function createRedactingHooksWith(
   scanAndRedact: ScanAndRedact,
-  { hooks, onOutcome, ...maskOptions }: RedactingHooksOptions = {},
+  { hooks, onOutcome, ...rawOptions }: RedactingHooksOptions = {},
 ): RedactingHooks {
   if (hooks !== undefined && (hooks === null || typeof hooks !== "object")) {
     throw new TypeError("createRedactingHooksWith: hooks must be an object");
@@ -358,9 +365,13 @@ export function createRedactingHooksWith(
   if (onOutcome !== undefined && typeof onOutcome !== "function") {
     throw new TypeError("createRedactingHooksWith: onOutcome must be a function");
   }
-  if ((maskOptions as { operation?: unknown }).operation !== undefined) {
+  if ((rawOptions as { operation?: unknown }).operation !== undefined) {
     throw new TypeError("createRedactingHooksWith: operation is not accepted; use operationLimits");
   }
+  // Validated and snapshotted once, here, and shared by both hooks: a malformed
+  // scan option is a programming error at construction, and every leaf of
+  // every record is scanned with the one snapshot.
+  const maskOptions = { ...rawOptions, scanConfig: rawOptions.scanConfig ?? resolveScanConfig(rawOptions) };
   const forwarded: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(hooks ?? {})) {
     if (!(COMPOSED_KEYS as readonly string[]).includes(key)) forwarded[key] = value;

@@ -28,6 +28,10 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 - **Behavior change with defaults:** an operation that stays inside `traversalLimits` and `wholeInputLimits` but visits more than 100,000 values or keys, scans more than 25,000 leaves or 50,000 times, or accumulates more than 100,000 findings, is now `blocked` / `limit_exceeded`. It is a work counter checked between scans, not a wall-clock interrupt.
 
+### Changed
+
+- `ruleset` and `scanLimits` are now rejected by name with a `TypeError` instead of being silently ignored (redact-secret/redact-secret-adapters#175): the core has no ruleset for an incremental session, and this boundary's whole-input limits are `wholeInputLimits`. They arrive only if passed, so no existing caller changes. `policy` and `placeholderFormatter` still reach both the whole-input and the incremental path.
+
 ## [0.1.2] - 2026-10-01
 ### Changed
 

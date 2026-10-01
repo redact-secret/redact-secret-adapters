@@ -86,7 +86,17 @@ const LIMIT_KEYS = ["wholeInputLimits", "incrementalLimits", "traversalLimits"] 
  * non-limit keys are read with `in` and a property read, both of which follow
  * the chain.
  */
-const OPTION_KEYS = [...LIMIT_KEYS, "policy", "placeholderFormatter", "onFinding", "operationLimits"] as const;
+const OPTION_KEYS = [
+  ...LIMIT_KEYS,
+  "policy",
+  "placeholderFormatter",
+  "onFinding",
+  "operationLimits",
+  // Not options the boundary takes: forwarded so `createAiContextBoundaryWith`
+  // can reject them by name (#175) even when they arrive through a prototype.
+  "ruleset",
+  "scanLimits",
+] as const;
 
 /**
  * Fills in any limit set `options` **omits** from
