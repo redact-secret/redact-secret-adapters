@@ -14,6 +14,11 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-01
+### Changed
+
+- Verified against `@redact-secret/core` 0.1.0-beta.12, which carries the core's performance improvements; they reach this package through the unchanged core range. No API or range change.
+
 ## [0.1.2] - 2026-09-30
 ### Changed
 - The optional peer `@modelcontextprotocol/sdk` range is raised from

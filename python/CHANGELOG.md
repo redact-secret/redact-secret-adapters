@@ -20,6 +20,11 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-01
+### Changed
+
+- Verified against `redact-secret` 0.1.0b12, which carries the core's performance improvements; they reach this package through the unchanged core range. No API or range change.
+
 ## [0.1.2] - 2026-09-30
 ### Added
 
