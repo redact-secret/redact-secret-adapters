@@ -40,7 +40,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [],
@@ -72,7 +72,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [
@@ -120,7 +120,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [
@@ -168,7 +168,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [
@@ -216,7 +216,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [],
@@ -253,7 +253,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.11"
+          "highest": "0.1.0-beta.12"
         }
       },
       "hosts": [
@@ -323,7 +323,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0b6",
-          "highest": "0.1.0b11"
+          "highest": "0.1.0b12"
         }
       },
       "hosts": [
