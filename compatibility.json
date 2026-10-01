@@ -172,7 +172,9 @@
         "packages/adapter/test/activation-live.test.ts",
         "packages/adapter-ai-context/test/key-context-live.test.ts",
         "packages/adapter-ai-context/test/budget.test.ts",
-        "packages/adapter-ai-context/test/scan-options.test.ts"
+        "packages/adapter-ai-context/test/scan-options.test.ts",
+        "packages/adapter-ai-context/test/occurrence.test.ts",
+        "packages/adapter-ai-context/test/occurrence-live.test.ts"
       ]
     },
     {
@@ -227,7 +229,8 @@
         "packages/adapter-mcp/test/defaults.test.ts",
         "packages/adapter-mcp/test/vault-token.test.ts",
         "packages/adapter/test/activation-live.test.ts",
-        "packages/adapter-mcp/test/budget.test.ts"
+        "packages/adapter-mcp/test/budget.test.ts",
+        "packages/adapter-mcp/test/occurrence.test.ts"
       ]
     },
     {

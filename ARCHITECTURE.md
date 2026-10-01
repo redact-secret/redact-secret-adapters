@@ -322,6 +322,17 @@ when partly masked:
 - **Fixed outcomes.** `ok` / `blocked` / `aborted`, with the contract's five
   reasons. Findings cross as allowlisted copies; error messages are never
   read.
+- **Occurrence provenance** (#177). A finding's `start`/`end` index into one
+  scanned string, never a whole document, and the core numbers findings per scan,
+  so a flattened `ok.findings` repeats ids. Each finding therefore has an
+  *occurrence*: `partIndex`, `rangeScope` (`text`, `leaf`, `stream`, and `key` for
+  telemetry only), `rangeUnit` (UTF-16 code units) and a leaf or key ordinal that
+  advances per visit, so a memoized repeat or a shared reference still has its own.
+  It is additive and non-sensitive (ordinals and fixed labels only), reaches
+  `onFinding` as a third argument and `findingOccurrences(outcome)` as an array
+  aligned with `ok.findings`, and is kept *beside* the outcome (a `WeakMap`)
+  rather than on it, because the outcome's JSON shape is the core's contract and
+  the vendored fixture replays it byte for byte.
 
 The live factory never rejects for an initialization failure: the boundary
 it returns fails every operation closed with the core's mapped error, so an

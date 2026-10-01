@@ -32,6 +32,11 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 - `ruleset` and `scanLimits` are now rejected by name with a `TypeError` instead of being silently ignored (redact-secret/redact-secret-adapters#175): the core has no ruleset for an incremental session, and this boundary's whole-input limits are `wholeInputLimits`. They arrive only if passed, so no existing caller changes. `policy` and `placeholderFormatter` still reach both the whole-input and the incremental path.
 
+### Added
+
+- **Occurrence provenance for findings** (redact-secret/redact-secret-adapters#177). `findingOccurrences(outcome)` returns, for an `ok` outcome, one `FindingOccurrence` per finding at the same index as `ok.findings`: `partIndex` (the part index for `buildContext`, else `0`), `rangeScope` (`"text"`, `"leaf"`, `"stream"`, or `"key"` for telemetry only), `rangeUnit` (`"utf16-code-units"`) and, for a leaf or key, a zero-based `leafOrdinal` / `keyOrdinal` in document order. It says what `start`/`end` index into: the whole text, one leaf (a key-context finding already mapped back to it), or the stream's logical text with absolute offsets across chunks; it does not reinterpret them as whole-document offsets. Ordinals advance per visit, so repeated and memoized strings and shared references each have their own. `onFinding` takes the occurrence as a third argument, and for every finding in `ok.findings` it is called with that finding and its occurrence in the same order; key scans add `rangeScope: "key"` events that `ok.findings` never carries. Also exported: `FINDING_OCCURRENCE_FIELDS`, `attachFindingOccurrences`, and the `FindingOccurrence` / `RangeScope` / `RangeUnit` types.
+- Compatibility: additive and non-sensitive (ordinals and fixed labels only: no key, field path, value, secret-derived identifier or score). The outcome's JSON, the eight `SAFE_FINDING_FIELDS`, `start`/`end` and the telemetry `context` (`{ boundary }`) are unchanged, so the vendored core conformance replay is untouched; the occurrences are kept beside the outcome, not on it, so a serialized outcome does not carry them. `finding.id` stays unique per scan only; within one operation (`partIndex`, `rangeScope`, ordinal, `finding.id`) is unique.
+
 ## [0.1.2] - 2026-10-01
 ### Changed
 

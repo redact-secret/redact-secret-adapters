@@ -87,7 +87,7 @@ CI runs this block verbatim from a clean install outside the repository
 - **A structured result can be blocked rather than redacted** when only a
   sibling or parent key identifies the secret. See
   [What is scanned](#what-is-scanned).
-- **`ok` with no findings is not proof** the result held no secret.
+- **`ok` with no findings is not proof** the result held no secret. `findingOccurrences(outcome)` from `@redact-secret/adapter-ai-context` also works on an MCP `ok` outcome and says which part and leaf each finding came from; the ordinals are those of the serialized result view the boundary scans.
 - **Do not log a raw `McpError` from `callTool`.** Its message can quote parts
   of the result.
 

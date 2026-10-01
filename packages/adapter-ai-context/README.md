@@ -238,6 +238,63 @@ reach a host. Offsets are UTF-16 code units, relative to the string that was
 scanned (for `sanitizeValue`, each leaf is its own string). They reveal where
 a secret sat and how long it was, never what it was.
 
+### Where a finding came from: occurrences
+
+`start` and `end` index into one scanned string, and a flattened `ok.findings`
+holds findings from many scans, each with the core's per-scan id (`finding-1`,
+`finding-1`, ...). To place a finding, ask for its **occurrence**, additive
+provenance that never reinterprets `start` and `end`:
+
+```js
+import { findingOccurrences } from "@redact-secret/adapter-ai-context";
+
+const outcome = boundary.buildContext([
+  { role: "user", text: `use ${token}` },
+  { role: "tool", value: { a: token, list: ["x", token] } },
+]);
+if (outcome.outcome === "ok") {
+  const occurrences = findingOccurrences(outcome); // same length and order as outcome.findings
+  outcome.findings.forEach((finding, index) => {
+    const where = occurrences[index];
+    // where.rangeScope: "text" | "leaf" | "stream"  (what start/end index into)
+    // where.partIndex, and where.leafOrdinal for a leaf
+  });
+}
+```
+
+| `rangeScope` | `start`/`end` index into | Other fields |
+| --- | --- | --- |
+| `"text"` | the whole string given to `sanitizeText`, or a text part of `buildContext` | `partIndex` |
+| `"leaf"` | one string leaf of a structured value (`sanitizeValue`, a value part). A key-context finding is already mapped back to the leaf; the key is never in the range | `partIndex`, `leafOrdinal` |
+| `"stream"` | the logical text of an open stream: **absolute** offsets over all chunks, not per chunk | `partIndex` (0) |
+| `"key"` | one object key scanned on its own. `onFinding` only: a redacted or blocked key blocks the value, so none is in `ok.findings` | `partIndex`, `keyOrdinal` |
+
+Every occurrence also carries `rangeUnit: "utf16-code-units"`. Nothing in an
+occurrence is sensitive: no key, no field path, no value, no identifier derived
+from a secret, no score. The fields are `FINDING_OCCURRENCE_FIELDS`.
+
+- **`partIndex`** is the index in `parts` for `buildContext` and `0` for every
+  other operation. **`leafOrdinal`** and **`keyOrdinal`** are zero-based and
+  count in document order within a part. `leafOrdinal` counts every string leaf
+  visited, with or without a finding; a value reached by two paths is a leaf at
+  each; object keys are not leaves. They advance per *visit*, so a memoized
+  repeat of a string (scanned once) still has its own ordinal.
+- **Uniqueness.** `finding.id` is unique within one scan only. Within one
+  operation, (`partIndex`, `rangeScope`, `leafOrdinal` or `keyOrdinal`, `finding.id`)
+  is unique; across operations nothing is. Do not use any of it as a stable
+  identifier of a secret.
+- **`onFinding(finding, context, occurrence)`** receives the same occurrence as a
+  third argument. For every finding in `ok.findings` it is called with that
+  finding and the occurrence at the same index, in the same order; key scans add
+  events with `rangeScope: "key"`. `context` is still exactly `{ boundary }`.
+- **Compatibility.** It is additive: the outcome's JSON is still
+  `{ outcome, value, findings }` (the occurrences are kept beside the outcome, so
+  a serialized outcome does not carry them), `start`/`end` are unchanged, and
+  `SAFE_FINDING_FIELDS` is the same eight fields. `findingOccurrences` returns
+  `undefined` for an outcome that is not `ok` or was not produced by this package.
+  New fields would be added, never changed; `adapter-mcp` forwards them for the
+  findings it carries.
+
 ## Reference
 
 ### Outcomes

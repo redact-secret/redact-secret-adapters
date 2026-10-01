@@ -44,6 +44,7 @@ import type {
   CancellationSignal,
   ContextMessage,
   ContextPart,
+  FindingOccurrence,
   JsonValue,
   OkOutcome,
   OperationOptions,
@@ -114,9 +115,68 @@ function blocked(reason: BlockReason, code?: SecretScanErrorCode): BlockedOutcom
     : Object.freeze({ outcome: "blocked", reason, code });
 }
 
-function ok<T>(value: T, findings: SafeFinding[]): OkOutcome<T> {
-  return Object.freeze({ outcome: "ok", value, findings: Object.freeze(findings) });
+/**
+ * The provenance of each `ok` outcome's findings, index-aligned with
+ * `outcome.findings` (redact-secret/redact-secret-adapters#177). Kept beside
+ * the outcome and not on it, on purpose: the outcome's JSON shape is the core's
+ * contract (`{ outcome, value, findings }`, replayed byte for byte by the
+ * conformance fixture), and occurrence metadata is additive to it.
+ */
+const OCCURRENCES = new WeakMap<object, readonly FindingOccurrence[]>();
+
+/** The fields a {@link FindingOccurrence} may carry, by name. Adding one is additive; removing or retyping one is breaking. */
+export const FINDING_OCCURRENCE_FIELDS = Object.freeze([
+  "partIndex",
+  "rangeScope",
+  "rangeUnit",
+  "leafOrdinal",
+  "keyOrdinal",
+] as const);
+
+function ok<T>(value: T, findings: SafeFinding[], occurrences: readonly FindingOccurrence[]): OkOutcome<T> {
+  const outcome: OkOutcome<T> = Object.freeze({ outcome: "ok", value, findings: Object.freeze(findings) });
+  OCCURRENCES.set(outcome, Object.freeze(occurrences.slice()));
+  return outcome;
 }
+
+/**
+ * The {@link FindingOccurrence} of each finding of an `ok` outcome, at the same
+ * index as `outcome.findings`, so findings that repeat an `id` (the core
+ * numbers findings per scan) can be told apart deterministically, and a range
+ * is read against the scope it indexes. `undefined` for an outcome this
+ * package did not produce, and for one that is not `ok`. The outcome itself is
+ * unchanged: serializing it does not carry this.
+ */
+export function findingOccurrences(outcome: unknown): readonly FindingOccurrence[] | undefined {
+  return typeof outcome === "object" && outcome !== null ? OCCURRENCES.get(outcome) : undefined;
+}
+
+/**
+ * For a boundary built on this one (`@redact-secret/adapter-mcp`), whose own
+ * `ok` outcome carries `source`'s findings unchanged: records the same
+ * occurrences for `target`. A no-op when `source` has none.
+ */
+export function attachFindingOccurrences<T extends object>(target: T, source: unknown): T {
+  const occurrences = findingOccurrences(source);
+  if (occurrences !== undefined) OCCURRENCES.set(target, occurrences);
+  return target;
+}
+
+/** Whole text, for `sanitizeText` and a text part. */
+const textOccurrence = (partIndex: number): FindingOccurrence =>
+  Object.freeze({ partIndex, rangeScope: "text", rangeUnit: "utf16-code-units" });
+/** One string leaf. */
+const leafOccurrence = (partIndex: number, leafOrdinal: number): FindingOccurrence =>
+  Object.freeze({ partIndex, rangeScope: "leaf", rangeUnit: "utf16-code-units", leafOrdinal });
+/** One object key. */
+const keyOccurrence = (partIndex: number, keyOrdinal: number): FindingOccurrence =>
+  Object.freeze({ partIndex, rangeScope: "key", rangeUnit: "utf16-code-units", keyOrdinal });
+/** The logical text of one stream: absolute offsets over every appended chunk. */
+const STREAM_OCCURRENCE: FindingOccurrence = Object.freeze({
+  partIndex: 0,
+  rangeScope: "stream",
+  rangeUnit: "utf16-code-units",
+});
 
 function isAborted(signal: CancellationSignal | undefined): boolean {
   try {
@@ -266,11 +326,11 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     cache: memoize ? new Map() : undefined,
   });
 
-  function emit(findings: readonly SafeFinding[], boundary: BoundaryLabel): void {
+  function emit(findings: readonly SafeFinding[], boundary: BoundaryLabel, occurrence: FindingOccurrence): void {
     if (typeof onFinding !== "function") return;
     for (const finding of findings) {
       try {
-        onFinding(finding, Object.freeze({ boundary }));
+        onFinding(finding, Object.freeze({ boundary }), occurrence);
       } catch {
         // Telemetry is observational: a throwing callback never changes the
         // outcome, and its error is never read or rethrown.
@@ -340,7 +400,7 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
   }
 
   function sanitizeText(text: string, { boundary = DEFAULT_BOUNDARY, signal }: OperationOptions = {}) {
-    return sanitizeTextIn(text, boundary, signal, newOperation(false));
+    return sanitizeTextIn(text, boundary, signal, newOperation(false), 0);
   }
 
   function sanitizeTextIn(
@@ -348,6 +408,7 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     boundary: BoundaryLabel,
     signal: CancellationSignal | undefined,
     op: Operation,
+    partIndex: number,
   ) {
     if (isAborted(signal)) return ABORTED;
     // A whole text is one value and one leaf of the operation.
@@ -356,17 +417,22 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     if ("failure" in scanned) return scanned.failure;
     const overrun = chargeFindings(op, scanned.findings);
     if (overrun !== undefined) return overrun;
-    emit(scanned.findings, boundary);
+    const occurrence = textOccurrence(partIndex);
+    emit(scanned.findings, boundary, occurrence);
     if (hasAction(scanned.findings, "block")) return blocked("policy");
     if (isAborted(signal)) return ABORTED;
-    return ok(scanned.text, scanned.findings);
+    return ok(
+      scanned.text,
+      scanned.findings,
+      scanned.findings.map(() => occurrence),
+    );
   }
 
   function sanitizeValue(
     value: unknown,
     { boundary = DEFAULT_BOUNDARY, signal }: OperationOptions = {},
   ): AiContextOutcome<JsonValue> {
-    return sanitizeValueIn(value, boundary, signal, newOperation(true));
+    return sanitizeValueIn(value, boundary, signal, newOperation(true), 0);
   }
 
   function sanitizeValueIn(
@@ -374,32 +440,47 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     boundary: BoundaryLabel,
     signal: CancellationSignal | undefined,
     op: Operation,
+    partIndex: number,
   ): AiContextOutcome<JsonValue> {
     if (isAborted(signal)) return ABORTED;
     const findings: SafeFinding[] = [];
+    const occurrences: FindingOccurrence[] = [];
+    // Ordinals count visits, not findings or distinct values: every string leaf
+    // (a shared reference at each path, a memoized repeat at each occurrence)
+    // and every object key advances its counter, so an ordinal is the same
+    // whether or not a scan was served from the memo.
+    let leafOrdinal = 0;
+    let keyOrdinal = 0;
     const walked = walkStrict<BlockedOutcome>(
       value,
       traversalLimits,
       {
         string(text, key): StrictVisit<BlockedOutcome> {
+          const occurrence = leafOccurrence(partIndex, leafOrdinal);
+          leafOrdinal += 1;
           if (!op.budget.chargeLeaf()) return { ok: false, failure: blocked("limit_exceeded") };
           const scanned = scanLeaf(text, key, op);
           if ("failure" in scanned) return { ok: false, failure: scanned.failure };
           const overrun = chargeFindings(op, scanned.findings);
           if (overrun !== undefined) return { ok: false, failure: overrun };
-          emit(scanned.findings, boundary);
-          findings.push(...scanned.findings);
+          emit(scanned.findings, boundary, occurrence);
+          for (const finding of scanned.findings) {
+            findings.push(finding);
+            occurrences.push(occurrence);
+          }
           if (hasAction(scanned.findings, "block")) return { ok: false, failure: blocked("policy") };
           return { ok: true, text: scanned.text };
         },
         key(key) {
+          const occurrence = keyOccurrence(partIndex, keyOrdinal);
+          keyOrdinal += 1;
           // A key cannot be rewritten without changing the value's shape, so a
           // key finding that would be redacted or blocked blocks the value.
           const scanned = scanText(key, op);
           if ("failure" in scanned) return { ok: false, failure: scanned.failure };
           const overrun = chargeFindings(op, scanned.findings);
           if (overrun !== undefined) return { ok: false, failure: overrun };
-          emit(scanned.findings, boundary);
+          emit(scanned.findings, boundary, occurrence);
           if (hasAction(scanned.findings, "block", "redact")) return { ok: false, failure: blocked("policy") };
           return { ok: true };
         },
@@ -408,7 +489,7 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     );
     if (!walked.ok) return typeof walked.failure === "string" ? blocked(walked.failure) : walked.failure;
     if (isAborted(signal)) return ABORTED;
-    return ok(walked.value as JsonValue, findings);
+    return ok(walked.value as JsonValue, findings, occurrences);
   }
 
   function sanitizeToolResult(result: unknown, { signal }: Omit<OperationOptions, "boundary"> = {}) {
@@ -425,11 +506,12 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     if (!Array.isArray(parts)) return blocked("unsupported_value");
     const messages: ContextMessage[] = [];
     const findings: SafeFinding[] = [];
+    const occurrences: FindingOccurrence[] = [];
     // One crossing, one operation: every part shares the memo (identical
     // texts across all parts are scanned once) and the aggregate budget, so
     // many parts cannot each spend a full one.
     const op = newOperation(true);
-    for (const part of parts as readonly unknown[]) {
+    for (const [partIndex, part] of (parts as readonly unknown[]).entries()) {
       let role: unknown;
       let boundary: BoundaryLabel;
       let isText: boolean;
@@ -448,14 +530,15 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
       // string and is never scanned.
       if (typeof role !== "string") return blocked("unsupported_value");
       const outcome = isText
-        ? sanitizeTextIn(content as string, boundary, signal, op)
-        : sanitizeValueIn(content, boundary, signal, op);
+        ? sanitizeTextIn(content as string, boundary, signal, op, partIndex)
+        : sanitizeValueIn(content, boundary, signal, op, partIndex);
       if (outcome.outcome !== "ok") return outcome;
       findings.push(...outcome.findings);
+      occurrences.push(...(findingOccurrences(outcome) ?? []));
       messages.push(Object.freeze({ role, content: outcome.value }));
     }
     if (isAborted(signal)) return ABORTED;
-    return ok(Object.freeze(messages), findings);
+    return ok(Object.freeze(messages), findings, occurrences);
   }
 
   function openStream({ boundary = DEFAULT_BOUNDARY, signal }: OperationOptions = {}): AiContextStream {
@@ -464,6 +547,7 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     let finalized = false;
     let staged = "";
     let findings: SafeFinding[] = [];
+    let occurrences: FindingOccurrence[] = [];
     // A streamed session is bounded by the core's `incrementalLimits`; this
     // budget adds the one bound the core does not give it, on how many
     // findings it may accumulate before `finalize`.
@@ -484,6 +568,7 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
       if (terminal === undefined) terminal = outcome;
       staged = "";
       findings = [];
+      occurrences = [];
       detach();
       if (session !== undefined) {
         try {
@@ -504,8 +589,11 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
         fail(blocked("limit_exceeded"));
         return;
       }
-      emit(read.findings, boundary);
-      findings.push(...read.findings);
+      emit(read.findings, boundary, STREAM_OCCURRENCE);
+      for (const finding of read.findings) {
+        findings.push(finding);
+        occurrences.push(STREAM_OCCURRENCE);
+      }
       staged += read.text;
       if (hasAction(read.findings, "block")) fail(blocked("policy"));
     }
@@ -560,9 +648,10 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
         }
         detach();
         if (terminal !== undefined) return terminal;
-        const outcome = ok(staged, findings);
+        const outcome = ok(staged, findings, occurrences);
         staged = "";
         findings = [];
+        occurrences = [];
         return outcome;
       },
       abort(): void {
