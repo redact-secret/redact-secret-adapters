@@ -66,6 +66,13 @@ export interface Limits {
 export interface MaskLeafOptions {
   readonly policy?: Policy;
   readonly maxStringLength?: number | undefined;
+  /**
+   * The object key (or attribute name) the leaf sits directly under, when the
+   * host supplies one. Context for detection only (see `./key-context.ts`):
+   * the key is never rewritten, never scanned on its own and never returned.
+   * Omit it for a message, an array element, or any leaf with no direct key.
+   */
+  readonly key?: string | undefined;
 }
 
 export interface MaskOptions {

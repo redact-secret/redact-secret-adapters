@@ -20,6 +20,14 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+### Added
+
+- **`redact_secret_adapters.key_context`**: the shared key-context scan primitive (`scan_leaf_in_key_context`, `key_context_view`, `key_context_prefix`, `KeyContextFailure`), the Python twin of the JavaScript primitive in redact-secret/redact-secret-adapters#172. `mask_leaf_with` and `mask_leaf_outcome_with` take `key=`.
+
+### Changed
+
+- **Key-aware detection** (redact-secret/redact-secret-adapters#172). A string directly under a mapping key is now scanned with that key as detection context, so a context-dependent credential (`{"api_key": "..."}`) is masked by `mask_secrets_with`, `mask_log_value_with`, `RedactSecretFilter` (inside `extra_fields` values, and the extra field's own name for a plain string), and `RedactingSpanProcessorWith` / `redact_attributes_with` (the attribute name). The core alone decides; keys are never scanned, rewritten or returned, and sequence elements, messages, tracebacks, span names, event names and status descriptions have no key. A keyed string costs one extra `scan_and_redact` call unless its own scan already redacted or blocked it; the `scanned` outcome counter still counts leaves. A key-context finding outside the leaf (it would rewrite the key) replaces the leaf with `[REDACTED:BLOCKED]`; a key longer than `max_string_length` makes the leaf `[REDACTED:LIMIT_EXCEEDED]`.
+
 ## [0.1.3] - 2026-10-01
 ### Changed
 

@@ -77,7 +77,8 @@ export interface RedactingSpanProcessorOptions extends MaskLeafOptions {
   readonly onOutcome?: (outcome: OtelSpanOutcome) => void;
 }
 
-type Mask = (text: string) => string;
+/** `key` is the attribute name the string sits directly under, when it has one. */
+type Mask = (text: string, key?: string) => string;
 
 /** A span field that did not take a masked write. The message names the field, never its value. */
 class UnredactableFieldError extends Error {}
@@ -87,9 +88,9 @@ class UnredactableFieldError extends Error {}
  * span and the processor can swap in a fresh per-span counter.
  */
 function maskerFor(scanAndRedact: ScanAndRedact, options: MaskLeafOptions, counter?: () => OutcomeCounter): Mask {
-  return (text) => {
+  return (text, key) => {
     try {
-      const leaf = maskLeafOutcomeWith(scanAndRedact, text, options);
+      const leaf = maskLeafOutcomeWith(scanAndRedact, text, { ...options, key });
       if (counter !== undefined) countLeaf(counter(), leaf);
       return leaf.text;
     } catch {
@@ -100,11 +101,13 @@ function maskerFor(scanAndRedact: ScanAndRedact, options: MaskLeafOptions, count
 }
 
 /** The masked value, or `value` itself when nothing in it changed. */
-function maskAttributeValue(mask: Mask, value: unknown): unknown {
-  if (typeof value === "string") return mask(value);
+function maskAttributeValue(mask: Mask, value: unknown, key: string): unknown {
+  if (typeof value === "string") return mask(value, key);
   if (Array.isArray(value)) {
     // OpenTelemetry allows null/undefined holes in a homogeneous array, so
     // every string element is masked and every other element kept in place.
+    // An element is not directly under the attribute's name, so it is masked
+    // without key context, as an array element is everywhere else.
     const masked = value.map((item) => (typeof item === "string" ? mask(item) : item));
     return masked.some((item, index) => item !== value[index]) ? masked : value;
   }
@@ -127,7 +130,7 @@ function writeBack(target: object, key: string, value: unknown, field: string): 
 function redactBag(mask: Mask, bag: object | null | undefined, field: string): void {
   if (bag == null) return;
   for (const key of Object.keys(bag)) {
-    writeBack(bag, key, maskAttributeValue(mask, (bag as Record<string, unknown>)[key]), field);
+    writeBack(bag, key, maskAttributeValue(mask, (bag as Record<string, unknown>)[key], key), field);
   }
 }
 

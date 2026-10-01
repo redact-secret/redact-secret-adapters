@@ -277,7 +277,9 @@ class MaskSecretsWithTest(unittest.TestCase):
             with self.subTest(mask=mask.__name__):
                 scanner = RecordingScanner()
                 mask(scanner, {"a": "x", "b": ["y", ("z",)]}, policy=policy)
-                self.assertEqual([text for text, _ in scanner.calls], ["x", "y", "z"])
+                # A value directly under a mapping key is also scanned in its key
+                # context; a sequence element is not (#172).
+                self.assertEqual([text for text, _ in scanner.calls], ["x", '{"a":"x"}', "y", "z"])
                 self.assertTrue(all(called_policy is policy for _, called_policy in scanner.calls))
 
     def test_rejects_non_callable_scan_and_redact(self) -> None:

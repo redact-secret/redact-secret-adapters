@@ -127,12 +127,26 @@ walked once per path, and without this budget its cost would grow
 exponentially. Past `maxNodes`, every value, a number included, becomes
 `[REDACTED:LIMIT_EXCEEDED]`.
 
-**Object keys and attribute names are not scanned.** `maskSecretsWith` and
-`maskLogValueWith` mask values only. Every key, including the own property
-names copied from an `Error` or a class instance, reaches the host unchanged,
-so `{ [token]: 1 }` keeps `token` in the output. Do not put a secret in a key.
-`walkStrict` differs: it hands every key to the caller's visitor, and the
-AI-context boundary built on it does scan keys.
+**Object keys and attribute names are not scanned on their own.**
+`maskSecretsWith` and `maskLogValueWith` mask values only. Every key, including
+the own property names copied from an `Error` or a class instance, reaches the
+host unchanged, so `{ [token]: 1 }` keeps `token` in the output. Do not put a
+secret in a key. `walkStrict` differs: it hands every key to the caller's
+visitor, and the AI-context boundary built on it does scan keys.
+
+**A key is context for the string directly under it.** A credential whose
+detection depends on its field name (`{ api_key: "..." }`) is only recognised
+with that name in view, so a string leaf directly under an object key is
+scanned alone and, if that redacts or blocks nothing, once more as
+`{"<key>":"<leaf>"}` (key and leaf verbatim). The core alone decides whether
+the pair is a secret; this package holds no key list. A finding inside the
+leaf is mapped back to leaf offsets and applied. A redacting or blocking
+finding anywhere else would have to rewrite the key, so the leaf becomes
+`[REDACTED:BLOCKED]` and the key is kept. An array element, a message, an
+`Error`'s `message`, `stack` and `cause`, and the root have no direct key and
+are scanned alone. The cost is one more `scanAndRedact` call per keyed string
+leaf; the `scanned` counter still counts leaves. The primitive is exported as
+`scanLeafInKeyContext` and shared with the AI-context boundary.
 
 ## Outcome counters
 

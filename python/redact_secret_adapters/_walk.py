@@ -81,14 +81,18 @@ class _Walk:
                 self.counter.failed += 1
         return marker
 
-    def string(self, value: str) -> str:
+    def string(self, value: str, key: Any = None) -> str:
         if self.leaves <= 0:
             if self.counter is not None:
                 self.counter.limited += 1
             return LIMIT_MARKER
         self.leaves -= 1
         leaf = mask_leaf_outcome_with(
-            self.scan_and_redact, value, policy=self.policy, max_string_length=self.limits["max_string_length"]
+            self.scan_and_redact,
+            value,
+            policy=self.policy,
+            max_string_length=self.limits["max_string_length"],
+            key=key if isinstance(key, str) else None,
         )
         count_leaf(self.counter, leaf)
         return leaf.text
@@ -108,7 +112,7 @@ class _Walk:
             item = container[key]
         except Exception:
             return self.marker(ERROR_MARKER)
-        return self.value(item, depth + 1)
+        return self.value(item, depth + 1, key)
 
     def exception(self, exc: BaseException, depth: int) -> dict[str, Any]:
         try:
@@ -131,14 +135,14 @@ class _Walk:
             out["cause"] = self.value(exc.__cause__, depth + 1)
         return out
 
-    def value(self, value: Any, depth: int) -> Any:
+    def value(self, value: Any, depth: int, key: Any = None) -> Any:
         # Every visit counts, once per path: ``seen`` holds only the current
         # path, so a shared reference is walked again from each parent.
         if self.nodes <= 0:
             return self.marker(LIMIT_MARKER)
         self.nodes -= 1
         if isinstance(value, str):
-            return self.string(value)
+            return self.string(value, key)
         if isinstance(value, _PRIMITIVES):
             return value
         if not isinstance(value, (BaseException, list, tuple, dict)):
@@ -178,10 +182,15 @@ def walk(
     policy: Optional[Any],
     limits: Optional[dict[str, int]],
     counter: Optional[OutcomeCounter] = None,
+    key: Optional[str] = None,
 ) -> Any:
     """Masks every string reachable in ``data``. Never raises for any
-    input value; see the module docstring for what each kind becomes."""
-    return _Walk(scan_and_redact, policy, limits, counter).value(data, 0)
+    input value; see the module docstring for what each kind becomes.
+
+    ``key`` is the name ``data`` sits directly under, when it is a plain
+    string and the host knows one (a log record's ``extra`` field name):
+    context for detection only (see ``key_context.py``)."""
+    return _Walk(scan_and_redact, policy, limits, counter).value(data, 0, key)
 
 
 def mask_exception_text_with(

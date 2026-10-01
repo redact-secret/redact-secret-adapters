@@ -177,6 +177,7 @@ class RedactSecretFilter(logging.Filter):
                         policy=self._policy,
                         limits=self._limits,
                         counter=counter,
+                        key=field,
                     )
                 except Exception:
                     # walk() degrades per key and element and should never

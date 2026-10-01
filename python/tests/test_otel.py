@@ -248,8 +248,8 @@ class RedactingSpanProcessorWithTest(unittest.TestCase):
         scanner = RecordingScanner()
         processor = RedactingSpanProcessorWith(FakeNextProcessor(), scanner, policy=policy)
         processor.on_end(FakeSpan({"k": "v"}, events=[FakeEvent({"e": "v"})], links=[FakeLink({"l": "v"})]))
-        # name, attribute, event name, event attribute, link attribute
-        self.assertEqual(len(scanner.calls), 5)
+        # name, event name, then each attribute alone and in its key context
+        self.assertEqual(len(scanner.calls), 8)
         self.assertTrue(all(called_policy is policy for _, called_policy in scanner.calls))
 
     def test_rejects_next_processor_without_on_end_or_non_callable_scanner(self) -> None:

@@ -72,7 +72,7 @@ Use both: they work side by side.
 
 | Covered | Not covered |
 | --- | --- |
-| The message, joined with its `%s` values before scanning, so a secret split across the format string and its arguments is still caught | Object **keys**. Do not put a secret in a key |
+| The message, joined with its `%s` values before scanning, so a secret split across the format string and its arguments is still caught | Object **keys**, which are never scanned on their own or rewritten (a key is only context for the value under it). Do not put a secret in a key |
 | Every string in a merging object, at any depth, including class instances and `toJSON()` values | Text a `destination` or transport adds after the line is written |
 | An `Error` anywhere in the call, including a bare `logger.error(err)`: `message`, `stack` and own properties | A hook you wrap *around* the redacting hooks by hand |
 | Child-logger bindings, `mixin()` output, serializer output, `base` | |

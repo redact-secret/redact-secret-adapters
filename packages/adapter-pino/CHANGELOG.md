@@ -19,6 +19,10 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Changed
+
+- **Key-aware detection** (redact-secret/redact-secret-adapters#172). `hooks.logMethod` and `hooks.streamWrite` now give a string value its direct object key as detection context, through the shared primitive in `@redact-secret/adapter`: a context-dependent credential (`{ "api_key": "..." }`) is masked in call arguments, child-logger bindings, `mixin()` output and serializer output. In the final line, the key is the string literal directly before the value's colon; array elements and values after a non-string have none. Keys are still never scanned, rewritten or output, so the line keeps its shape and both hooks stay (neither is replaced). Cost: a keyed string value is scanned twice unless its own scan already redacted or blocked it. A key literal that is not valid JSON now fails the line closed (`{"msg":"[REDACTED:ERROR]"}`), as an invalid value literal already did.
+
 ## [0.1.3] - 2026-10-01
 ### Changed
 

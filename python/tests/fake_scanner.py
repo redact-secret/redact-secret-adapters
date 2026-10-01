@@ -66,3 +66,44 @@ class RecordingScanner:
     def __call__(self, text: str, policy=None) -> FakeResult:
         self.calls.append((text, policy))
         return fake_scan_and_redact(text, policy)
+
+
+_KEYS = ("api_key", "password", "client_secret")
+_VIEW = re.compile(r'^\{"(api_key|password|client_secret)":"([\s\S]*)"\}$')
+
+
+class KeyAwareScanner:
+    """A stand-in for a core whose detection is key-aware, for tests that
+    must control what the key-context view reports (the Python twin of
+    ``fixtures/key-aware-scanner.ts``). It detects nothing on its own text:
+    only a leaf's view ``{"<key>":"<leaf>"}`` whose key is one of ``_KEYS``
+    and whose leaf is at least eight characters, over the leaf's span.
+    Everything else falls through to ``fake_scan_and_redact``. Offsets are
+    Unicode code points, like the real Python binding."""
+
+    def __init__(self, *, action="redact", span_key=False, corrupt_text=False, throw_on_view=False) -> None:
+        self.action = action
+        self.span_key = span_key
+        self.corrupt_text = corrupt_text
+        self.throw_on_view = throw_on_view
+        self.calls: list[str] = []
+
+    def __call__(self, text: str, policy=None) -> FakeResult:
+        self.calls.append(text)
+        match = _VIEW.match(text)
+        if match is None:
+            return fake_scan_and_redact(text, policy)
+        if self.throw_on_view:
+            raise RuntimeError("simulated view failure for " + text)
+        key, leaf = match.group(1), match.group(2)
+        start = len(key) + 5
+        findings = []
+        if self.span_key:
+            findings.append(FakeFinding("redact", start=2, end=2 + len(key), type="contextual_secret"))
+        if len(leaf) < 8:
+            return FakeResult(text, findings)
+        findings.append(FakeFinding(self.action, start=start, end=start + len(leaf), type="contextual_secret"))
+        if self.corrupt_text:
+            return FakeResult("<SECRET_1>", findings)
+        replaced = "<SECRET_1>" if self.action in ("redact", "block") else leaf
+        return FakeResult(text[:start] + replaced + text[start + len(leaf) :], findings)

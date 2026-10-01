@@ -22,6 +22,13 @@ export interface WalkContext {
   readonly budget: { leaves: number; nodes: number };
   /** Optional, caller-owned: see `./outcome.ts`. Absent means nothing is counted. */
   readonly counter?: OutcomeCounter | undefined;
+  /**
+   * When set, `rootKeys[i]` is the direct key of element `i` of the root
+   * array: the keys a host already knows for a flat list of leaves it lifted
+   * out of a document (pino's final line). Read for the root array only.
+   */
+  readonly rootKeys?: readonly (string | undefined)[] | undefined;
+  readonly root?: unknown;
 }
 
 /** Per-key fallback to `DEFAULT_LIMITS`, so `{ maxDepth: undefined }` or `NaN` never disables a bound. */
@@ -49,7 +56,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
   return proto === Object.prototype || proto === null;
 }
 
-export function maskString(scanAndRedact: ScanAndRedact, value: string, ctx: WalkContext): string {
+export function maskString(scanAndRedact: ScanAndRedact, value: string, ctx: WalkContext, key?: string): string {
   if (ctx.budget.leaves <= 0) {
     if (ctx.counter !== undefined) ctx.counter.limited += 1;
     return LIMIT_MARKER;
@@ -58,6 +65,7 @@ export function maskString(scanAndRedact: ScanAndRedact, value: string, ctx: Wal
   const leaf = maskLeafOutcomeWith(scanAndRedact, value, {
     policy: ctx.policy,
     maxStringLength: ctx.limits.maxStringLength,
+    key,
   });
   countLeaf(ctx.counter, leaf);
   return leaf.text;
@@ -73,7 +81,7 @@ export function defineDataKey(out: object, key: string, value: unknown): void {
   });
 }
 
-type Walk = (value: unknown, depth: number) => unknown;
+type Walk = (value: unknown, depth: number, key?: string) => unknown;
 
 /**
  * Counts a marker this walk produced for a whole value rather than for a
@@ -107,7 +115,7 @@ function maskProperties(
   for (const key of keys.slice(0, ctx.limits.maxObjectKeys)) {
     let masked: unknown;
     try {
-      masked = walk(record[key], depth + 1);
+      masked = walk(record[key], depth + 1, key);
     } catch {
       masked = countMarker(ctx, ERROR_MARKER);
     }
@@ -136,17 +144,25 @@ function maskError(error: Error, scanAndRedact: ScanAndRedact, walk: Walk, ctx: 
   return out;
 }
 
-function maskObject(value: object, scanAndRedact: ScanAndRedact, walk: Walk, ctx: WalkContext, depth: number) {
+function maskObject(
+  value: object,
+  scanAndRedact: ScanAndRedact,
+  walk: Walk,
+  ctx: WalkContext,
+  depth: number,
+  key?: string,
+) {
   if (value instanceof Error) return maskError(value, scanAndRedact, walk, ctx, depth);
   if (Array.isArray(value)) {
     // Elements beyond the limit are dropped, never passed through unmasked.
-    return value.slice(0, ctx.limits.maxArrayLength).map((item) => walk(item, depth + 1));
+    const rootKeys = value === ctx.root ? ctx.rootKeys : undefined;
+    return value.slice(0, ctx.limits.maxArrayLength).map((item, index) => walk(item, depth + 1, rootKeys?.[index]));
   }
   // Serialize the way JSON.stringify would: a boxed primitive is its
   // primitive, and `toJSON()` replaces the value (Date, URL, Buffer, ...).
   // Checked on plain objects too: a toJSON left on the masked copy would
   // run again at serialization time and emit its unmasked result.
-  if (value instanceof String) return maskString(scanAndRedact, value.valueOf(), ctx);
+  if (value instanceof String) return maskString(scanAndRedact, value.valueOf(), ctx, key);
   if (value instanceof Number || value instanceof Boolean) return value.valueOf();
   const toJSON: unknown = (value as { toJSON?: unknown }).toJSON;
   if (typeof toJSON === "function") {
@@ -158,7 +174,7 @@ function maskObject(value: object, scanAndRedact: ScanAndRedact, walk: Walk, ctx
     }
     // One level deeper, so a toJSON that returns a fresh toJSON object
     // each call still terminates at maxDepth.
-    return walk(json, depth + 1);
+    return walk(json, depth + 1, key);
   }
   // Plain objects, and any other instance (class, IncomingMessage, Map, ...)
   // as the own enumerable properties JSON.stringify would emit.
@@ -175,21 +191,26 @@ function maskObject(value: object, scanAndRedact: ScanAndRedact, walk: Walk, ctx
  * `undefined`, bigints, symbols and functions pass through unchanged
  * until `maxNodes` is spent; past it, every value is {@link LIMIT_MARKER}.
  */
-export function walkValue(scanAndRedact: ScanAndRedact, data: unknown, options: MaskOptions): unknown {
-  const ctx = createWalkContext(options);
+export function walkValue(
+  scanAndRedact: ScanAndRedact,
+  data: unknown,
+  options: MaskOptions,
+  rootKeys?: readonly (string | undefined)[],
+): unknown {
+  const ctx: WalkContext = { ...createWalkContext(options), rootKeys, root: data };
   const seen = new Set<object>();
-  const walk: Walk = (value, depth) => {
+  const walk: Walk = (value, depth, key) => {
     // Every visit counts, once per path: `seen` holds only the current
     // path, so a shared reference is walked again from each parent.
     if (ctx.budget.nodes <= 0) return countMarker(ctx, LIMIT_MARKER);
     ctx.budget.nodes -= 1;
-    if (typeof value === "string") return maskString(scanAndRedact, value, ctx);
+    if (typeof value === "string") return maskString(scanAndRedact, value, ctx, key);
     if (typeof value !== "object" || value === null) return value;
     if (depth >= ctx.limits.maxDepth) return countMarker(ctx, LIMIT_MARKER);
     if (seen.has(value)) return countMarker(ctx, CYCLE_MARKER);
     seen.add(value);
     try {
-      return maskObject(value, scanAndRedact, walk, ctx, depth);
+      return maskObject(value, scanAndRedact, walk, ctx, depth, key);
     } catch {
       return countMarker(ctx, ERROR_MARKER);
     } finally {

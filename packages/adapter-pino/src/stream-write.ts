@@ -11,7 +11,7 @@
  */
 
 import type { MaskOptions, ScanAndRedact } from "@redact-secret/adapter";
-import { ERROR_MARKER, LIMIT_MARKER, maskLogValueWith } from "@redact-secret/adapter";
+import { ERROR_MARKER, LIMIT_MARKER, maskKeyedLeavesWith } from "@redact-secret/adapter";
 
 /** The exact shape of pino's `hooks.streamWrite`. */
 export type RedactingStreamWrite = (line: string) => string;
@@ -31,12 +31,23 @@ function isWhitespace(code: number): boolean {
   return code === 32 || code === 9 || code === 10 || code === 13;
 }
 
+/** One string literal that is a value: its `[start, end)` span and the raw literal of the key it sits directly under. */
+interface ValueSpan {
+  readonly start: number;
+  readonly end: number;
+  readonly keySpan: readonly [number, number] | undefined;
+}
+
 /**
- * `[start, end)` spans of every string literal in `line` that is a value,
- * not an object key. Keys are left alone, as the walker leaves keys alone.
+ * Every string literal in `line` that is a value, not an object key, with the
+ * key literal it sits directly under (`"key": "value"`, any whitespace
+ * between). A value that is an array element, or follows a non-string, has
+ * none. Keys are left alone, as the walker leaves keys alone.
  */
-function valueStringSpans(line: string): [number, number][] {
-  const spans: [number, number][] = [];
+function valueStringSpans(line: string): ValueSpan[] {
+  const spans: ValueSpan[] = [];
+  let pendingKey: [number, number] | undefined;
+  let pendingAt = -1;
   let i = 0;
   while (i < line.length) {
     if (line.charCodeAt(i) !== QUOTE) {
@@ -49,20 +60,31 @@ function valueStringSpans(line: string): [number, number][] {
     i++;
     let next = i;
     while (next < line.length && isWhitespace(line.charCodeAt(next))) next++;
-    if (line.charCodeAt(next) !== COLON) spans.push([start, i]);
+    if (line.charCodeAt(next) === COLON) {
+      // A key: if the next token is a string, that string is its value.
+      let after = next + 1;
+      while (after < line.length && isWhitespace(line.charCodeAt(after))) after++;
+      pendingKey = [start, i];
+      pendingAt = after;
+    } else {
+      spans.push({ start, end: i, keySpan: pendingAt === start ? pendingKey : undefined });
+    }
   }
   return spans;
 }
 
 function redactLine(scanAndRedact: ScanAndRedact, line: string, options: MaskOptions): string {
   const spans = valueStringSpans(line);
-  const values = spans.map(([start, end]) => JSON.parse(line.slice(start, end)) as string);
+  const values = spans.map(({ start, end }) => JSON.parse(line.slice(start, end)) as string);
+  const keys = spans.map(({ keySpan }) =>
+    keySpan === undefined ? undefined : (JSON.parse(line.slice(keySpan[0], keySpan[1])) as string),
+  );
   // One walk over all values, so maxTotalLeaves bounds the whole line.
-  const masked = maskLogValueWith(scanAndRedact, values, options);
+  const masked = maskKeyedLeavesWith(scanAndRedact, values, keys, options);
   if (!Array.isArray(masked)) throw new TypeError("unexpected walk result");
   let out = "";
   let last = 0;
-  spans.forEach(([start, end], index) => {
+  spans.forEach(({ start, end }, index) => {
     // Values past maxArrayLength were dropped by the walk: never pass them
     // through. The walk could not count them — it never saw them — so they are
     // counted here, or `limited` would under-report exactly the refused values.

@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from .key_context import KeyContextFailure, scan_leaf_in_key_context
 from .outcome import OutcomeCounter
 
 BLOCK_MARKER = "[REDACTED:BLOCKED]"
@@ -67,6 +68,7 @@ def mask_leaf_with(
     *,
     policy: Optional[Any] = None,
     max_string_length: Optional[int] = None,
+    key: Optional[str] = None,
 ) -> str:
     """Masks one leaf string.
 
@@ -81,7 +83,9 @@ def mask_leaf_with(
     For a plain string log call the leaf *is* the message, and for a
     formatted field or an ``exc_text`` the leaf is that field's whole text.
     """
-    return mask_leaf_outcome_with(scan_and_redact, text, policy=policy, max_string_length=max_string_length).text
+    return mask_leaf_outcome_with(
+        scan_and_redact, text, policy=policy, max_string_length=max_string_length, key=key
+    ).text
 
 
 @dataclass(frozen=True)
@@ -105,10 +109,15 @@ def mask_leaf_outcome_with(
     *,
     policy: Optional[Any] = None,
     max_string_length: Optional[int] = None,
+    key: Optional[str] = None,
 ) -> MaskedLeaf:
     """:func:`mask_leaf_with`, plus what happened, for a host adapter that
     reports outcome counters. Nothing derived from the leaf's text is in the
     result besides the masked text itself.
+
+    ``key`` is the mapping key (or attribute name) the leaf sits directly
+    under, when the host supplies one: context for detection only (see
+    ``key_context.py``), never rewritten, scanned on its own, or returned.
 
     The masking decisions are the same, with one deliberate difference from
     ``0.1.0``: counting the findings needs ``len(result.findings)``, so a
@@ -119,24 +128,39 @@ def mask_leaf_outcome_with(
     if not isinstance(text, str):
         raise TypeError("mask_leaf_with: text must be a str")
 
-    if len(text) > resolve_limit(max_string_length, DEFAULT_LIMITS["max_string_length"]):
+    limit = resolve_limit(max_string_length, DEFAULT_LIMITS["max_string_length"])
+    if len(text) > limit:
+        return MaskedLeaf(LIMIT_MARKER, "limited")
+    keyed = key if isinstance(key, str) else None
+    if keyed is not None and len(keyed) > limit:
         return MaskedLeaf(LIMIT_MARKER, "limited")
 
+    def scan(candidate: str) -> tuple[str, Any]:
+        try:
+            result = scan_and_redact(candidate, policy)
+            # Reading the result is inside the guard too: a malformed result
+            # must not raise into the host or pass the input through.
+            len(result.findings)  # no length (a generator) is a malformed result
+            findings = list(result.findings)
+            masked = result.text
+        except Exception:
+            raise KeyContextFailure("error") from None
+        if not isinstance(masked, str):
+            raise KeyContextFailure("error")
+        return masked, findings
+
     try:
-        result = scan_and_redact(text, policy)
-        # Reading the result is inside the guard too: a malformed result
-        # must not raise into the host or pass the input through.
-        findings = len(result.findings)
-        if any(finding.action == "block" for finding in result.findings):
-            return MaskedLeaf(BLOCK_MARKER, "blocked", findings)
-        masked = result.text
-    except Exception:
+        masked, findings = scan_leaf_in_key_context(scan, text, keyed)
+    except KeyContextFailure as failure:
+        if failure.kind == "policy":
+            return MaskedLeaf(BLOCK_MARKER, "blocked")
         return MaskedLeaf(ERROR_MARKER, "failed")
-    if not isinstance(masked, str):
-        return MaskedLeaf(ERROR_MARKER, "failed")
+    count = len(findings)
+    if any(getattr(finding, "action", None) == "block" for finding in findings):
+        return MaskedLeaf(BLOCK_MARKER, "blocked", count)
     # A ``warn`` finding leaves the text alone, so a scan can report findings
     # and still be ``unchanged``. That is why the two are counted apart.
-    return MaskedLeaf(masked, "redacted" if masked != text else "unchanged", findings)
+    return MaskedLeaf(masked, "redacted" if masked != text else "unchanged", count)
 
 
 def count_leaf(counter: Optional[OutcomeCounter], leaf: MaskedLeaf) -> None:

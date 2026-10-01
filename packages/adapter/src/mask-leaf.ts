@@ -6,6 +6,7 @@
 
 import type { SecretAction } from "@redact-secret/core";
 
+import { type KeyContextScanned, scanLeafInKeyContext } from "./key-context.js";
 import type { LeafOutcome, OutcomeCounter } from "./outcome.js";
 import type { Limits, MaskLeafOptions, ScanAndRedact } from "./types.js";
 
@@ -83,7 +84,7 @@ export interface MaskedLeaf {
 export function maskLeafOutcomeWith(
   scanAndRedact: ScanAndRedact,
   text: string,
-  { policy, maxStringLength }: MaskLeafOptions = {},
+  { policy, maxStringLength, key }: MaskLeafOptions = {},
 ): MaskedLeaf {
   if (typeof text !== "string") {
     throw new TypeError("maskLeafWith: text must be a string");
@@ -91,23 +92,39 @@ export function maskLeafOutcomeWith(
   if (text.length > resolveLimit(maxStringLength, DEFAULT_LIMITS.maxStringLength)) {
     return { text: LIMIT_MARKER, outcome: "limited", findings: 0 };
   }
-
-  try {
-    const result = scanAndRedact(text, { policy });
-    if (typeof result?.text !== "string" || !Array.isArray(result.findings)) {
-      return { text: ERROR_MARKER, outcome: "failed", findings: 0 };
-    }
-    const findings = result.findings.length;
-    if (result.findings.some((finding) => finding?.action === BLOCK)) {
-      return { text: BLOCK_MARKER, outcome: "blocked", findings };
-    }
-    // A `warn` finding leaves the text alone, so a scan can report findings
-    // and still be `unchanged`. That is why the two are counted apart.
-    return { text: result.text, outcome: result.text === text ? "unchanged" : "redacted", findings };
-  } catch {
-    return { text: ERROR_MARKER, outcome: "failed", findings: 0 };
+  // The key is context for the scan, never output, and is not itself
+  // scanned: a key is kept as it is, so the value keeps its shape.
+  const keyed = typeof key === "string" ? key : undefined;
+  if (keyed !== undefined && keyed.length > resolveLimit(maxStringLength, DEFAULT_LIMITS.maxStringLength)) {
+    return { text: LIMIT_MARKER, outcome: "limited", findings: 0 };
   }
+
+  const scan = (input: string): KeyContextScanned | { readonly failure: Failure } => {
+    try {
+      const result = scanAndRedact(input, { policy });
+      if (typeof result?.text !== "string" || !Array.isArray(result.findings)) return { failure: "error" };
+      return result;
+    } catch {
+      return { failure: "error" };
+    }
+  };
+  const scanned = scanLeafInKeyContext(scan, text, keyed, { policy: "blocked", coreError: "error" });
+  if ("failure" in scanned) {
+    return scanned.failure === "blocked"
+      ? { text: BLOCK_MARKER, outcome: "blocked", findings: 0 }
+      : { text: ERROR_MARKER, outcome: "failed", findings: 0 };
+  }
+  const findings = scanned.findings.length;
+  if (scanned.findings.some((finding) => finding?.action === BLOCK)) {
+    return { text: BLOCK_MARKER, outcome: "blocked", findings };
+  }
+  // A `warn` finding leaves the text alone, so a scan can report findings
+  // and still be `unchanged`. That is why the two are counted apart.
+  return { text: scanned.text, outcome: scanned.text === text ? "unchanged" : "redacted", findings };
 }
+
+/** What a scan inside {@link maskLeafOutcomeWith} can fail with before it is mapped to a marker. */
+type Failure = "error" | "blocked";
 
 /** Adds one leaf's outcome to `counter`. A leaf the core never saw does not count as `scanned`. */
 export function countLeaf(counter: OutcomeCounter | undefined, leaf: MaskedLeaf): void {

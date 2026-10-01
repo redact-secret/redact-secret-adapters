@@ -32,3 +32,21 @@ export function maskLogValueWith(scanAndRedact: ScanAndRedact, data: unknown, op
   assertScanner("maskLogValueWith", scanAndRedact);
   return walkValue(scanAndRedact, data, options);
 }
+
+/**
+ * {@link maskLogValueWith} over a flat list of string leaves a host lifted
+ * out of a document, each with the object key it sat directly under (or
+ * `undefined`). It is the same walk over the array `texts`, so the walk
+ * budgets bound the whole list; `keys[i]` is context for the scan of
+ * `texts[i]` (see `./key-context.ts`) and is never output. pino's final-line
+ * masking is the caller.
+ */
+export function maskKeyedLeavesWith(
+  scanAndRedact: ScanAndRedact,
+  texts: readonly string[],
+  keys: readonly (string | undefined)[],
+  options: MaskOptions = {},
+): unknown {
+  assertScanner("maskKeyedLeavesWith", scanAndRedact);
+  return walkValue(scanAndRedact, texts, options, keys);
+}

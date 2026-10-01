@@ -76,7 +76,7 @@ bytes.
 | --- | --- |
 | The span name | OpenTelemetry **Logs** (`LogRecord`s from `@opentelemetry/sdk-logs` or a log bridge) |
 | Every string and string-array attribute (a `null` hole in an array stays in place) | Metrics |
-| Every event's name and attributes | Attribute **names**. Do not put a secret in an attribute key |
+| Every event's name and attributes | Attribute **names**, which are never scanned on their own or rewritten (a name is only context for the string value under it). Do not put a secret in an attribute key |
 | The status message | Spans the wrapped processor never receives: sampled out, or handled by a processor registered ahead of this one |
 | Every link's attributes | |
 

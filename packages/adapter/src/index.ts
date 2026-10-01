@@ -10,6 +10,15 @@ export {
 } from "./activation.js";
 export { type CreateMaskSecretsOptions, createMaskSecrets } from "./create-mask-secrets.js";
 export {
+  KEY_CONTEXT_SUFFIX,
+  type KeyContextFailures,
+  type KeyContextFinding,
+  type KeyContextScanned,
+  keyContextPrefix,
+  keyContextView,
+  scanLeafInKeyContext,
+} from "./key-context.js";
+export {
   BLOCK_MARKER,
   CYCLE_MARKER,
   countLeaf,
@@ -20,7 +29,7 @@ export {
   maskLeafOutcomeWith,
   maskLeafWith,
 } from "./mask-leaf.js";
-export { maskLogValueWith, maskSecretsWith } from "./mask-secrets.js";
+export { maskKeyedLeavesWith, maskLogValueWith, maskSecretsWith } from "./mask-secrets.js";
 export {
   addCounts,
   createOutcomeCounter,

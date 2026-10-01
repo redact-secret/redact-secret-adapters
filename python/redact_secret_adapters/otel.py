@@ -58,15 +58,20 @@ from .outcome import OutcomeCounter, SpanOutcome, ValueCounts, notify
 __all__ = ["RedactingSpanProcessorWith", "create_redacting_span_processor", "redact_attributes_with"]
 
 
-def _mask_attribute_value(scan_and_redact, value, *, policy, max_string_length, counter=None):
-    def mask(text):
-        leaf = mask_leaf_outcome_with(scan_and_redact, text, policy=policy, max_string_length=max_string_length)
+def _mask_attribute_value(scan_and_redact, value, *, policy, max_string_length, counter=None, key=None):
+    # ``key`` is the attribute name a plain string sits directly under (#172).
+    # A sequence element is not directly under it, so it is masked without
+    # key context, as an array element is everywhere else.
+    def mask(text, text_key=None):
+        leaf = mask_leaf_outcome_with(
+            scan_and_redact, text, policy=policy, max_string_length=max_string_length, key=text_key
+        )
         count_leaf(counter, leaf)
         return leaf.text
 
     try:
         if isinstance(value, str):
-            return mask(value)
+            return mask(value, key)
         if isinstance(value, (list, tuple)) and any(isinstance(item, str) for item in value):
             # The SDK accepts None inside a sequence, so mask each str
             # element and keep everything else in place.
@@ -100,11 +105,13 @@ def redact_attributes_with(
     max_string_length = (limits or {}).get("max_string_length")
     _redact_bag(
         attributes,
-        lambda value: _mask_attribute_value(scan_and_redact, value, policy=policy, max_string_length=max_string_length),
+        lambda value, key=None: _mask_attribute_value(
+            scan_and_redact, value, policy=policy, max_string_length=max_string_length, key=key
+        ),
     )
 
 
-def _redact_bag(attributes: Optional[dict], mask: Callable[[Any], Any]) -> None:
+def _redact_bag(attributes: Optional[dict], mask: Callable[..., Any]) -> None:
     """Mutates an attribute mapping in place through ``mask``. Shared by
     :func:`redact_attributes_with` and the processor, so the processor's own
     masker -- the one that feeds its per-span counter -- is what runs."""
@@ -112,7 +119,7 @@ def _redact_bag(attributes: Optional[dict], mask: Callable[[Any], Any]) -> None:
         return
     target = getattr(attributes, "_dict", attributes)
     for key in list(target.keys()):
-        target[key] = mask(target[key])
+        target[key] = mask(target[key], key)
 
 
 class _Unredactable(Exception):
@@ -182,7 +189,7 @@ class RedactingSpanProcessorWith:
         if callable(on_ending):
             on_ending(span)
 
-    def _mask_text(self, value: Any) -> Any:
+    def _mask_text(self, value: Any, key: Optional[str] = None) -> Any:
         max_string_length = (self._limits or {}).get("max_string_length")
         return _mask_attribute_value(
             self._scan_and_redact,
@@ -190,6 +197,7 @@ class RedactingSpanProcessorWith:
             policy=self._policy,
             max_string_length=max_string_length,
             counter=getattr(self._state, "counter", None),
+            key=key if isinstance(key, str) else None,
         )
 
     def _redact_name(self, obj: Any) -> None:

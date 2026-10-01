@@ -25,6 +25,10 @@ version numbers start again here, at `0.1.0`, and do not follow the old name's.
 
 ## [Unreleased]
 
+### Changed
+
+- **Key-aware detection** (redact-secret/redact-secret-adapters#172). A string attribute value on a span, event or link is now scanned with its attribute name as detection context, through the shared primitive in `@redact-secret/adapter`, so a context-dependent credential (`api_key`, `password`) is masked. The attribute name is never rewritten or output; string-array elements, the span name, event names and the status message have no direct key and are scanned as before. Cost: a string attribute is scanned twice unless its own scan already redacted or blocked it.
+
 ## [0.1.1] - 2026-10-01
 ### Changed
 

@@ -15,6 +15,10 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+### Changed
+
+- Internal: the key-aware leaf scan is now the shared `scanLeafInKeyContext` primitive in `@redact-secret/adapter` (redact-secret/redact-secret-adapters#172), also used by the logging and tracing adapters. Behavior, the failure mapping and the leaf-offset contract are unchanged; the conformance replay and the new cross-adapter test confirm it.
+
 ## [0.1.2] - 2026-10-01
 ### Changed
 

@@ -18,7 +18,7 @@
  * module holds no key pattern or name list.
  */
 
-import { isStrictWalkLimits, type StrictVisit, walkStrict } from "@redact-secret/adapter";
+import { isStrictWalkLimits, type StrictVisit, scanLeafInKeyContext, walkStrict } from "@redact-secret/adapter";
 import type { SecretScanErrorCode } from "@redact-secret/core";
 
 import type {
@@ -245,45 +245,22 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
 
   /**
    * One string leaf, key-aware (core contract: "Key-aware `sanitizeValue`").
-   * The leaf is scanned alone; when that redacts or blocks nothing and the
-   * leaf sits directly under an object key, it is scanned again in its view
-   * `{"<key>":"<leaf>"}` (key and leaf verbatim). A view finding inside the
-   * leaf's span is shifted to leaf offsets; a redacting or blocking one
-   * outside it blocks as `policy`, since the key cannot be rewritten. The
-   * view's result replaces the leaf-alone one, whole, when it redacts or
-   * blocks, or when the leaf alone reported nothing. Two results are never
-   * merged.
+   * The shared primitive (`scanLeafInKeyContext` in `@redact-secret/adapter`)
+   * does the work: the leaf is scanned alone and, when that redacts or blocks
+   * nothing and the leaf sits directly under an object key, once more in its
+   * view `{"<key>":"<leaf>"}` with findings mapped back to leaf offsets. A
+   * redacting or blocking finding outside the leaf blocks as `policy`, since
+   * the key cannot be rewritten.
    */
-  function scanLeaf(text: string, key: string | undefined, cache?: ScanCache): ReturnType<typeof scanText> {
-    const alone = scanText(text, cache);
-    if ("failure" in alone || key === undefined || hasAction(alone.findings, "redact", "block")) return alone;
-    const prefix = `{"${key}":"`;
-    const suffix = '"}';
-    const view = scanText(prefix + text + suffix, cache);
-    if ("failure" in view) return view;
-    const leafEnd = prefix.length + text.length;
-    const findings: SafeFinding[] = [];
-    for (const finding of view.findings) {
-      if (finding.start >= prefix.length && finding.end <= leafEnd) {
-        findings.push(
-          Object.freeze({ ...finding, start: finding.start - prefix.length, end: finding.end - prefix.length }),
-        );
-      } else if (hasAction([finding], "redact", "block")) {
-        return { failure: blocked("policy") };
-      }
-    }
-    if (!hasAction(findings, "redact", "block") && alone.findings.length > 0) return alone;
-    // Nothing outside the leaf was rewritten, so the view's text is the
-    // prefix, the sanitized leaf, and the suffix; anything else is a core
-    // that broke its own contract.
-    if (
-      !view.text.startsWith(prefix) ||
-      !view.text.endsWith(suffix) ||
-      view.text.length < prefix.length + suffix.length
-    ) {
-      return { failure: blocked("core_error") };
-    }
-    return { text: view.text.slice(prefix.length, view.text.length - suffix.length), findings };
+  function scanLeaf(
+    text: string,
+    key: string | undefined,
+    cache?: ScanCache,
+  ): { text: string; findings: readonly SafeFinding[] } | { failure: BlockedOutcome } {
+    return scanLeafInKeyContext<SafeFinding, BlockedOutcome>((input) => scanText(input, cache), text, key, {
+      policy: blocked("policy"),
+      coreError: blocked("core_error"),
+    });
   }
 
   function sanitizeText(text: string, { boundary = DEFAULT_BOUNDARY, signal }: OperationOptions = {}) {

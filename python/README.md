@@ -104,7 +104,7 @@ one.
 | --- | --- |
 | The message, formatted with its `args` before scanning | Record attributes you did not name in `extra_fields` |
 | `exc_info` (replaced with redacted traceback text), cached `exc_text`, `stack_info` | Anything a custom formatter adds after the filter runs |
-| Every attribute you name: `RedactSecretFilter(extra_fields=["user"])` | Dict keys and attribute names. Do not put a secret in a key |
+| Every attribute you name: `RedactSecretFilter(extra_fields=["user"])` | Dict keys and attribute names, never scanned on their own or rewritten (a key is only context for the string under it). Do not put a secret in a key |
 
 After formatting the message the filter clears `args`, so a downstream
 formatter cannot rebuild the original. A record with no finding is formatted
@@ -162,7 +162,7 @@ Wrap the processor you already have. It takes `policy`, `limits` and
 | Covered | Not covered |
 | --- | --- |
 | The span name and status description | OpenTelemetry **Logs** and metrics |
-| Every string and string-sequence attribute (a `None` inside a sequence stays in place) | Attribute **names**. Do not put a secret in an attribute key |
+| Every string and string-sequence attribute (a `None` inside a sequence stays in place) | Attribute **names**, never scanned on their own or rewritten (a name is only context for the string value under it). Do not put a secret in an attribute key |
 | Every event's name and attributes | Spans the wrapped processor never receives |
 | Every link's attributes | |
 
@@ -323,8 +323,10 @@ for all three: any object that is not a string, number, boolean, `None`,
 TypeScript walker instead serializes an object the way `JSON.stringify` would;
 Python has no single serialization to mirror.
 
-**Dict keys and attribute names are not scanned.** The walker masks values
-only. Every dict key, and every attribute name copied from an exception's
+**Dict keys and attribute names are not scanned on their own.** The walker
+masks values only; a string directly under a key is also scanned in its
+key-context view `{"<key>":"<value>"}` (the core decides; a finding outside the
+value blocks the value and keeps the key), the way the JavaScript walker does. Every dict key, and every attribute name copied from an exception's
 `__dict__`, reaches the handler unchanged, and so does the name of an
 `extra_fields` attribute. The OpenTelemetry processor likewise leaves every
 span, event, and link attribute key as it is. Do not put a secret in a key or

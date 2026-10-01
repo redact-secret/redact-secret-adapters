@@ -19,6 +19,15 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Added
+
+- **Key-context scan primitive** (redact-secret/redact-secret-adapters#172): `scanLeafInKeyContext`, `keyContextView`, `keyContextPrefix`, `KEY_CONTEXT_SUFFIX` and the `KeyContext*` types, extracted from the AI-context boundary with its behavior and leaf-offset contract unchanged. It scans a leaf alone and, when that redacts or blocks nothing and the leaf sits directly under an object key, once more in its view `{"<key>":"<leaf>"}` (key and leaf verbatim), mapping findings back to leaf offsets. The core alone decides detection and policy; no key name list lives here.
+- `MaskLeafOptions.key`, and `maskKeyedLeavesWith(scanAndRedact, texts, keys, options)` for a flat list of leaves lifted out of a document.
+
+### Changed
+
+- **`walkValue` (`maskSecretsWith`, `maskLogValueWith`) and `maskLeafOutcomeWith` now give a string leaf its direct object key as detection context.** A credential whose detection depends on its field name (`{ api_key: "..." }`) is now masked, the same way the AI-context boundary has treated it. Object shape is unchanged and keys are still never scanned, rewritten or returned. Array elements, messages, `Error` `message`/`stack`/`cause`, and the root have no key and are scanned as before. Consequences worth knowing: a string leaf under a key costs one additional `scanAndRedact` call (two instead of one) unless its own scan already redacts or blocks it; the `scanned` outcome counter is unchanged (it counts leaves, not calls); a key-context finding that would have to rewrite the key, or that falls outside the leaf, replaces the leaf with `[REDACTED:BLOCKED]` (the key is kept); and a key longer than `maxStringLength` makes the leaf `[REDACTED:LIMIT_EXCEEDED]` before any scan.
+
 ## [0.1.6] - 2026-10-01
 ### Changed
 
