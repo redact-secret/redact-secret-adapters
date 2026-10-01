@@ -29,6 +29,7 @@ import math
 import traceback
 from typing import Any, Callable, Optional
 
+from .budget import OperationBudget
 from .mask_leaf import (
     CYCLE_MARKER,
     ERROR_MARKER,
@@ -51,7 +52,7 @@ def _slice_bound(limit: Any) -> Optional[int]:
 
 
 class _Walk:
-    __slots__ = ("scan_and_redact", "policy", "limits", "leaves", "nodes", "seen", "counter")
+    __slots__ = ("scan_and_redact", "policy", "limits", "leaves", "nodes", "seen", "counter", "budget")
 
     def __init__(
         self,
@@ -59,6 +60,8 @@ class _Walk:
         policy: Any,
         limits: Optional[dict[str, int]],
         counter: Optional[OutcomeCounter] = None,
+        budget: Optional[OperationBudget] = None,
+        operation_limits: Optional[dict[str, int]] = None,
     ) -> None:
         self.scan_and_redact = scan_and_redact
         self.policy = policy
@@ -68,6 +71,10 @@ class _Walk:
         self.seen: set[int] = set()
         # Caller-owned; see ``outcome.py``. ``None`` means nothing is counted.
         self.counter = counter
+        # The operation's aggregate budget (see ``budget.py``), shared by every
+        # walk and mask of one host operation when the caller passes one in; a
+        # walk of its own gets a fresh one.
+        self.budget = budget if budget is not None else OperationBudget(operation_limits)
 
     def marker(self, marker: str) -> str:
         """Counts a marker produced for a whole value rather than a scanned
@@ -82,7 +89,7 @@ class _Walk:
         return marker
 
     def string(self, value: str, key: Any = None) -> str:
-        if self.leaves <= 0:
+        if self.leaves <= 0 or not self.budget.charge_leaf():
             if self.counter is not None:
                 self.counter.limited += 1
             return LIMIT_MARKER
@@ -93,6 +100,7 @@ class _Walk:
             policy=self.policy,
             max_string_length=self.limits["max_string_length"],
             key=key if isinstance(key, str) else None,
+            budget=self.budget,
         )
         count_leaf(self.counter, leaf)
         return leaf.text
@@ -130,6 +138,9 @@ class _Walk:
         own = getattr(exc, "__dict__", None) or {}
         for key in list(own)[: _slice_bound(self.limits["max_object_keys"])]:
             if key not in out:
+                if not self.budget.charge_key():
+                    self.marker(LIMIT_MARKER)
+                    break
                 out[key] = self.entry(own, key, depth)
         if exc.__cause__ is not None:
             out["cause"] = self.value(exc.__cause__, depth + 1)
@@ -138,7 +149,7 @@ class _Walk:
     def value(self, value: Any, depth: int, key: Any = None) -> Any:
         # Every visit counts, once per path: ``seen`` holds only the current
         # path, so a shared reference is walked again from each parent.
-        if self.nodes <= 0:
+        if self.nodes <= 0 or not self.budget.charge_node():
             return self.marker(LIMIT_MARKER)
         self.nodes -= 1
         if isinstance(value, str):
@@ -162,7 +173,15 @@ class _Walk:
             if isinstance(value, dict):
                 # Keys beyond the limit are dropped, never passed through unmasked.
                 keys = list(value.keys())[: _slice_bound(self.limits["max_object_keys"])]
-                return {key: self.entry(value, key, depth) for key in keys}
+                out: dict[Any, Any] = {}
+                for key in keys:
+                    # Past the operation's key budget the remaining keys are
+                    # dropped, never passed through, as past ``max_object_keys``.
+                    if not self.budget.charge_key():
+                        self.marker(LIMIT_MARKER)
+                        break
+                    out[key] = self.entry(value, key, depth)
+                return out
             # Elements beyond the limit are dropped, never passed through unmasked.
             items = value[: _slice_bound(self.limits["max_array_length"])]
             masked = [self.value(item, depth + 1) for item in items]
@@ -183,6 +202,8 @@ def walk(
     limits: Optional[dict[str, int]],
     counter: Optional[OutcomeCounter] = None,
     key: Optional[str] = None,
+    budget: Optional[OperationBudget] = None,
+    operation_limits: Optional[dict[str, int]] = None,
 ) -> Any:
     """Masks every string reachable in ``data``. Never raises for any
     input value; see the module docstring for what each kind becomes.
@@ -190,7 +211,7 @@ def walk(
     ``key`` is the name ``data`` sits directly under, when it is a plain
     string and the host knows one (a log record's ``extra`` field name):
     context for detection only (see ``key_context.py``)."""
-    return _Walk(scan_and_redact, policy, limits, counter).value(data, 0, key)
+    return _Walk(scan_and_redact, policy, limits, counter, budget, operation_limits).value(data, 0, key)
 
 
 def mask_exception_text_with(
@@ -200,11 +221,13 @@ def mask_exception_text_with(
     policy: Optional[Any] = None,
     limits: Optional[dict[str, int]] = None,
     counter: Optional[OutcomeCounter] = None,
+    budget: Optional[OperationBudget] = None,
+    operation_limits: Optional[dict[str, int]] = None,
 ) -> str:
     """The masked ``stack`` that walking ``exc`` would produce, without
     scanning the message or cause separately: the formatted traceback
     already contains both, and the logging filter keeps only this text."""
-    state = _Walk(scan_and_redact, policy, limits, counter)
+    state = _Walk(scan_and_redact, policy, limits, counter, budget, operation_limits)
     if state.limits["max_depth"] <= 0:
         return state.marker(LIMIT_MARKER)
     return state.stack(exc)

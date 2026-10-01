@@ -6,6 +6,7 @@
 
 import type { ScanAndRedactOptions, ScanResult } from "@redact-secret/core";
 
+import type { OperationBudget, OperationLimits } from "./budget.js";
 import type { OutcomeCounter } from "./outcome.js";
 
 /** The injected scanner: `scanAndRedact` from `@redact-secret/core`, or a fake. */
@@ -73,6 +74,13 @@ export interface MaskLeafOptions {
    * Omit it for a message, an array element, or any leaf with no direct key.
    */
   readonly key?: string | undefined;
+  /**
+   * The operation's aggregate budget (see `./budget.ts`). Every scan this leaf
+   * makes, key-context view included, is charged to it; past it the leaf is
+   * `[REDACTED:LIMIT_EXCEEDED]` and the core is not called. Omit it and the
+   * leaf is bounded by `maxStringLength` alone.
+   */
+  readonly budget?: OperationBudget | undefined;
 }
 
 export interface MaskOptions {
@@ -87,4 +95,17 @@ export interface MaskOptions {
    * accurate across more than one masking pass.
    */
   readonly counter?: OutcomeCounter | undefined;
+  /**
+   * Overrides for this call's aggregate operation budget (see
+   * `./budget.ts`), which covers every string, key and value the call
+   * visits and is the sum over them, on top of the per-walk `limits`.
+   * Omitted keys use `DEFAULT_OPERATION_LIMITS`.
+   */
+  readonly operationLimits?: Partial<OperationLimits> | undefined;
+  /**
+   * A caller-owned budget to charge instead of a fresh one, for a host that
+   * masks one operation in more than one pass and owns the unit
+   * (`createOperationBudget()`). Wins over `operationLimits`.
+   */
+  readonly operation?: OperationBudget | undefined;
 }

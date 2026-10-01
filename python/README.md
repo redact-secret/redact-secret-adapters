@@ -134,7 +134,13 @@ becomes `[REDACTED:ERROR]`.
 ### Filter options
 
 ```python
-RedactSecretFilter(extra_fields=["user"], on_outcome=observe, policy=policy, limits={"max_depth": 4})
+RedactSecretFilter(
+    extra_fields=["user"],
+    on_outcome=observe,
+    policy=policy,
+    limits={"max_depth": 4},
+    operation_limits={"max_leaves": 1000},
+)
 ```
 
 | Option | What it does |
@@ -143,6 +149,7 @@ RedactSecretFilter(extra_fields=["user"], on_outcome=observe, policy=policy, lim
 | `on_outcome` | A callback with counts per record. See [Counting what happened](#counting-what-happened) |
 | `policy` | The core's policy, passed through unchanged |
 | `limits` | Override the walk limits. See [Fail-closed markers](#fail-closed-markers) |
+| `operation_limits` | Override the aggregate budget of **one `filter()` call**. See [Aggregate operation budget](#aggregate-operation-budget) |
 | `scan_and_redact` (first positional) | An injected scanner. With no argument it uses `redact_secret.scan_and_redact` |
 
 ## OpenTelemetry (`[otel]` extra)
@@ -331,6 +338,38 @@ value blocks the value and keeps the key), the way the JavaScript walker does. E
 `extra_fields` attribute. The OpenTelemetry processor likewise leaves every
 span, event, and link attribute key as it is. Do not put a secret in a key or
 an attribute name.
+
+## Aggregate operation budget
+
+`limits` bound one walk and `max_string_length` one string. A log record is
+masked as a message, an exception text, a stack and several extra fields, and a
+span has many attributes, events and links, so many individually valid fields
+could multiply the total work. An **operation** is one `filter()` call, one span
+ending or one `mask_secrets_with` call, and it owns one
+`redact_secret_adapters.budget.OperationBudget` that every pass and field of it
+shares; each call gets a fresh one, so two threads never share a budget.
+
+| Limit | Default | Counts | Unit |
+| --- | --- | --- | --- |
+| `max_bytes` | 16777216 | UTF-8 bytes of every text handed to `scan_and_redact`, key-context views included | actual calls |
+| `max_scans` | 50000 | every `scan_and_redact` call, views included | actual calls |
+| `max_nodes` | 100000 | every value visited | occurrences |
+| `max_keys` | 100000 | every mapping key or attribute name visited | occurrences |
+| `max_leaves` | 25000 | every string leaf handed to a scan | occurrences |
+| `max_findings` | 100000 | every finding the core reported, summed | occurrences |
+
+*Occurrences* are counted where a value is visited (a shared reference reached by
+two paths counts twice); *actual calls* where work is done. Bytes are UTF-8. The
+outcome counters keep their meaning (`scanned` counts leaves), and the per-walk
+`limits` still apply. Exhaustion is sticky and deterministic: past a bound every
+string not yet inspected becomes `[REDACTED:LIMIT_EXCEEDED]` unscanned (counted
+as `limited`), mapping keys past it are dropped, and the record or span is still
+delivered, never with text the budget did not allow to be inspected. It is a work
+counter, not a wall-clock timeout: it is checked between scans, and a
+`scan_and_redact` call or a host callback that never returns is not interrupted.
+The same options are accepted by `mask_secrets_with`, `mask_log_value_with`,
+`RedactingSpanProcessorWith`, `create_redacting_span_processor` and
+`redact_attributes_with` as `operation_limits`.
 
 ## Development
 

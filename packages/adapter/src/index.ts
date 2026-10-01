@@ -8,6 +8,15 @@ export {
   PII_ACTIVATION_CONFLICT,
   readPiiActivation,
 } from "./activation.js";
+export {
+  createOperationBudget,
+  DEFAULT_OPERATION_LIMITS,
+  type OperationBudget,
+  type OperationLimits,
+  type OperationUsage,
+  resolveOperationLimits,
+  utf8ByteLength,
+} from "./budget.js";
 export { type CreateMaskSecretsOptions, createMaskSecrets } from "./create-mask-secrets.js";
 export {
   KEY_CONTEXT_SUFFIX,

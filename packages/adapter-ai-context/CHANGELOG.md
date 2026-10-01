@@ -19,6 +19,15 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 - Internal: the key-aware leaf scan is now the shared `scanLeafInKeyContext` primitive in `@redact-secret/adapter` (redact-secret/redact-secret-adapters#172), also used by the logging and tracing adapters. Behavior, the failure mapping and the leaf-offset contract are unchanged; the conformance replay and the new cross-adapter test confirm it.
 
+### Added
+
+- **`operationLimits`: an aggregate budget per operation** (redact-secret/redact-secret-adapters#173). One `sanitizeText`, `sanitizeValue` or `buildContext` (every part together) shares one budget over values visited, object keys, string leaves, `scanAndRedact` calls and their UTF-8 bytes (key-context views and key scans included; a memoized repeat is not a call) and findings (summed over occurrences). A bound reached is `blocked` / `limit_exceeded` with no value and no findings, never a partly approved context. Defaults are those of `@redact-secret/adapter`, except that `maxBytes` is never below four times `wholeInputLimits.maxInputBytes`. An open stream is bounded by `incrementalLimits` and by `maxFindings` alone.
+- `MAX_MEMO_ENTRIES` (1024): the per-operation memo now keeps at most that many results; past it a text is scanned again and not remembered. Output and findings accumulation are bounded by the same budget.
+
+### Changed
+
+- **Behavior change with defaults:** an operation that stays inside `traversalLimits` and `wholeInputLimits` but visits more than 100,000 values or keys, scans more than 25,000 leaves or 50,000 times, or accumulates more than 100,000 findings, is now `blocked` / `limit_exceeded`. It is a work counter checked between scans, not a wall-clock interrupt.
+
 ## [0.1.2] - 2026-10-01
 ### Changed
 

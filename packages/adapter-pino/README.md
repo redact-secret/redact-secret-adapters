@@ -90,7 +90,7 @@ limits:
 ## Options
 
 ```js
-await createRedactingHooks({ hooks, pii, onOutcome, policy, limits });
+await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLimits });
 ```
 
 | Option | What it does |
@@ -100,6 +100,23 @@ await createRedactingHooks({ hooks, pii, onOutcome, policy, limits });
 | `onOutcome` | A callback with counts per log record, for your metrics. See below |
 | `policy` | The core's policy, passed through unchanged |
 | `limits` | Override the walk limits (`DEFAULT_LIMITS` in `@redact-secret/adapter`) |
+| `operationLimits` | Override the aggregate budget of **one log record**, shared by both hooks. See below |
+
+### One budget per record
+
+`logMethod` and `streamWrite` both mask the same record, so `createRedactingHooks`
+creates **one** aggregate budget per log record and spends it across both, plus
+child bindings and `mixin()` output on the final line. Many small fields,
+or a record the two passes would each scan in full, cannot multiply the work:
+past a bound the remaining values become `[REDACTED:LIMIT_EXCEEDED]`, and if the
+budget is spent before `streamWrite` visits any value the whole line is the
+fixed `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` line (`PINO_LIMIT_LINE`,
+`lineReplaced: true`). Each record, including one logged from inside a getter
+while another is being masked, has its own budget. The counters, their
+occurrence-versus-call units, the defaults and the fact that this is not a
+wall-clock timeout are in
+[`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#aggregate-operation-budget).
+The paired factory owns the unit, so it rejects a caller-owned `operation`.
 
 ### Composing with your own hooks
 

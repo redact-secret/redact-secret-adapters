@@ -28,6 +28,15 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 - **`walkValue` (`maskSecretsWith`, `maskLogValueWith`) and `maskLeafOutcomeWith` now give a string leaf its direct object key as detection context.** A credential whose detection depends on its field name (`{ api_key: "..." }`) is now masked, the same way the AI-context boundary has treated it. Object shape is unchanged and keys are still never scanned, rewritten or returned. Array elements, messages, `Error` `message`/`stack`/`cause`, and the root have no key and are scanned as before. Consequences worth knowing: a string leaf under a key costs one additional `scanAndRedact` call (two instead of one) unless its own scan already redacts or blocks it; the `scanned` outcome counter is unchanged (it counts leaves, not calls); a key-context finding that would have to rewrite the key, or that falls outside the leaf, replaces the leaf with `[REDACTED:BLOCKED]` (the key is kept); and a key longer than `maxStringLength` makes the leaf `[REDACTED:LIMIT_EXCEEDED]` before any scan.
 
+### Added
+
+- **Aggregate operation budget** (redact-secret/redact-secret-adapters#173): `createOperationBudget`, `DEFAULT_OPERATION_LIMITS`, `resolveOperationLimits`, `utf8ByteLength` and the `OperationBudget` / `OperationLimits` / `OperationUsage` types, and `operationLimits` / `operation` on `MaskOptions` and `budget` on `MaskLeafOptions`. One host operation (a log record, a span, a context) shares one budget across every pass and field. It counts UTF-8 bytes and `scanAndRedact` invocations as actual calls, and nodes, object keys, string leaves and findings as occurrences (a memoized repeat costs no scan but still a visit); key-context scans and keys are counted explicitly. Defaults: 16 MiB, 50,000 scans, 100,000 nodes, 100,000 keys, 25,000 leaves, 100,000 findings. No existing counter changes meaning and the per-walk `DEFAULT_LIMITS` still apply first.
+- `walkStrict` takes an optional fourth argument, the operation budget, charging every node and key as `limit_exceeded`.
+
+### Changed
+
+- **Behavior change with defaults:** every `maskSecretsWith` / `maskLogValueWith` call now runs under the default aggregate budget. A value that stays inside the per-walk limits but inspects more than 16 MiB, 50,000 scans, 25,000 leaves, 100,000 nodes or keys, or 100,000 findings in one call now has the remainder replaced by `[REDACTED:LIMIT_EXCEEDED]` (and the remaining keys of an object dropped), where it was scanned in full before. Exhaustion is sticky: nothing after the first overrun is scanned or passed on. It is a work counter checked between scans, not a wall-clock interrupt.
+
 ## [0.1.6] - 2026-10-01
 ### Changed
 

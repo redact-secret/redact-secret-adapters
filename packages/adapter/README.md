@@ -148,6 +148,61 @@ are scanned alone. The cost is one more `scanAndRedact` call per keyed string
 leaf; the `scanned` counter still counts leaves. The primitive is exported as
 `scanLeafInKeyContext` and shared with the AI-context boundary.
 
+## Aggregate operation budget
+
+`DEFAULT_LIMITS` bound one *walk* and `maxStringLength` one *string*. Neither
+bounds a whole host operation: a span has many attributes, events and links, a
+log record is masked by two pino hooks, and an AI context is built from many
+parts. Many individually valid fields could multiply the total scanning and the
+retained findings. An **operation** is the unit a host counts in (one log
+record, one span, one `buildContext` or `sanitizeValue` call, one `maskSecrets`
+call), and it owns one `OperationBudget` that every pass and field of it shares.
+
+```js
+maskSecretsWith(scanAndRedact, data, { operationLimits: { maxLeaves: 1000 } });
+// or share one budget across passes you own:
+const operation = createOperationBudget({ maxBytes: 1 << 20 });
+```
+
+`DEFAULT_OPERATION_LIMITS` (every key optional; an unusable override falls back
+per key):
+
+| Limit | Default | Counts | Unit |
+| --- | --- | --- | --- |
+| `maxBytes` | 16777216 (16 MiB) | the UTF-8 bytes of every text handed to `scanAndRedact`, key-context views included | actual calls |
+| `maxScans` | 50000 | every `scanAndRedact` invocation, key-context views included | actual calls |
+| `maxNodes` | 100000 | every value visited, containers and leaves | occurrences |
+| `maxKeys` | 100000 | every object key or attribute name visited | occurrences |
+| `maxLeaves` | 25000 | every string leaf handed to a scan | occurrences |
+| `maxFindings` | 100000 | every finding the core reported, summed | occurrences |
+
+**Occurrences versus actual calls.** *Occurrences* are counted where a value is
+visited, however it is reached and whether or not its scan was memoized, so a
+shared reference reached by two paths counts twice. *Actual calls* are counted
+where work is done, so a memoized repeat costs no scan and no bytes. Bytes are
+UTF-8, not code units: a Korean character is 3, an emoji 4, a lone surrogate 3.
+No existing counter changes meaning: `scanned` still counts leaves, and the
+per-walk limits still apply to every pass. This budget is the **sum** over the
+operation, and whichever bound is reached first wins.
+
+**Exhaustion is sticky and deterministic.** The first charge that does not fit
+marks the budget exhausted and every later charge fails, so nothing after the
+overrun is scanned or passed on; a failed charge spends nothing. The same input
+and limits always stop at the same place. What happens next belongs to the host:
+
+- logging and tracing replace what was not inspected with
+  `[REDACTED:LIMIT_EXCEEDED]` (counted as `limited`) and keep going, dropping
+  object keys past the bound as `maxObjectKeys` does; a pino line refused whole
+  becomes the fixed `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` line;
+- the AI-context and MCP boundaries return `blocked` / `limit_exceeded` with no
+  value and no findings, never a partly approved one.
+
+**It is a work counter, not a wall-clock timeout.** It is checked between
+scans, synchronously. One `scanAndRedact` call, once started, runs to its own
+completion under the core's whole-input limits, and a host callback (a policy,
+a getter, a `toJSON()`) that never returns is not interrupted. Use your own
+timeout, or the AI-context boundary's `AbortSignal`, for cancellation.
+
 ## Outcome counters
 
 The host adapters report what happened to a log record or a span through one

@@ -123,6 +123,21 @@ public API and move only in a major version. The reasons behind them:
   adapters map the same case to a block marker on the leaf. The AI-context
   boundary additionally scans every key on its own (`walkStrict` hands each key
   to its visitor).
+- **Per-walk and per-string bounds do not bound a whole host operation**
+  (#173). A span has many fields, a log record is masked by two pino hooks, and
+  an AI context is built from many parts, each its own walk. One operation owns
+  one `OperationBudget` (`packages/adapter/src/budget.ts`,
+  `python/.../budget.py`), shared by every pass and field of it: both pino
+  stages and the child-binding and `mixin()` values on the final line, every
+  field of one span or `filter()` call, and every part of `buildContext`. It
+  counts UTF-8 bytes and scanner invocations as *actual calls* and nodes,
+  object keys, leaves and findings as *occurrences*, so a memoized repeat costs
+  no scan but still costs a visit; key-context scans and object keys count
+  explicitly. Exhaustion is sticky: the marker adapters mark the rest
+  `[REDACTED:LIMIT_EXCEEDED]`, the AI-context and MCP boundaries return
+  `blocked` / `limit_exceeded` with nothing partly approved. It is a work counter
+  checked between scans, not a wall-clock interrupt. The per-walk `maxNodes`
+  and `maxTotalLeaves` keep their meaning; this is their sum over the operation.
 - Every visit counts against `maxNodes`, not only string leaves. The walk
   tracks only the current path, which is enough to detect a cycle, so a shared
   reference is walked once per path. Budgeting leaves alone would let an

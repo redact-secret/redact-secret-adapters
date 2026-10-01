@@ -28,6 +28,14 @@ can read it without leaving their environment.
 
 - **Key-aware detection** (redact-secret/redact-secret-adapters#172). A string directly under a mapping key is now scanned with that key as detection context, so a context-dependent credential (`{"api_key": "..."}`) is masked by `mask_secrets_with`, `mask_log_value_with`, `RedactSecretFilter` (inside `extra_fields` values, and the extra field's own name for a plain string), and `RedactingSpanProcessorWith` / `redact_attributes_with` (the attribute name). The core alone decides; keys are never scanned, rewritten or returned, and sequence elements, messages, tracebacks, span names, event names and status descriptions have no key. A keyed string costs one extra `scan_and_redact` call unless its own scan already redacted or blocked it; the `scanned` outcome counter still counts leaves. A key-context finding outside the leaf (it would rewrite the key) replaces the leaf with `[REDACTED:BLOCKED]`; a key longer than `max_string_length` makes the leaf `[REDACTED:LIMIT_EXCEEDED]`.
 
+### Added
+
+- **`redact_secret_adapters.budget.OperationBudget`: an aggregate budget per operation** (redact-secret/redact-secret-adapters#173), accepted as `operation_limits` by `RedactSecretFilter` (one `filter()` call: message, exception text, stack and every extra field), `RedactingSpanProcessorWith` / `create_redacting_span_processor` (one span), `redact_attributes_with`, `mask_secrets_with` and `mask_log_value_with`. It counts UTF-8 bytes and `scan_and_redact` calls as actual calls and nodes, mapping keys, leaves and findings as occurrences (key-context scans and keys explicitly). Defaults: 16 MiB, 50,000 scans, 100,000 nodes, 100,000 keys, 25,000 leaves, 100,000 findings. Each call has a fresh budget, so threads and re-entrant calls never share one. It is a work counter, not a wall-clock interrupt.
+
+### Changed
+
+- **Behavior change with defaults:** a record, span or call that inspects more than the default budget now has the rest replaced by `[REDACTED:LIMIT_EXCEEDED]` (and mapping keys past it dropped); the outcome counters keep their meaning (`limited` counts them).
+
 ## [0.1.3] - 2026-10-01
 ### Changed
 

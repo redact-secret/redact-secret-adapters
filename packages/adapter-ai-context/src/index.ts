@@ -42,7 +42,7 @@ import { type AiContextBoundaryOptionsWithDefaults, withDefaultLimits } from "./
 import type { AiContextBoundary, AiContextCore } from "./types.js";
 
 export type { CoreActivation } from "@redact-secret/adapter";
-export { BLOCK_REASONS, createAiContextBoundaryWith, SAFE_FINDING_FIELDS } from "./boundary.js";
+export { BLOCK_REASONS, createAiContextBoundaryWith, MAX_MEMO_ENTRIES, SAFE_FINDING_FIELDS } from "./boundary.js";
 export {
   AI_CONTEXT_DEFAULT_LIMITS,
   type AiContextBoundaryOptionsWithDefaults,

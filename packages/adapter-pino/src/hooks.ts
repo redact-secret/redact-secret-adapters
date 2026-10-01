@@ -33,12 +33,12 @@
  * reading plaintext. See ARCHITECTURE.md § pino.
  */
 
-import type { MaskOptions, OutcomeCounter, ScanAndRedact, ValueCounts } from "@redact-secret/adapter";
-import { addCounts, createOutcomeCounter, notify, toValueCounts } from "@redact-secret/adapter";
+import type { MaskOptions, OperationBudget, OutcomeCounter, ScanAndRedact, ValueCounts } from "@redact-secret/adapter";
+import { addCounts, createOperationBudget, createOutcomeCounter, notify, toValueCounts } from "@redact-secret/adapter";
 import type { LogFn, Logger } from "pino";
 
 import { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
-import { createRedactingStreamWriteWith, PINO_ERROR_LINE, type RedactingStreamWrite } from "./stream-write.js";
+import { createRedactingStreamWriteWith, isReplacementLine, type RedactingStreamWrite } from "./stream-write.js";
 
 /**
  * The hooks this package composes with. Shaped after pino 10's
@@ -74,14 +74,24 @@ export interface PinoLogOutcome {
   readonly values: ValueCounts;
   /**
    * `true` when the `streamWrite` hook could not lex the line and wrote the
-   * fixed `[REDACTED:ERROR]` line instead of it. It says nothing about
+   * fixed `[REDACTED:ERROR]` line instead of it, or refused it because the
+   * record's budget was already spent and wrote the fixed
+   * `[REDACTED:LIMIT_EXCEEDED]` line (`PINO_LIMIT_LINE`). It says nothing about
    * whether the destination or transport then accepted the line: this
    * adapter never learns that.
    */
   readonly lineReplaced: boolean;
 }
 
-export interface RedactingHooksOptions extends MaskOptions {
+export interface RedactingHooksOptions extends Omit<MaskOptions, "operation"> {
+  /**
+   * Not accepted: the paired factory owns the unit. It creates one aggregate
+   * budget per **log record** (`operationLimits` overrides its limits) and
+   * shares it between `logMethod` and `streamWrite`, so the two passes over
+   * one record cannot each spend a full budget. Passing a caller-owned
+   * `operation` here throws.
+   */
+  readonly operation?: undefined;
   /**
    * The `hooks` object the application would otherwise have passed to
    * `pino()`. Its `logMethod` and `streamWrite` are composed with the
@@ -153,6 +163,8 @@ function composeStreamWrite(host: PinoHostHooks["streamWrite"], redacting: Redac
 /** One record in flight: what both hooks accumulate into before it is reported. */
 interface PendingRecord {
   readonly counts: OutcomeCounter;
+  /** One aggregate budget for the whole record, shared by both hooks (#173). */
+  readonly budget: OperationBudget;
   readonly stages: PinoRedactionStage[];
   readonly level: number;
   lineReplaced: boolean;
@@ -180,7 +192,7 @@ interface PendingRecord {
 function observed(
   scanAndRedact: ScanAndRedact,
   maskOptions: MaskOptions,
-  onOutcome: (outcome: PinoLogOutcome) => void,
+  onOutcome: ((outcome: PinoLogOutcome) => void) | undefined,
 ): { logMethod: RedactingLogMethod; streamWrite: RedactingStreamWrite } {
   const stack: PendingRecord[] = [];
   let reporting = false;
@@ -192,6 +204,11 @@ function observed(
     ...maskOptions,
     get counter(): OutcomeCounter | undefined {
       return stack[stack.length - 1]?.counts;
+    },
+    // Likewise the budget: the record being masked right now owns it, so a
+    // nested record (a getter that logs) cannot spend the outer one's.
+    get operation(): OperationBudget | undefined {
+      return stack[stack.length - 1]?.budget;
     },
   };
   const inner = {
@@ -248,6 +265,7 @@ function observed(
     logMethod: function observedLogMethod(this: Logger, args, method, level) {
       const pending: PendingRecord = {
         counts: createOutcomeCounter(),
+        budget: createOperationBudget(maskOptions.operationLimits),
         stages: [],
         level,
         lineReplaced: false,
@@ -282,6 +300,7 @@ function observed(
         // first so the line's own values are counted onto it.
         const orphan: PendingRecord = {
           counts: createOutcomeCounter(),
+          budget: createOperationBudget(maskOptions.operationLimits),
           stages: ["stream-write"],
           level: -1,
           lineReplaced: false,
@@ -294,14 +313,14 @@ function observed(
         } finally {
           stack.pop();
         }
-        orphan.lineReplaced = out === PINO_ERROR_LINE || out === `${PINO_ERROR_LINE}\n`;
+        orphan.lineReplaced = isReplacementLine(out);
         reportOrphanLine(orphan.counts, orphan.stages, orphan.lineReplaced);
         addToCallerCounter(orphan.counts);
         return out;
       }
       const out = inner.streamWrite(line);
       pending.stages.push("stream-write");
-      pending.lineReplaced = out === PINO_ERROR_LINE || out === `${PINO_ERROR_LINE}\n`;
+      pending.lineReplaced = isReplacementLine(out);
       report(pending);
       addToCallerCounter(pending.counts);
       return out;
@@ -325,18 +344,17 @@ export function createRedactingHooksWith(
   if (onOutcome !== undefined && typeof onOutcome !== "function") {
     throw new TypeError("createRedactingHooksWith: onOutcome must be a function");
   }
+  if ((maskOptions as { operation?: unknown }).operation !== undefined) {
+    throw new TypeError("createRedactingHooksWith: operation is not accepted; use operationLimits");
+  }
   const forwarded: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(hooks ?? {})) {
     if (!(COMPOSED_KEYS as readonly string[]).includes(key)) forwarded[key] = value;
   }
-  // Without an observer there is nothing to count, so nothing wraps the pair.
-  const redacting =
-    onOutcome === undefined
-      ? {
-          logMethod: createRedactingLogMethodWith(scanAndRedact, maskOptions),
-          streamWrite: createRedactingStreamWriteWith(scanAndRedact, maskOptions),
-        }
-      : observed(scanAndRedact, maskOptions, onOutcome);
+  // The pair is always wrapped, observer or not: the record is the unit that
+  // owns the aggregate budget both hooks spend (#173), and `observed` is what
+  // correlates the two passes over one record.
+  const redacting = observed(scanAndRedact, maskOptions, onOutcome);
   return Object.freeze({
     ...forwarded,
     logMethod: composeLogMethod(hooks?.logMethod, redacting.logMethod),

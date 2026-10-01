@@ -18,7 +18,17 @@
  * module holds no key pattern or name list.
  */
 
-import { isStrictWalkLimits, type StrictVisit, scanLeafInKeyContext, walkStrict } from "@redact-secret/adapter";
+import {
+  createOperationBudget,
+  isStrictWalkLimits,
+  type OperationBudget,
+  type OperationLimits,
+  resolveOperationLimits,
+  type StrictVisit,
+  scanLeafInKeyContext,
+  utf8ByteLength,
+  walkStrict,
+} from "@redact-secret/adapter";
 import type { SecretScanErrorCode } from "@redact-secret/core";
 
 import type {
@@ -160,6 +170,25 @@ type ScanCache = Map<string, { text: string; findings: SafeFinding[] }>;
  */
 const MAX_MEMOIZED_LENGTH = 1024;
 
+/**
+ * The most results one operation's memo keeps. Past it, a new text is scanned
+ * and not remembered, so the memo is bounded by `MAX_MEMO_ENTRIES` entries of
+ * at most `MAX_MEMOIZED_LENGTH` code units each however many distinct short
+ * strings an adversarial value holds.
+ */
+export const MAX_MEMO_ENTRIES = 1024;
+
+/**
+ * One host operation: one `sanitizeText`, `sanitizeValue` or `buildContext`
+ * call. It owns the aggregate budget every scan and every visit of the
+ * operation is charged to (redact-secret/redact-secret-adapters#173) and the
+ * memo of results already obtained, and nothing in it outlives the call.
+ */
+interface Operation {
+  readonly budget: OperationBudget;
+  readonly cache: ScanCache | undefined;
+}
+
 function hasAction(findings: readonly SafeFinding[], ...actions: string[]): boolean {
   return findings.some((finding) => actions.includes(finding.action));
 }
@@ -168,7 +197,7 @@ function validateOptions(options: AiContextBoundaryOptions): void {
   if (options === null || typeof options !== "object") {
     throw new TypeError("createAiContextBoundary: options are required");
   }
-  const { wholeInputLimits, incrementalLimits, traversalLimits, onFinding } = options;
+  const { wholeInputLimits, incrementalLimits, traversalLimits, onFinding, operationLimits } = options;
   if (wholeInputLimits === null || typeof wholeInputLimits !== "object") {
     throw new TypeError("createAiContextBoundary: wholeInputLimits is required");
   }
@@ -183,6 +212,26 @@ function validateOptions(options: AiContextBoundaryOptions): void {
   if (onFinding !== undefined && typeof onFinding !== "function") {
     throw new TypeError("createAiContextBoundary: onFinding must be a function");
   }
+  if (operationLimits !== undefined && (operationLimits === null || typeof operationLimits !== "object")) {
+    throw new TypeError("createAiContextBoundary: operationLimits must be an object");
+  }
+}
+
+/**
+ * The aggregate limits of one operation. Omitted keys default to the shared
+ * `DEFAULT_OPERATION_LIMITS`, except `maxBytes`: it is never lower than four
+ * times the whole-input byte ceiling, so one text the core accepts alone
+ * always fits, however it is scanned (alone, in a key-context view, and under
+ * a key of its own).
+ */
+function operationLimitsFor(
+  overrides: Partial<OperationLimits> | undefined,
+  wholeInputLimits: AiContextBoundaryOptions["wholeInputLimits"],
+): OperationLimits {
+  const base = resolveOperationLimits(undefined);
+  const ceiling = (wholeInputLimits as { maxInputBytes?: unknown }).maxInputBytes;
+  const floor = typeof ceiling === "number" && Number.isFinite(ceiling) && ceiling > 0 ? ceiling * 4 : 0;
+  return resolveOperationLimits({ maxBytes: Math.max(base.maxBytes, floor), ...overrides });
 }
 
 /**
@@ -200,6 +249,13 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
   const { wholeInputLimits, incrementalLimits, traversalLimits, policy, placeholderFormatter, onFinding } = options;
   const wholeInputOptions = Object.freeze({ policy, placeholderFormatter, limits: wholeInputLimits });
   const incrementalOptions = Object.freeze({ policy, placeholderFormatter, limits: incrementalLimits });
+  const operationLimits = operationLimitsFor(options.operationLimits, wholeInputLimits);
+
+  /** One fresh operation: a new aggregate budget and, when the operation repeats texts, a memo. */
+  const newOperation = (memoize: boolean): Operation => ({
+    budget: createOperationBudget(operationLimits),
+    cache: memoize ? new Map() : undefined,
+  });
 
   function emit(findings: readonly SafeFinding[], boundary: BoundaryLabel): void {
     if (typeof onFinding !== "function") return;
@@ -214,23 +270,30 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
   }
 
   /**
-   * One whole-input scan. With a `cache`, a text already scanned within the
-   * same crossing reuses that result: `scanAndRedact(text, options)` is a
-   * pure function of its text and this boundary's fixed options (placeholder
-   * numbering restarts on every call), so the reuse is byte-identical.
-   * Only successes of short texts are kept; a failure ends the operation.
-   * Callers still map and emit findings once per occurrence.
+   * One whole-input scan. With the operation's memo, a text already scanned
+   * within the same crossing reuses that result: `scanAndRedact(text,
+   * options)` is a pure function of its text and this boundary's fixed
+   * options (placeholder numbering restarts on every call), so the reuse is
+   * byte-identical. Only successes of short texts are kept, up to
+   * `MAX_MEMO_ENTRIES`; a failure ends the operation. Callers still map and
+   * emit findings once per occurrence.
+   *
+   * An actual call is charged to the operation's budget as one scan and its
+   * UTF-8 bytes; a memo hit is not a call and costs neither. Past the budget
+   * the core is not called and the operation fails as `limit_exceeded`.
    */
   function scanText(
     text: unknown,
-    cache?: ScanCache,
+    op: Operation,
   ): { text: string; findings: SafeFinding[] } | { failure: BlockedOutcome } {
     if (typeof text !== "string") return { failure: blocked("unsupported_value") };
+    const cache = op.cache;
     const cacheable = cache !== undefined && text.length <= MAX_MEMOIZED_LENGTH;
     if (cacheable) {
       const hit = cache.get(text);
       if (hit !== undefined) return hit;
     }
+    if (!op.budget.chargeScan(utf8ByteLength(text))) return { failure: blocked("limit_exceeded") };
     let result: unknown;
     try {
       result = core.scanAndRedact(text, wholeInputOptions);
@@ -239,9 +302,13 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     }
     const read = readResult(result);
     if (read === undefined) return { failure: blocked("core_error") };
-    if (cacheable) cache.set(text, read);
+    if (cacheable && cache.size < MAX_MEMO_ENTRIES) cache.set(text, read);
     return read;
   }
+
+  /** The findings of one occurrence are charged where they are accumulated, memoized or not. */
+  const chargeFindings = (op: Operation, findings: readonly SafeFinding[]): BlockedOutcome | undefined =>
+    op.budget.chargeFindings(findings.length) ? undefined : blocked("limit_exceeded");
 
   /**
    * One string leaf, key-aware (core contract: "Key-aware `sanitizeValue`").
@@ -255,27 +322,31 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
   function scanLeaf(
     text: string,
     key: string | undefined,
-    cache?: ScanCache,
+    op: Operation,
   ): { text: string; findings: readonly SafeFinding[] } | { failure: BlockedOutcome } {
-    return scanLeafInKeyContext<SafeFinding, BlockedOutcome>((input) => scanText(input, cache), text, key, {
+    return scanLeafInKeyContext<SafeFinding, BlockedOutcome>((input) => scanText(input, op), text, key, {
       policy: blocked("policy"),
       coreError: blocked("core_error"),
     });
   }
 
   function sanitizeText(text: string, { boundary = DEFAULT_BOUNDARY, signal }: OperationOptions = {}) {
-    return sanitizeTextIn(text, boundary, signal);
+    return sanitizeTextIn(text, boundary, signal, newOperation(false));
   }
 
   function sanitizeTextIn(
     text: string,
     boundary: BoundaryLabel,
     signal: CancellationSignal | undefined,
-    cache?: ScanCache,
+    op: Operation,
   ) {
     if (isAborted(signal)) return ABORTED;
-    const scanned = scanText(text, cache);
+    // A whole text is one value and one leaf of the operation.
+    if (!op.budget.chargeNode() || !op.budget.chargeLeaf()) return blocked("limit_exceeded");
+    const scanned = scanText(text, op);
     if ("failure" in scanned) return scanned.failure;
+    const overrun = chargeFindings(op, scanned.findings);
+    if (overrun !== undefined) return overrun;
     emit(scanned.findings, boundary);
     if (hasAction(scanned.findings, "block")) return blocked("policy");
     if (isAborted(signal)) return ABORTED;
@@ -286,36 +357,46 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     value: unknown,
     { boundary = DEFAULT_BOUNDARY, signal }: OperationOptions = {},
   ): AiContextOutcome<JsonValue> {
-    return sanitizeValueIn(value, boundary, signal, new Map());
+    return sanitizeValueIn(value, boundary, signal, newOperation(true));
   }
 
   function sanitizeValueIn(
     value: unknown,
     boundary: BoundaryLabel,
     signal: CancellationSignal | undefined,
-    cache: ScanCache,
+    op: Operation,
   ): AiContextOutcome<JsonValue> {
     if (isAborted(signal)) return ABORTED;
     const findings: SafeFinding[] = [];
-    const walked = walkStrict<BlockedOutcome>(value, traversalLimits, {
-      string(text, key): StrictVisit<BlockedOutcome> {
-        const scanned = scanLeaf(text, key, cache);
-        if ("failure" in scanned) return { ok: false, failure: scanned.failure };
-        emit(scanned.findings, boundary);
-        findings.push(...scanned.findings);
-        if (hasAction(scanned.findings, "block")) return { ok: false, failure: blocked("policy") };
-        return { ok: true, text: scanned.text };
+    const walked = walkStrict<BlockedOutcome>(
+      value,
+      traversalLimits,
+      {
+        string(text, key): StrictVisit<BlockedOutcome> {
+          if (!op.budget.chargeLeaf()) return { ok: false, failure: blocked("limit_exceeded") };
+          const scanned = scanLeaf(text, key, op);
+          if ("failure" in scanned) return { ok: false, failure: scanned.failure };
+          const overrun = chargeFindings(op, scanned.findings);
+          if (overrun !== undefined) return { ok: false, failure: overrun };
+          emit(scanned.findings, boundary);
+          findings.push(...scanned.findings);
+          if (hasAction(scanned.findings, "block")) return { ok: false, failure: blocked("policy") };
+          return { ok: true, text: scanned.text };
+        },
+        key(key) {
+          // A key cannot be rewritten without changing the value's shape, so a
+          // key finding that would be redacted or blocked blocks the value.
+          const scanned = scanText(key, op);
+          if ("failure" in scanned) return { ok: false, failure: scanned.failure };
+          const overrun = chargeFindings(op, scanned.findings);
+          if (overrun !== undefined) return { ok: false, failure: overrun };
+          emit(scanned.findings, boundary);
+          if (hasAction(scanned.findings, "block", "redact")) return { ok: false, failure: blocked("policy") };
+          return { ok: true };
+        },
       },
-      key(key) {
-        // A key cannot be rewritten without changing the value's shape, so a
-        // key finding that would be redacted or blocked blocks the value.
-        const scanned = scanText(key, cache);
-        if ("failure" in scanned) return { ok: false, failure: scanned.failure };
-        emit(scanned.findings, boundary);
-        if (hasAction(scanned.findings, "block", "redact")) return { ok: false, failure: blocked("policy") };
-        return { ok: true };
-      },
-    });
+      op.budget,
+    );
     if (!walked.ok) return typeof walked.failure === "string" ? blocked(walked.failure) : walked.failure;
     if (isAborted(signal)) return ABORTED;
     return ok(walked.value as JsonValue, findings);
@@ -335,8 +416,10 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     if (!Array.isArray(parts)) return blocked("unsupported_value");
     const messages: ContextMessage[] = [];
     const findings: SafeFinding[] = [];
-    // One crossing: identical texts across all parts are scanned once.
-    const cache: ScanCache = new Map();
+    // One crossing, one operation: every part shares the memo (identical
+    // texts across all parts are scanned once) and the aggregate budget, so
+    // many parts cannot each spend a full one.
+    const op = newOperation(true);
     for (const part of parts as readonly unknown[]) {
       let role: unknown;
       let boundary: BoundaryLabel;
@@ -356,8 +439,8 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
       // string and is never scanned.
       if (typeof role !== "string") return blocked("unsupported_value");
       const outcome = isText
-        ? sanitizeTextIn(content as string, boundary, signal, cache)
-        : sanitizeValueIn(content, boundary, signal, cache);
+        ? sanitizeTextIn(content as string, boundary, signal, op)
+        : sanitizeValueIn(content, boundary, signal, op);
       if (outcome.outcome !== "ok") return outcome;
       findings.push(...outcome.findings);
       messages.push(Object.freeze({ role, content: outcome.value }));
@@ -372,6 +455,10 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
     let finalized = false;
     let staged = "";
     let findings: SafeFinding[] = [];
+    // A streamed session is bounded by the core's `incrementalLimits`; this
+    // budget adds the one bound the core does not give it, on how many
+    // findings it may accumulate before `finalize`.
+    const streamBudget = createOperationBudget(operationLimits);
 
     const onAbort = (): void => {
       if (!finalized) fail(ABORTED);
@@ -402,6 +489,10 @@ export function createAiContextBoundaryWith(core: AiContextCore, options: AiCont
       const read = readResult(result);
       if (read === undefined) {
         fail(blocked("core_error"));
+        return;
+      }
+      if (!streamBudget.chargeFindings(read.findings.length)) {
+        fail(blocked("limit_exceeded"));
         return;
       }
       emit(read.findings, boundary);

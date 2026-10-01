@@ -19,6 +19,7 @@ def mask_log_value_with(
     *,
     policy: Optional[Any] = None,
     limits: Optional[dict[str, int]] = None,
+    operation_limits: Optional[dict[str, int]] = None,
 ) -> Any:
     """Recursively masks every string (and every exception's message/stack)
     inside a dict/list/tuple/exception tree. ``scan_and_redact`` is called
@@ -27,4 +28,4 @@ def mask_log_value_with(
     """
     if not callable(scan_and_redact):
         raise TypeError("mask_log_value_with: scan_and_redact must be callable")
-    return walk(scan_and_redact, data, policy=policy, limits=limits)
+    return walk(scan_and_redact, data, policy=policy, limits=limits, operation_limits=operation_limits)

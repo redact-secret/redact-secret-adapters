@@ -109,7 +109,7 @@ assertion is not optional.
 ## Options
 
 ```js
-await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLength });
+await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLength, operationLimits });
 ```
 
 | Option | What it does |
@@ -118,6 +118,20 @@ await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLeng
 | `onOutcome` | A callback with counts per span, for your metrics. See below |
 | `policy` | The core's policy, passed through unchanged |
 | `maxStringLength` | Strings longer than this become `[REDACTED:LIMIT_EXCEEDED]` unscanned |
+| `operationLimits` | Override the aggregate budget of **one span**. See below |
+
+### One budget per span
+
+The span name, every attribute, every event and link, and the status message
+share **one** aggregate budget per span, so a span with many events and links
+cannot multiply the scanning even when each string is within `maxStringLength`.
+Past a bound every string not yet inspected becomes
+`[REDACTED:LIMIT_EXCEEDED]` unscanned and the span is still forwarded, never with
+text the budget did not allow to be inspected; nothing in `onOutcome` carries
+input. A key-context scan counts as a scan, and attribute names count as keys.
+A span ended re-entrantly inside the next processor has its own budget. Units,
+defaults and the caveat that this is a work counter and not a timeout are in
+[`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#aggregate-operation-budget).
 
 ### PII detection
 

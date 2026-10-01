@@ -50,7 +50,12 @@ export {
   type RedactingHooksOptions,
 } from "./hooks.js";
 export { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
-export { createRedactingStreamWriteWith, PINO_ERROR_LINE, type RedactingStreamWrite } from "./stream-write.js";
+export {
+  createRedactingStreamWriteWith,
+  PINO_ERROR_LINE,
+  PINO_LIMIT_LINE,
+  type RedactingStreamWrite,
+} from "./stream-write.js";
 
 /** {@link RedactingHooksOptions} plus the live factory's PII activation. */
 export type CreateRedactingHooksOptions = RedactingHooksOptions & CoreActivation;

@@ -86,7 +86,7 @@ const LIMIT_KEYS = ["wholeInputLimits", "incrementalLimits", "traversalLimits"] 
  * non-limit keys are read with `in` and a property read, both of which follow
  * the chain.
  */
-const OPTION_KEYS = [...LIMIT_KEYS, "policy", "placeholderFormatter", "onFinding"] as const;
+const OPTION_KEYS = [...LIMIT_KEYS, "policy", "placeholderFormatter", "onFinding", "operationLimits"] as const;
 
 /**
  * Fills in any limit set `options` **omits** from

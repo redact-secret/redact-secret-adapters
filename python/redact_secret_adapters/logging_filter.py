@@ -52,7 +52,8 @@ import warnings
 from typing import Any, Callable, Optional, Sequence
 
 from ._walk import mask_exception_text_with, walk
-from .mask_leaf import ERROR_MARKER, count_leaf, mask_leaf_outcome_with
+from .budget import OperationBudget
+from .mask_leaf import ERROR_MARKER, LIMIT_MARKER, count_leaf, mask_leaf_outcome_with
 from .outcome import LogRecordOutcome, OutcomeCounter, notify
 
 __all__ = ["RedactSecretFilter"]
@@ -90,6 +91,7 @@ class RedactSecretFilter(logging.Filter):
         policy: Optional[Any] = None,
         extra_fields: Sequence[str] = (),
         limits: Optional[dict[str, int]] = None,
+        operation_limits: Optional[dict[str, int]] = None,
         on_outcome: Optional[Callable[[LogRecordOutcome], None]] = None,
     ) -> None:
         if name:
@@ -115,6 +117,11 @@ class RedactSecretFilter(logging.Filter):
         # A bare string names one field; tuple("auth") would name four.
         self._extra_fields = (extra_fields,) if isinstance(extra_fields, str) else tuple(extra_fields)
         self._limits = limits
+        # The aggregate budget of one ``filter()`` call (see ``budget.py``):
+        # the message, the exception text, the stack and every extra field
+        # share it, so many individually valid fields cannot multiply the
+        # work. Each call gets a fresh one, so threads and records never share.
+        self._operation_limits = operation_limits
         if on_outcome is not None and not callable(on_outcome):
             raise TypeError("RedactSecretFilter: on_outcome must be callable")
         self._on_outcome = on_outcome
@@ -125,9 +132,15 @@ class RedactSecretFilter(logging.Filter):
         # ``filter()`` call.
         self._state = threading.local()
 
-    def _mask(self, text: str, counter: Optional[OutcomeCounter] = None) -> str:
+    def _mask(self, text: str, counter: Optional[OutcomeCounter], budget: OperationBudget) -> str:
+        if not budget.charge_node() or not budget.charge_leaf():
+            if counter is not None:
+                counter.limited += 1
+            return LIMIT_MARKER
         max_len = (self._limits or {}).get("max_string_length")
-        leaf = mask_leaf_outcome_with(self._scan_and_redact, text, policy=self._policy, max_string_length=max_len)
+        leaf = mask_leaf_outcome_with(
+            self._scan_and_redact, text, policy=self._policy, max_string_length=max_len, budget=budget
+        )
         count_leaf(counter, leaf)
         return leaf.text
 
@@ -136,6 +149,7 @@ class RedactSecretFilter(logging.Filter):
         # filtered handlers is two units of work and reports twice, which is
         # what a per-handler count means. Nothing is shared between calls.
         counter = OutcomeCounter() if self._on_outcome is not None else None
+        budget = OperationBudget(self._operation_limits)
 
         try:
             message = record.getMessage()
@@ -147,7 +161,7 @@ class RedactSecretFilter(logging.Filter):
             if counter is not None:
                 counter.failed += 1
         else:
-            record.msg = self._mask(message, counter)
+            record.msg = self._mask(message, counter, budget)
         record.args = None
 
         exc_value = None
@@ -157,15 +171,20 @@ class RedactSecretFilter(logging.Filter):
             record.exc_info = None
         if isinstance(exc_value, BaseException):
             record.exc_text = mask_exception_text_with(
-                self._scan_and_redact, exc_value, policy=self._policy, limits=self._limits, counter=counter
+                self._scan_and_redact,
+                exc_value,
+                policy=self._policy,
+                limits=self._limits,
+                counter=counter,
+                budget=budget,
             )
         elif record.exc_text:
             # Also reached with exc_info == (None, None, None): a cached
             # exc_text still renders and must be scanned.
-            record.exc_text = self._mask(record.exc_text, counter)
+            record.exc_text = self._mask(record.exc_text, counter, budget)
 
         if record.stack_info:
-            record.stack_info = self._mask(record.stack_info, counter)
+            record.stack_info = self._mask(record.stack_info, counter, budget)
 
         for field in self._extra_fields:
             if hasattr(record, field):
@@ -178,6 +197,7 @@ class RedactSecretFilter(logging.Filter):
                         limits=self._limits,
                         counter=counter,
                         key=field,
+                        budget=budget,
                     )
                 except Exception:
                     # walk() degrades per key and element and should never

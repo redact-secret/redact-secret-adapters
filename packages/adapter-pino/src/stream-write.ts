@@ -23,6 +23,31 @@ export type RedactingStreamWrite = (line: string) => string;
  */
 export const PINO_ERROR_LINE = JSON.stringify({ msg: ERROR_MARKER });
 
+/**
+ * The fixed line written in place of one the adapter refused to inspect
+ * because a budget was spent (the aggregate operation budget, redact-secret/
+ * redact-secret-adapters#173, or a pre-processing ceiling, #174), as opposed
+ * to one it could not lex. A valid JSON object like {@link PINO_ERROR_LINE},
+ * and never a line pino itself produced.
+ */
+export const PINO_LIMIT_LINE = JSON.stringify({ msg: LIMIT_MARKER });
+
+/** Whether `line` is one of the fixed replacement lines, with or without its newline. */
+export function isReplacementLine(line: string): boolean {
+  const bare = line.endsWith("\n") ? line.slice(0, -1) : line;
+  return bare === PINO_ERROR_LINE || bare === PINO_LIMIT_LINE;
+}
+
+/**
+ * A budget refused the whole line. `counted` is whether the walk that spent it
+ * already added to the `limited` counter.
+ */
+class LineLimitExceeded extends Error {
+  constructor(readonly counted: boolean) {
+    super("line limit exceeded");
+  }
+}
+
 const QUOTE = 34;
 const BACKSLASH = 92;
 const COLON = 58;
@@ -81,6 +106,11 @@ function redactLine(scanAndRedact: ScanAndRedact, line: string, options: MaskOpt
   );
   // One walk over all values, so maxTotalLeaves bounds the whole line.
   const masked = maskKeyedLeavesWith(scanAndRedact, values, keys, options);
+  // The operation's budget spent before any of the line's values was visited
+  // comes back as a bare marker: a refusal of the whole line, not a malformed
+  // result. (A per-walk bound such as `maxDepth: 0` keeps failing to the error
+  // line, as it always has.)
+  if (masked === LIMIT_MARKER && options.operation?.exhausted === true) throw new LineLimitExceeded(true);
   if (!Array.isArray(masked)) throw new TypeError("unexpected walk result");
   let out = "";
   let last = 0;
@@ -113,10 +143,16 @@ export function createRedactingStreamWriteWith(
   return function redactingStreamWrite(line) {
     try {
       return redactLine(scanAndRedact, line, options);
-    } catch {
+    } catch (error) {
+      const newline = String(line).endsWith("\n") ? "\n" : "";
+      if (error instanceof LineLimitExceeded) {
+        // The whole line was refused by a budget, not malformed.
+        if (!error.counted && options.counter !== undefined) options.counter.limited += 1;
+        return `${PINO_LIMIT_LINE}${newline}`;
+      }
       // The whole line is one value the adapter could not represent.
       if (options.counter !== undefined) options.counter.failed += 1;
-      return `${PINO_ERROR_LINE}${String(line).endsWith("\n") ? "\n" : ""}`;
+      return `${PINO_ERROR_LINE}${newline}`;
     }
   };
 }

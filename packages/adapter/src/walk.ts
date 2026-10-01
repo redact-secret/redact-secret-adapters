@@ -4,6 +4,7 @@
  * reaches a host's serializer unmasked.
  */
 
+import { createOperationBudget, type OperationBudget } from "./budget.js";
 import {
   CYCLE_MARKER,
   countLeaf,
@@ -20,6 +21,8 @@ export interface WalkContext {
   readonly policy: Policy;
   readonly limits: Limits;
   readonly budget: { leaves: number; nodes: number };
+  /** The operation's aggregate budget, shared by every pass of one host operation (`./budget.ts`). */
+  readonly operation: OperationBudget;
   /** Optional, caller-owned: see `./outcome.ts`. Absent means nothing is counted. */
   readonly counter?: OutcomeCounter | undefined;
   /**
@@ -46,6 +49,7 @@ export function createWalkContext(options: MaskOptions): WalkContext {
     policy: options.policy,
     limits,
     budget: { leaves: limits.maxTotalLeaves, nodes: limits.maxNodes },
+    operation: options.operation ?? createOperationBudget(options.operationLimits),
     counter: options.counter,
   };
 }
@@ -57,7 +61,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 export function maskString(scanAndRedact: ScanAndRedact, value: string, ctx: WalkContext, key?: string): string {
-  if (ctx.budget.leaves <= 0) {
+  if (ctx.budget.leaves <= 0 || !ctx.operation.chargeLeaf()) {
     if (ctx.counter !== undefined) ctx.counter.limited += 1;
     return LIMIT_MARKER;
   }
@@ -66,6 +70,7 @@ export function maskString(scanAndRedact: ScanAndRedact, value: string, ctx: Wal
     policy: ctx.policy,
     maxStringLength: ctx.limits.maxStringLength,
     key,
+    budget: ctx.operation,
   });
   countLeaf(ctx.counter, leaf);
   return leaf.text;
@@ -113,6 +118,12 @@ function maskProperties(
   const record = source as Record<string, unknown>;
   const keys = Object.keys(source).filter((key) => !skip?.has(key));
   for (const key of keys.slice(0, ctx.limits.maxObjectKeys)) {
+    // Past the operation's key budget the remaining keys are dropped, never
+    // passed through unmasked, as keys past `maxObjectKeys` are.
+    if (!ctx.operation.chargeKey()) {
+      countMarker(ctx, LIMIT_MARKER);
+      return;
+    }
     let masked: unknown;
     try {
       masked = walk(record[key], depth + 1, key);
@@ -202,7 +213,7 @@ export function walkValue(
   const walk: Walk = (value, depth, key) => {
     // Every visit counts, once per path: `seen` holds only the current
     // path, so a shared reference is walked again from each parent.
-    if (ctx.budget.nodes <= 0) return countMarker(ctx, LIMIT_MARKER);
+    if (ctx.budget.nodes <= 0 || !ctx.operation.chargeNode()) return countMarker(ctx, LIMIT_MARKER);
     ctx.budget.nodes -= 1;
     if (typeof value === "string") return maskString(scanAndRedact, value, ctx, key);
     if (typeof value !== "object" || value === null) return value;

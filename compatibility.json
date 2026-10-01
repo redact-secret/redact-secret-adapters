@@ -23,7 +23,8 @@
         "packages/adapter/test/outcome.test.ts",
         "packages/adapter/test/vault-token.test.ts",
         "packages/adapter/test/activation-live.test.ts",
-        "packages/adapter/test/key-context-live.test.ts"
+        "packages/adapter/test/key-context-live.test.ts",
+        "packages/adapter/test/budget.test.ts"
       ]
     },
     {
@@ -60,7 +61,8 @@
         "packages/adapter-pino/test/outcome.test.ts",
         "packages/adapter-pino/test/vault-token.test.ts",
         "packages/adapter/test/activation-live.test.ts",
-        "packages/adapter-pino/test/key-context-live.test.ts"
+        "packages/adapter-pino/test/key-context-live.test.ts",
+        "packages/adapter-pino/test/budget.test.ts"
       ]
     },
     {
@@ -98,7 +100,8 @@
         "packages/adapter-otel-trace/test/outcome.test.ts",
         "packages/adapter-otel-trace/test/vault-token.test.ts",
         "packages/adapter/test/activation-live.test.ts",
-        "packages/adapter-otel-trace/test/key-context-live.test.ts"
+        "packages/adapter-otel-trace/test/key-context-live.test.ts",
+        "packages/adapter-otel-trace/test/budget.test.ts"
       ]
     },
     {
@@ -162,7 +165,8 @@
         "packages/adapter-ai-context/test/defaults.test.ts",
         "packages/adapter-ai-context/test/vault-token.test.ts",
         "packages/adapter/test/activation-live.test.ts",
-        "packages/adapter-ai-context/test/key-context-live.test.ts"
+        "packages/adapter-ai-context/test/key-context-live.test.ts",
+        "packages/adapter-ai-context/test/budget.test.ts"
       ]
     },
     {
@@ -216,7 +220,8 @@
         "packages/adapter-mcp/test/live-init-failure.test.ts",
         "packages/adapter-mcp/test/defaults.test.ts",
         "packages/adapter-mcp/test/vault-token.test.ts",
-        "packages/adapter/test/activation-live.test.ts"
+        "packages/adapter/test/activation-live.test.ts",
+        "packages/adapter-mcp/test/budget.test.ts"
       ]
     },
     {
@@ -259,7 +264,8 @@
         "python/tests/test_otel_outcome.py",
         "python/tests/test_vault_token.py",
         "python/tests/test_pii_activation.py",
-        "python/tests/test_key_context.py"
+        "python/tests/test_key_context.py",
+        "python/tests/test_budget.py"
       ]
     }
   ],

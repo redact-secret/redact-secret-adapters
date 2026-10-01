@@ -6,7 +6,9 @@
 
 import type { SecretAction } from "@redact-secret/core";
 
+import { utf8ByteLength } from "./budget.js";
 import { type KeyContextScanned, scanLeafInKeyContext } from "./key-context.js";
+import { resolveLimit } from "./limit.js";
 import type { LeafOutcome, OutcomeCounter } from "./outcome.js";
 import type { Limits, MaskLeafOptions, ScanAndRedact } from "./types.js";
 
@@ -14,6 +16,8 @@ export const BLOCK_MARKER = "[REDACTED:BLOCKED]";
 export const ERROR_MARKER = "[REDACTED:ERROR]";
 export const LIMIT_MARKER = "[REDACTED:LIMIT_EXCEEDED]";
 export const CYCLE_MARKER = "[REDACTED:CYCLE]";
+
+export { resolveLimit };
 
 const BLOCK: SecretAction = "block";
 
@@ -38,15 +42,6 @@ export const DEFAULT_LIMITS: Limits = Object.freeze({
   maxTotalLeaves: 5000,
   maxNodes: 20_000,
 });
-
-/**
- * `value` if it is a usable bound, else `fallback`. `undefined`, `NaN`, a
- * negative number, or a non-number would otherwise disable a limit
- * (`length > NaN` is never true) or override the default by accident.
- */
-export function resolveLimit(value: unknown, fallback: number): number {
-  return typeof value === "number" && value >= 0 ? value : fallback;
-}
 
 /**
  * Masks one leaf string. Any thrown error — including `NOT_INITIALIZED` if
@@ -84,7 +79,7 @@ export interface MaskedLeaf {
 export function maskLeafOutcomeWith(
   scanAndRedact: ScanAndRedact,
   text: string,
-  { policy, maxStringLength, key }: MaskLeafOptions = {},
+  { policy, maxStringLength, key, budget }: MaskLeafOptions = {},
 ): MaskedLeaf {
   if (typeof text !== "string") {
     throw new TypeError("maskLeafWith: text must be a string");
@@ -100,9 +95,13 @@ export function maskLeafOutcomeWith(
   }
 
   const scan = (input: string): KeyContextScanned | { readonly failure: Failure } => {
+    // Charged before the call, so an operation past its budget never reaches
+    // the core; the scan and its findings are charged as actual calls.
+    if (budget !== undefined && !budget.chargeScan(utf8ByteLength(input))) return { failure: "limit" };
     try {
       const result = scanAndRedact(input, { policy });
       if (typeof result?.text !== "string" || !Array.isArray(result.findings)) return { failure: "error" };
+      if (budget !== undefined && !budget.chargeFindings(result.findings.length)) return { failure: "limit" };
       return result;
     } catch {
       return { failure: "error" };
@@ -110,6 +109,7 @@ export function maskLeafOutcomeWith(
   };
   const scanned = scanLeafInKeyContext(scan, text, keyed, { policy: "blocked", coreError: "error" });
   if ("failure" in scanned) {
+    if (scanned.failure === "limit") return { text: LIMIT_MARKER, outcome: "limited", findings: 0 };
     return scanned.failure === "blocked"
       ? { text: BLOCK_MARKER, outcome: "blocked", findings: 0 }
       : { text: ERROR_MARKER, outcome: "failed", findings: 0 };
@@ -124,7 +124,7 @@ export function maskLeafOutcomeWith(
 }
 
 /** What a scan inside {@link maskLeafOutcomeWith} can fail with before it is mapped to a marker. */
-type Failure = "error" | "blocked";
+type Failure = "error" | "blocked" | "limit";
 
 /** Adds one leaf's outcome to `counter`. A leaf the core never saw does not count as `scanned`. */
 export function countLeaf(counter: OutcomeCounter | undefined, leaf: MaskedLeaf): void {

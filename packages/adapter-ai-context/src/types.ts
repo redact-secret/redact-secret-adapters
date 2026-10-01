@@ -6,7 +6,7 @@
  * compile here instead of silently widening what crosses the boundary.
  */
 
-import type { StrictWalkLimits } from "@redact-secret/adapter";
+import type { OperationLimits, StrictWalkLimits } from "@redact-secret/adapter";
 import type {
   IncrementalLimits,
   IncrementalSanitizer,
@@ -100,6 +100,24 @@ export interface AiContextBoundaryOptions {
   readonly incrementalLimits: IncrementalLimits;
   /** Bounds for nested values, enforced here: `maxDepth` counts containers including the root, `maxNodes` every visited value. Required. */
   readonly traversalLimits: TraversalLimits;
+  /**
+   * The aggregate budget of **one operation**: one `sanitizeText`, one
+   * `sanitizeValue`, one `buildContext` (every part together). Optional; omitted keys use
+   * the shared defaults (`DEFAULT_OPERATION_LIMITS` in `@redact-secret/adapter`),
+   * except that `maxBytes` is never lower than four times
+   * `wholeInputLimits.maxInputBytes`. It is the sum over everything the
+   * operation visits and scans, on top of `wholeInputLimits` (one scan) and
+   * `traversalLimits` (one value): every value visited, every object key,
+   * every string leaf, every `scanAndRedact` call and its UTF-8 bytes
+   * (key-context views and key scans included; a memoized repeat is not a
+   * call), and every finding, summed over occurrences. A limit reached is a
+   * `blocked` / `limit_exceeded` outcome with no value and no findings, never a
+   * partly approved one. An open stream is bounded by `incrementalLimits`, and
+   * by this budget's `maxFindings` alone. It is a work counter checked between
+   * scans, not a wall-clock timeout: a single core call or a host callback
+   * that never returns is not interrupted.
+   */
+  readonly operationLimits?: Partial<OperationLimits>;
   /**
    * Passed to the core unchanged, on both the whole-input and the
    * incremental path. It sees safe metadata only. A throwing policy fails

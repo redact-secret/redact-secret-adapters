@@ -12,6 +12,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from ._limit import resolve_limit
+from .budget import utf8_byte_length
 from .key_context import KeyContextFailure, scan_leaf_in_key_context
 from .outcome import OutcomeCounter
 
@@ -41,19 +43,6 @@ DEFAULT_LIMITS: dict[str, int] = {
 }
 
 
-def resolve_limit(value: Any, fallback: int) -> Any:
-    """``value`` if it is a usable bound, else ``fallback``, like
-    ``resolveLimit`` in ``mask-leaf.ts``. ``None``, ``NaN``, a negative
-    number, a ``bool``, or a non-number would otherwise raise out of a
-    walk, disable a bound (``len(text) > nan`` is never true), or turn a
-    slice bound negative (``[:-1]`` keeps almost everything)."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return fallback
-    if value != value or value < 0:  # NaN is the one value unequal to itself
-        return fallback
-    return value
-
-
 def resolve_limits(overrides: Optional[Any]) -> dict[str, Any]:
     """Per-key :func:`resolve_limit` over ``DEFAULT_LIMITS``; like
     ``resolveLimits`` in ``walk.ts``, anything that is not a mapping is no
@@ -69,6 +58,7 @@ def mask_leaf_with(
     policy: Optional[Any] = None,
     max_string_length: Optional[int] = None,
     key: Optional[str] = None,
+    budget: Optional[Any] = None,
 ) -> str:
     """Masks one leaf string.
 
@@ -110,10 +100,15 @@ def mask_leaf_outcome_with(
     policy: Optional[Any] = None,
     max_string_length: Optional[int] = None,
     key: Optional[str] = None,
+    budget: Optional[Any] = None,
 ) -> MaskedLeaf:
     """:func:`mask_leaf_with`, plus what happened, for a host adapter that
     reports outcome counters. Nothing derived from the leaf's text is in the
     result besides the masked text itself.
+
+    ``budget`` is the operation's aggregate :class:`~redact_secret_adapters.budget.OperationBudget`
+    (see ``budget.py``): every scan this leaf makes, key-context view included, is
+    charged to it, and past it the leaf is ``LIMIT_MARKER`` and the core is not called.
 
     ``key`` is the mapping key (or attribute name) the leaf sits directly
     under, when the host supplies one: context for detection only (see
@@ -136,6 +131,10 @@ def mask_leaf_outcome_with(
         return MaskedLeaf(LIMIT_MARKER, "limited")
 
     def scan(candidate: str) -> tuple[str, Any]:
+        # Charged before the call, so an operation past its budget never
+        # reaches the core; the scan and its findings are charged as actual calls.
+        if budget is not None and not budget.charge_scan(utf8_byte_length(candidate)):
+            raise KeyContextFailure("limit")
         try:
             result = scan_and_redact(candidate, policy)
             # Reading the result is inside the guard too: a malformed result
@@ -147,11 +146,15 @@ def mask_leaf_outcome_with(
             raise KeyContextFailure("error") from None
         if not isinstance(masked, str):
             raise KeyContextFailure("error")
+        if budget is not None and not budget.charge_findings(len(findings)):
+            raise KeyContextFailure("limit")
         return masked, findings
 
     try:
         masked, findings = scan_leaf_in_key_context(scan, text, keyed)
     except KeyContextFailure as failure:
+        if failure.kind == "limit":
+            return MaskedLeaf(LIMIT_MARKER, "limited")
         if failure.kind == "policy":
             return MaskedLeaf(BLOCK_MARKER, "blocked")
         return MaskedLeaf(ERROR_MARKER, "failed")

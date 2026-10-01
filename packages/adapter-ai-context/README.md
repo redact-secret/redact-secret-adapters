@@ -158,6 +158,31 @@ Two things to know:
   key and its JSON punctuation. With the default 64 KiB that is noise; with a
   small override it is what binds first.
 
+### Operation limits
+
+```js
+const boundary = await createAiContextBoundary({
+  operationLimits: { maxBytes: 4_194_304, maxScans: 2000, maxLeaves: 1000, maxNodes: 8000, maxKeys: 8000, maxFindings: 1000 },
+});
+```
+
+The three limit sets bound one scan, one stream and one value. **One
+operation**, a `sanitizeText`, a `sanitizeValue` or a `buildContext` (every part
+together), also has an aggregate budget, so many parts that each fit cannot
+multiply the work. It counts every value visited, every object key, every string
+leaf, every `scanAndRedact` call and its UTF-8 bytes (key-context views and key
+scans included; a memoized repeat is not a call), and every finding summed over
+occurrences. Every key is optional and defaults to `DEFAULT_OPERATION_LIMITS`
+(see [`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#aggregate-operation-budget)),
+except that `maxBytes` is never below four times `wholeInputLimits.maxInputBytes`,
+so one text the core accepts always fits.
+
+A bound reached is a `blocked` / `limit_exceeded` outcome with **no value and no
+findings**, never a partly approved context. The per-operation memo holds at most
+1024 results. An open stream is bounded by `incrementalLimits`, and by this
+budget's `maxFindings` alone. Like every bound here it is checked between scans:
+a work counter, not a wall-clock timeout; use the `AbortSignal` for cancellation.
+
 `createAiContextBoundaryWith`, the injected API, requires all three sets
 explicitly; pass `withDefaultLimits()` to hand it the preset.
 `test/defaults.test.ts` asserts against the real core that each preset bound

@@ -23,6 +23,16 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 - **Key-aware detection** (redact-secret/redact-secret-adapters#172). `hooks.logMethod` and `hooks.streamWrite` now give a string value its direct object key as detection context, through the shared primitive in `@redact-secret/adapter`: a context-dependent credential (`{ "api_key": "..." }`) is masked in call arguments, child-logger bindings, `mixin()` output and serializer output. In the final line, the key is the string literal directly before the value's colon; array elements and values after a non-string have none. Keys are still never scanned, rewritten or output, so the line keeps its shape and both hooks stay (neither is replaced). Cost: a keyed string value is scanned twice unless its own scan already redacted or blocked it. A key literal that is not valid JSON now fails the line closed (`{"msg":"[REDACTED:ERROR]"}`), as an invalid value literal already did.
 
+### Added
+
+- **One aggregate budget per log record** (redact-secret/redact-secret-adapters#173), shared by `logMethod` and `streamWrite` (and so by child bindings and `mixin()` output on the final line). `operationLimits` overrides it; the defaults are those of `@redact-secret/adapter`. A record logged from inside a getter while another is masked has its own budget. `createRedactingHooks` rejects a caller-owned `operation` (it owns the unit).
+- `PINO_LIMIT_LINE`, `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}`: the fixed, valid line written (with the original newline) when the record's budget is already spent before `streamWrite` visits any value. `lineReplaced` is `true` for it, as for `PINO_ERROR_LINE`, and the `limited` counter, not `failed`, counts it.
+
+### Changed
+
+- `createRedactingHooks` now always correlates the two hooks per record (it previously did so only with an `onOutcome` observer), because the record owns the shared budget. A caller-supplied `counter` still receives each record's counts.
+- **Behavior change with defaults:** a record that inspects more than the default budget (16 MiB, 50,000 scans, 25,000 leaves, ...) across both hooks now has the remainder replaced by `[REDACTED:LIMIT_EXCEEDED]`. Both hooks together scan the record twice, so a record near the old per-walk limits is likelier to meet it.
+
 ## [0.1.3] - 2026-10-01
 ### Changed
 
