@@ -33,6 +33,14 @@ tarball (`files` in `package.json`), so a consumer can read it from
 - `createRedactingHooks` now always correlates the two hooks per record (it previously did so only with an `onOutcome` observer), because the record owns the shared budget. A caller-supplied `counter` still receives each record's counts.
 - **Behavior change with defaults:** a record that inspects more than the default budget (16 MiB, 50,000 scans, 25,000 leaves, ...) across both hooks now has the remainder replaced by `[REDACTED:LIMIT_EXCEEDED]`. Both hooks together scan the record twice, so a record near the old per-walk limits is likelier to meet it.
 
+### Added
+
+- **Pre-processing ceilings on `hooks.streamWrite`** (redact-secret/redact-secret-adapters#174), overridable with `lineLimits` (`createRedactingHooks`, `createRedactingStreamWrite`, `createRedactingStreamWriteWith`) and exported as `DEFAULT_LINE_LIMITS` / `PinoLineLimits` / `StreamWriteOptions`. Before lexing or decoding anything, the hook now refuses a line longer than `maxLineLength` (4,194,304 UTF-16 code units, checked first and unread), a line with more than `maxValueSpans` (20,000) string-literal values (checked as each span is found), and a line whose value literals plus the key literal each sits under exceed `maxDecodeLength` (2,097,152 raw code units, checked before any literal is decoded). A bound met exactly is accepted. The refusal is the fixed valid line `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` (`PINO_LIMIT_LINE`) with the original's newline: never the original line, and never because a parser failed. It reports `lineReplaced: true` and counts one `limited` value (a line that cannot be lexed is still `PINO_ERROR_LINE` and `failed`).
+
+### Changed
+
+- **Behavior change with defaults:** a line past a default ceiling, which was previously lexed and decoded in full and then bounded by the walk limits, is now the fixed limit line. The ceilings are separate from `limits` / `operationLimits` (traversal and aggregate scanning work) and from the core's whole-input limits (one scan); the README says how they differ.
+
 ## [0.1.3] - 2026-10-01
 ### Changed
 

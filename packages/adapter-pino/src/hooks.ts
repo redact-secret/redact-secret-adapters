@@ -38,7 +38,12 @@ import { addCounts, createOperationBudget, createOutcomeCounter, notify, toValue
 import type { LogFn, Logger } from "pino";
 
 import { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
-import { createRedactingStreamWriteWith, isReplacementLine, type RedactingStreamWrite } from "./stream-write.js";
+import {
+  createRedactingStreamWriteWith,
+  isReplacementLine,
+  type PinoLineLimits,
+  type RedactingStreamWrite,
+} from "./stream-write.js";
 
 /**
  * The hooks this package composes with. Shaped after pino 10's
@@ -92,6 +97,15 @@ export interface RedactingHooksOptions extends Omit<MaskOptions, "operation"> {
    * `operation` here throws.
    */
   readonly operation?: undefined;
+  /**
+   * Override the pre-processing ceilings `streamWrite` applies to the finished
+   * line before it lexes or decodes anything (`DEFAULT_LINE_LIMITS`): the
+   * longest line, the most value literals and the most decoded code units. A
+   * line past one is the fixed `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` line, never
+   * the original. They are not the core's input limits and not the walker's
+   * `limits`.
+   */
+  readonly lineLimits?: Partial<PinoLineLimits> | undefined;
   /**
    * The `hooks` object the application would otherwise have passed to
    * `pino()`. Its `logMethod` and `streamWrite` are composed with the

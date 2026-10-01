@@ -216,6 +216,22 @@ consequence worth naming: a host `streamWrite` receives pino's line
 copies the line elsewhere is handling plaintext even though what reaches the
 destination is masked.
 
+`streamWrite` has to lex the finished line into string values and `JSON.parse`
+each before the walker can bound anything, so it carries its own
+**pre-processing ceilings** (#174, `PinoLineLimits`): the longest line, the most
+value literals, and the most raw code units decoded, all in UTF-16 code units and
+all checked before anything proportional to the line is allocated (the line
+length first and unread, the span and decode counts as each span is found,
+before any literal is decoded). A line past one is the fixed
+`{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` line with the original's newline and is
+reported as one `limited` value with `lineReplaced: true`; a line that cannot be
+lexed stays `{"msg":"[REDACTED:ERROR]"}` and `failed`. Neither forwards the
+original, and the hook reads only the finished string, never a host
+serialization hook. These ceilings are deliberately separate from the aggregate
+budget above (which bounds the *scanning* of the values) and from the core's
+whole-input limits (which bound one scan): this one bounds the work that happens
+*before* the walker.
+
 Reporting an outcome per record (#45) rides on the same seam. The two hooks
 share a stack of in-flight records and the counter handed to the walkers is
 resolved per masking call, because this path is re-entrant in three different

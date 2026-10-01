@@ -90,7 +90,7 @@ limits:
 ## Options
 
 ```js
-await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLimits });
+await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLimits, lineLimits });
 ```
 
 | Option | What it does |
@@ -101,6 +101,7 @@ await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLim
 | `policy` | The core's policy, passed through unchanged |
 | `limits` | Override the walk limits (`DEFAULT_LIMITS` in `@redact-secret/adapter`) |
 | `operationLimits` | Override the aggregate budget of **one log record**, shared by both hooks. See below |
+| `lineLimits` | Override the pre-processing ceilings `streamWrite` applies to the finished line. See below |
 
 ### One budget per record
 
@@ -117,6 +118,41 @@ occurrence-versus-call units, the defaults and the fact that this is not a
 wall-clock timeout are in
 [`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#aggregate-operation-budget).
 The paired factory owns the unit, so it rejects a caller-owned `operation`.
+
+### Pre-processing ceilings on the final line
+
+`streamWrite` has to find the string values in the finished JSON line and decode
+them before the walker can bound anything. Without a ceiling, an oversized line,
+or one made of very many tiny literals or very long escape-heavy ones, would be
+lexed, collected into arrays and `JSON.parse`d first, and only then meet a walk
+limit. `lineLimits` is that ceiling, applied **before** anything proportional to
+the line is allocated:
+
+| Ceiling | Default | Refuses |
+| --- | --- | --- |
+| `maxLineLength` | 4194304 (4 Mi code units) | a line longer than this, checked first and unread |
+| `maxValueSpans` | 20000 | a line with more string literals that are *values* (keys are not counted), checked as each is found |
+| `maxDecodeLength` | 2097152 (2 Mi code units) | a line whose value literals, plus the key literal each sits under, total more raw code units than this to decode, checked before any is decoded |
+
+Sizes are UTF-16 code units (`string.length`), not bytes: a code-unit count is the
+one thing readable before the line is looked at. A bound met exactly is accepted,
+one more is refused. A refused line is replaced by the fixed, valid
+`{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` line (`PINO_LIMIT_LINE`) with the
+original's newline, **never** by the original line and never because a parser
+failed: `lineReplaced` is `true`, and the `limited` counter (not `failed`) counts
+it. A line that is malformed or has an unterminated string is still the fixed
+`{"msg":"[REDACTED:ERROR]"}` line (`PINO_ERROR_LINE`). The hook reads only the
+finished string and calls no serialization hook of the host's. Because redaction
+runs last, a host `streamWrite` that grows the line is measured after it grew.
+
+**How the three kinds of limit differ.** They bound different work at different
+times and are configured separately:
+
+| Kind | Bounds | When | Over the limit |
+| --- | --- | --- | --- |
+| `lineLimits` (this section) | lexing and decoding the line into the values to mask | before anything is allocated for the line | the whole line becomes the limit line |
+| `limits` / `operationLimits` | the traversal of the values (`maxDepth`, `maxTotalLeaves`, ...) and the aggregate work of one record | while the walker visits them | the value, or the rest, becomes `[REDACTED:LIMIT_EXCEEDED]` |
+| the core's whole-input limits | one `scanAndRedact` call (`maxInputBytes`, `maxFindings`, enforced by the core) | inside the core, per scan | that leaf becomes `[REDACTED:ERROR]` (a core failure) |
 
 ### Composing with your own hooks
 

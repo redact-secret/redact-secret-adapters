@@ -38,7 +38,7 @@ import { activateCore, type CoreActivation, type MaskOptions, type ScanAndRedact
 
 import { createRedactingHooksWith, type RedactingHooks, type RedactingHooksOptions } from "./hooks.js";
 import { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
-import { createRedactingStreamWriteWith, type RedactingStreamWrite } from "./stream-write.js";
+import { createRedactingStreamWriteWith, type RedactingStreamWrite, type StreamWriteOptions } from "./stream-write.js";
 
 export { formatPinoMessage } from "./format-message.js";
 export {
@@ -52,9 +52,12 @@ export {
 export { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
 export {
   createRedactingStreamWriteWith,
+  DEFAULT_LINE_LIMITS,
   PINO_ERROR_LINE,
   PINO_LIMIT_LINE,
+  type PinoLineLimits,
   type RedactingStreamWrite,
+  type StreamWriteOptions,
 } from "./stream-write.js";
 
 /** {@link RedactingHooksOptions} plus the live factory's PII activation. */
@@ -62,6 +65,9 @@ export type CreateRedactingHooksOptions = RedactingHooksOptions & CoreActivation
 
 /** {@link MaskOptions} plus the live single-hook factories' PII activation. */
 export type CreateRedactingHookOptions = MaskOptions & CoreActivation;
+
+/** {@link StreamWriteOptions} (walk options plus `lineLimits`) plus the live factory's PII activation. */
+export type CreateRedactingStreamWriteOptions = StreamWriteOptions & CoreActivation;
 
 /**
  * Reads `pii` by property, not by rest-destructuring: a property read follows
@@ -120,7 +126,7 @@ export async function createRedactingLogMethod(options: CreateRedactingHookOptio
  * {@link createRedactingHooks}.
  */
 export async function createRedactingStreamWrite(
-  options: CreateRedactingHookOptions = {},
+  options: CreateRedactingStreamWriteOptions = {},
 ): Promise<RedactingStreamWrite> {
   return createRedactingStreamWriteWith(await initializedScanner(activationOf(options)), options);
 }

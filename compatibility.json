@@ -62,7 +62,8 @@
         "packages/adapter-pino/test/vault-token.test.ts",
         "packages/adapter/test/activation-live.test.ts",
         "packages/adapter-pino/test/key-context-live.test.ts",
-        "packages/adapter-pino/test/budget.test.ts"
+        "packages/adapter-pino/test/budget.test.ts",
+        "packages/adapter-pino/test/line-limits.test.ts"
       ]
     },
     {
