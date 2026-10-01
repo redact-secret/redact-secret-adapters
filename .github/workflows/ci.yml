@@ -40,6 +40,10 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
+        if: matrix.node != '22'
+      # One leg measures statement coverage and fails below 80%.
+      - run: npm run coverage
+        if: matrix.node == '22'
 
   range-endpoints:
     # A typecheck only covers the versions that are installed, so every

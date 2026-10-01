@@ -53,6 +53,9 @@ checked in review.
   request: `packages/*/test` (Vitest) for the npm packages and `python/tests`
   (pytest) for the PyPI package. A bug fix adds a test that fails without the fix.
   A pull request that changes behavior without a test is not ready to merge.
+  New functionality is accepted only with tests that exercise it, and
+  statement coverage of `packages/*/src` must stay at or above 80%
+  (`npm run coverage`, enforced in CI).
 - **Security boundary.** Every change must hold to the
   [Security boundary](./ARCHITECTURE.md#security-boundary): the core stays side
   effect free; an adapter performs no network, filesystem, environment, or
@@ -72,8 +75,14 @@ checked in review.
 - **Changelog.** A user-visible change adds an entry under `Unreleased` in the
   affected package's `CHANGELOG.md` (`packages/<name>/CHANGELOG.md`, or
   `python/CHANGELOG.md`).
-- **License.** By contributing, you agree that your contribution is licensed
-  under the repository's [MIT License](./LICENSE).
+- **License and origin.** Contributions are licensed under the repository's
+  [MIT License](./LICENSE). By opening a pull request you certify the
+  [Developer Certificate of Origin 1.1](https://developercertificate.org/):
+  you wrote the change or otherwise have the right to submit it under that
+  license. The pull request template asks you to confirm this; a
+  `Signed-off-by` trailer is welcome but not required.
+- **Conduct.** Follow the [code of conduct](./CODE_OF_CONDUCT.md). How changes
+  are decided is described in [GOVERNANCE.md](./GOVERNANCE.md).
 
 ## Running the checks locally
 
@@ -82,6 +91,7 @@ npm ci
 npm run build
 npm run typecheck
 npm test              # Vitest
+npm run coverage      # Vitest with the 80% statement-coverage floor
 npm run lint          # Biome
 npm run compat:check
 npm run feed:check
