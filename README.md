@@ -97,7 +97,7 @@ corrected activation guidance shipped in train
 
 Every package declares `@redact-secret/core` / `redact-secret`
 `0.1.0-beta.6` or later, and none of that changes here. Core
-`0.1.0-beta.11` / `0.1.0b11` is the newest, and is what the quick starts below
+`0.1.0-beta.12` / `0.1.0b12` is the newest, and is what the quick starts below
 are verified against; `0.1.0-beta.6` is the floor, and CI runs the real-host
 tests at both. Passing `pii` to a factory needs `0.1.0-beta.10` or later, the
 release that added opt-in PII detection; everything else works at the floor.
@@ -458,7 +458,7 @@ A declared range and a qualified endpoint are different claims. The range says
 what installs; `endpoints` names the two versions CI actually installs and runs
 the real-host tests against, and the semver expression between them is **not**
 evidence that every version inside it was tested. As of 2026-09-29 the core
-endpoints are `0.1.0-beta.6` and `0.1.0-beta.11` (`0.1.0b6` and `0.1.0b11` on
+endpoints are `0.1.0-beta.6` and `0.1.0-beta.12` (`0.1.0b6` and `0.1.0b12` on
 PyPI). A newer core does not narrow
 the floor: a range is raised only when a package needs an API a lower core
 lacks, which the `published-combination` job enforces. A core version that is

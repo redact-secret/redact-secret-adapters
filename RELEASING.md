@@ -219,7 +219,7 @@ their tested endpoints, already held equal to the manifests by
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-pino",
       "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "tested": ["20", "22", "24"] },
       "core": { "name": "@redact-secret/core", "range": "^0.1.0-beta.6", "kind": "peerDependency", "optional": false,
-                "tested": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.11" } },
+                "tested": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.12" } },
       "hosts": [{ "name": "pino", "range": "^10.0.0", "kind": "peerDependency", "optional": false,
                   "tested": { "lowest": "10.0.0", "highest": "10.3.1" } }],
       "dependsOn": [{ "name": "@redact-secret/adapter", "range": "^0.1.3" }]
