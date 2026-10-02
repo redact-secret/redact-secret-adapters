@@ -1,0 +1,4 @@
+{
+  "description": "Synthetic values used by the Pino and Python logging scenarios (#194): an email address, a warn-only password-shaped value and the body of a synthetic private-key block. None is real. Scrubbed from every result string like the base sentinels.",
+  "patterns": ["jane\\.doe@acme-corp\\.io", "hunter2hunter2[A-Za-z0-9]*", "SYNTHETICREVOKEDNOTAREALKEY[A-Za-z0-9]*"]
+}

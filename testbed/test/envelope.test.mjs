@@ -131,7 +131,7 @@ test("the real node scenarios match the committed smoke IDs", async () => {
     "node",
     contract,
   );
-  assert.deepEqual([...found.keys()].sort(), [
+  assert.deepEqual([...found.keys()].filter((id) => id.startsWith("smoke.")).sort(), [
     "smoke.node-core-active",
     "smoke.node-install-isolation",
     "smoke.node-public-imports",
@@ -148,7 +148,7 @@ scrub = envelope.make_scrubber(envelope.load_sentinels(c))
 def ok(ctx, rec): rec.check("a", True, "ghp_SYNTHETICREVOKED0000"); rec.evidence["x"] = 1
 r = envelope.run_scenario({"id": "smoke.python-core-active", "title": "t", "classification": "install-check", "run": ok}, "python", {}, scrub)
 found = envelope.discover_scenarios(pathlib.Path("${fileURLToPath(new URL("../services/python-consumer/scenarios/", import.meta.url))}"), "python", c)
-print(json.dumps({"result": r, "ids": sorted(found)}))`;
+print(json.dumps({"result": r, "ids": sorted(i for i in found if i.startswith("smoke."))}))`;
   const out = JSON.parse(execFileSync("python3", ["-c", script], { encoding: "utf-8" }));
   assert.ok(validate(out.result), JSON.stringify(validate.errors));
   assert.ok(!JSON.stringify(out.result).includes("ghp_SYNTHETIC"));

@@ -1,4 +1,22 @@
 {
   "namespace": "pylog",
-  "scenarios": []
+  "scenarios": [
+    { "id": "pylog.every-handler-filtered", "host": "python" },
+    { "id": "pylog.exceptions-and-extras", "host": "python" },
+    { "id": "pylog.propagation", "host": "python" },
+    { "id": "pylog.negative-controls", "host": "python" },
+    { "id": "pylog.policy-warn", "host": "python" },
+    { "id": "pylog.policy-block", "host": "python" },
+    { "id": "pylog.policy-explicit", "host": "python" },
+    { "id": "pylog.limits-string", "host": "python" },
+    { "id": "pylog.limits-record-budget", "host": "python" },
+    { "id": "pylog.injected-scanner-failure", "host": "python" },
+    { "id": "pylog.bad-format-args", "host": "python" },
+    { "id": "pylog.pii-default", "host": "python" },
+    { "id": "pylog.pii-global", "host": "python" },
+    { "id": "pylog.pii-explicit-policy", "host": "python" },
+    { "id": "pylog.pii-adapter-first", "host": "python" },
+    { "id": "pylog.pii-conflict", "host": "python" },
+    { "id": "pylog.bounded-capture", "host": "python" }
+  ]
 }
