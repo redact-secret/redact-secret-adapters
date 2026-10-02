@@ -299,6 +299,9 @@ from a secret, no score. The fields are `FINDING_OCCURRENCE_FIELDS`.
 
 ### Outcomes
 
+What to check and the smallest safe fix for each row:
+[troubleshooting](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/troubleshooting.md#ai-context-and-mcp-outcomes).
+
 | Cause | Outcome |
 | --- | --- |
 | Any finding whose resolved action is `block` | `blocked` / `policy` |

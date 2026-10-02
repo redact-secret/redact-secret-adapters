@@ -87,7 +87,9 @@ real pino logger and includes unprotected paths as negative controls.
 When something cannot be scanned, a fixed marker is written instead of the
 text: `[REDACTED:BLOCKED]` for a `block` finding, `[REDACTED:ERROR]` for any
 core failure. A line that cannot be parsed fails closed to
-`{"msg":"[REDACTED:ERROR]"}` (exported as `PINO_ERROR_LINE`). All markers and
+`{"msg":"[REDACTED:ERROR]"}` (exported as `PINO_ERROR_LINE`). What to check and how to correct each marker:
+[troubleshooting](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/troubleshooting.md#logs-and-spans-markers).
+All markers and
 limits:
 [`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#fail-closed-markers).
 

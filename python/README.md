@@ -325,7 +325,8 @@ message:
 ## Fail-closed markers
 
 When something goes wrong, a fixed marker is written instead of the original
-text.
+text. What each one means and how to correct it:
+[troubleshooting](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/troubleshooting.md#logs-and-spans-markers).
 
 | Marker | When |
 | --- | --- |

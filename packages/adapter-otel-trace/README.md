@@ -100,6 +100,9 @@ for the markers.
 
 ### A span that cannot be redacted is dropped
 
+(Other markers and limits, and what to do about each:
+[troubleshooting](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/troubleshooting.md#logs-and-spans-markers).)
+
 `ReadableSpan`'s fields are typed `readonly` but are plain writable objects at
 runtime, and this processor writes the masked values back in place. Every
 write is read back. If one does not take (for example, an earlier processor

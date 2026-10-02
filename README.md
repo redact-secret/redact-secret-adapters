@@ -209,6 +209,11 @@ and change only in a major version.
 The AI-context and MCP packages do not use markers. They return an outcome
 (`ok`, `blocked`, `aborted`) and give you no value unless it is `ok`.
 
+Each marker and outcome has a cause and a smallest safe correction, with the
+differences between the kinds of limit:
+[troubleshooting](./docs/troubleshooting.md#logs-and-spans-markers) (markers) and
+[outcomes](./docs/troubleshooting.md#ai-context-and-mcp-outcomes).
+
 Size limits (`DEFAULT_LIMITS`, overridable per call; snake case in Python):
 
 | Limit | Default |
@@ -330,6 +335,8 @@ pull request needs.
 | --- | --- |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | How the adapters are layered, the security boundary, what is deliberately excluded, and how they compose with [`@redact-secret/vault`](./ARCHITECTURE.md#the-vault-boundary) |
 | [docs/compatibility.md](./docs/compatibility.md) | Tested host and core versions, and combinations that are not claimed |
+| [docs/troubleshooting.md](./docs/troubleshooting.md) | What each marker and outcome means, and the smallest safe fix |
+| [examples/](./examples) | Runnable quickstarts, placement checks and a credential-versus-PII comparison |
 | [docs/pii.md](./docs/pii.md) | Turning on PII detection, and what it does not do |
 | [docs/performance.md](./docs/performance.md) | Measuring overhead and package footprint |
 | [RELEASING.md](./RELEASING.md) | Branches, release trains, how a version is published |

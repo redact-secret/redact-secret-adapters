@@ -96,7 +96,9 @@ walk itself never throws.
 
 ## Fail-closed markers
 
-Public API. They change only in a major version.
+Public API. They change only in a major version. For what to check and how to
+correct each one, see
+[troubleshooting](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/troubleshooting.md#logs-and-spans-markers).
 
 | Marker | When |
 | --- | --- |
