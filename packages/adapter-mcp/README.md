@@ -284,6 +284,9 @@ How each operation maps onto the AI-context boundary:
 
 ## Outcomes and fixed results
 
+What each `blocked` reason means and how to correct it:
+[troubleshooting](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/troubleshooting.md#ai-context-and-mcp-outcomes).
+
 | Outcome | Delivered by `toCallToolResult` |
 | --- | --- |
 | `ok` | the sanitized value, and nothing else |

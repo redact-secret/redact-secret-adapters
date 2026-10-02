@@ -265,6 +265,9 @@ jobs:
       # committed site-feed/v1/adapters.json is not what the manifests and
       # compatibility.json generate, or does not match its schema.
       - run: npm run feed:check
+      # #181: README snippets equal the executable example sources, and the
+      # example manifests pin exact released versions.
+      - run: npm run examples:check
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
@@ -273,6 +276,33 @@ jobs:
       - run: ruff format --check python
       - run: ruff check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py scripts/install-overhead-baseline.py
       - run: ruff format --check --config python/pyproject.toml scripts/install-range-endpoint.py scripts/smoke-test-python-wheel.py scripts/measure-overhead.py scripts/overhead_workloads.py scripts/install-overhead-baseline.py
+      - run: ruff check --config python/pyproject.toml examples
+      - run: ruff format --check --config python/pyproject.toml examples
+
+  examples:
+    # #181, #183, #184: the standalone consumer examples, each copied to a fresh
+    # directory outside the checkout and installed from the registry at its
+    # pinned released versions (no workspace links, no repository build), then
+    # run. The output must equal the expected output in the example's README.
+    name: Examples (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22", "24"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: npm run examples:run
 
   overhead-harness:
     # The adapter-overhead harnesses (#11) and the footprint harness (package
@@ -385,6 +415,7 @@ jobs:
       - python-wheel-smoke
       - python-range-endpoints
       - lint
+      - examples
       - overhead-harness
       - bench-image
     runs-on: ubuntu-latest
