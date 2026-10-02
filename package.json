@@ -40,6 +40,8 @@
     "footprint": "node scripts/measure-footprint.mjs",
     "bench:docker": "node scripts/bench-docker.mjs",
     "feed:generate": "node scripts/generate-site-feed.mjs",
+    "examples:check": "node scripts/check-examples.mjs",
+    "examples:run": "node scripts/check-examples.mjs --run",
     "feed:check": "node scripts/generate-site-feed.mjs --check"
   },
   "devDependencies": {

@@ -26,7 +26,7 @@ and carry its answer back out.
 | I want to protect | Install | Guide |
 | --- | --- | --- |
 | [pino](#pino) log lines | `npm i @redact-secret/core @redact-secret/adapter-pino pino` | [adapter-pino](./packages/adapter-pino#readme) |
-| [OpenTelemetry JS](#opentelemetry-traces-javascript) spans | `npm i @redact-secret/core @redact-secret/adapter-otel-trace @opentelemetry/sdk-trace-base` | [adapter-otel-trace](./packages/adapter-otel-trace#readme) |
+| [OpenTelemetry JS](#opentelemetry-traces-javascript) spans | `npm i @redact-secret/core @redact-secret/adapter-otel-trace @opentelemetry/sdk-trace-base` (the snippet below uses only this) | [adapter-otel-trace](./packages/adapter-otel-trace#readme) |
 | [Python `logging`](#python-logging) records | `pip install redact-secret redact-secret-adapters` | [python](./python#readme) |
 | [OpenTelemetry Python](#opentelemetry-traces-python) spans | `pip install redact-secret "redact-secret-adapters[otel]"` | [python](./python#opentelemetry-otel-extra) |
 | [AI context](#ai-context): user input, tool results, streamed text | `npm i @redact-secret/core @redact-secret/adapter-ai-context` | [adapter-ai-context](./packages/adapter-ai-context#readme) |
@@ -54,19 +54,29 @@ repository but is **not published** and cannot be installed from npm yet;
 ## Quick start
 
 Find your host, copy the block, done. The values in these examples are
-synthetic.
+synthetic. The pino, Python `logging` and AI-context blocks are the exact source
+of a complete project in [`examples/`](./examples) that installs the released
+packages from the registry and checks its own output: run one from an empty
+directory with the steps in [examples/README.md](./examples#run-one). CI runs
+them, and fails if a block here drifts from its source.
 
 ### pino
 
+<!-- snippet: examples/pino/app.mjs -->
 ```js
-import pino from "pino";
 import { createRedactingHooks } from "@redact-secret/adapter-pino";
+import pino from "pino";
 
-const logger = pino({ hooks: await createRedactingHooks() });
+// Synthetic, revoked-shaped value only. Never put a real credential in an example.
+const token = "ghp_SYNTHETICREVOKED00000000000000000000";
+
+const logger = pino({ base: null, timestamp: false, hooks: await createRedactingHooks() });
 
 logger.child({ session: token }).info("deploy with token %s", token);
-// {"level":30,…,"session":"<SECRET_1>","msg":"deploy with token <SECRET_1>"}
 ```
+
+Prints `{"level":30,"session":"<SECRET_1>","msg":"deploy with token <SECRET_1>"}`.
+Runnable: [`examples/pino`](./examples/pino).
 
 Messages, merged objects, errors, child bindings and `mixin()` output are all
 covered. pino's own `redact` option still works alongside it.
@@ -75,10 +85,11 @@ covered. pino's own `redact` option still works alongside it.
 ### OpenTelemetry traces (JavaScript)
 
 ```js
-import { NodeTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-node";
+import { BasicTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel-trace";
 
-const provider = new NodeTracerProvider({
+// `exporter` is the span exporter you already use.
+const provider = new BasicTracerProvider({
   spanProcessors: [await createRedactingSpanProcessor(new BatchSpanProcessor(exporter))],
 });
 ```
@@ -89,17 +100,23 @@ the status message are redacted before export.
 
 ### Python `logging`
 
+<!-- snippet: examples/python-logging/app.py -->
 ```python
 import logging
+
 from redact_secret_adapters.logging_filter import RedactSecretFilter
+
+# Synthetic, revoked-shaped value only. Never put a real credential in an example.
+token = "ghp_SYNTHETICREVOKED00000000000000000000"
 
 handler = logging.StreamHandler()
 handler.addFilter(RedactSecretFilter())  # on the handler, not the logger
 logging.getLogger().addHandler(handler)
 
 logging.warning("deploy with token %s", token)
-# deploy with token <SECRET_1>
 ```
+
+Prints `deploy with token <SECRET_1>`. Runnable: [`examples/python-logging`](./examples/python-logging).
 
 Add the filter to **every handler** that writes somewhere. A handler without
 it writes plaintext. [Full guide](./python#readme).
@@ -119,8 +136,13 @@ provider.add_span_processor(create_redacting_span_processor(BatchSpanProcessor(e
 
 ### AI context
 
+<!-- snippet: examples/ai-context/app.mjs -->
 ```js
 import { createAiContextBoundary } from "@redact-secret/adapter-ai-context";
+
+// Synthetic, revoked-shaped values only. Never put a real credential in an example.
+const userText = "deploy with API_KEY=ghp_SYNTHETICREVOKED00000000000000000000";
+const toolResult = { content: [{ type: "text", text: "build ok" }], exitCode: 0 };
 
 const boundary = await createAiContextBoundary();
 const context = boundary.buildContext([
@@ -128,12 +150,18 @@ const context = boundary.buildContext([
   { role: "tool", boundary: "tool-result", value: toolResult },
 ]);
 
-if (context.outcome === "ok") callModel(context.value);
-// otherwise nothing of the input is returned
+if (context.outcome !== "ok") {
+  // `reason` and `code` are fixed labels, safe to log. There is no value to use.
+  throw new Error(`context refused: ${context.outcome} ${context.reason ?? ""}`);
+}
+
+// context.value is the only thing that may go to a model. This example prints it instead of calling one.
+console.log(JSON.stringify(context.value));
 ```
 
 Call it where your code builds the prompt. The result is `ok` with a sanitized
-value, or `blocked` / `aborted` with no value at all.
+value, or `blocked` / `aborted` with no value at all. No model is called in the
+example. Runnable: [`examples/ai-context`](./examples/ai-context).
 [Full guide](./packages/adapter-ai-context#readme).
 
 ### MCP

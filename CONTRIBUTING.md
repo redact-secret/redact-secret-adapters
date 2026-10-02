@@ -43,6 +43,7 @@ packages/
   adapter-mcp/          MCP boundary, built on adapter-ai-context
 python/                 the PyPI package: logging filter, OpenTelemetry, walker
 fixtures/               test cases shared by the TypeScript and Python suites
+examples/               standalone consumer projects that install released packages
 scripts/                smoke tests, compatibility checks, benchmarks
 docs/                   compatibility, PII, performance, decisions
 ```
@@ -76,6 +77,9 @@ change to how an adapter behaves; you can skip it for docs and small fixes.
    npm run lint                           # Biome
    npm run typecheck
    ```
+
+   Touched a README snippet or an example: `npm run examples:check` (offline),
+   and `npm run examples:run` to install and run them from the registry.
 
    For Python: `pytest`, `ruff check python` and `ruff format python`
    (`pip install ruff`).
