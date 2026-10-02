@@ -131,7 +131,7 @@ test("the real node scenarios match the committed smoke IDs", async () => {
     "node",
     contract,
   );
-  assert.deepEqual([...found.keys()].sort(), [
+  assert.deepEqual([...found.keys()].filter((id) => id.startsWith("smoke.")).sort(), [
     "smoke.node-core-active",
     "smoke.node-install-isolation",
     "smoke.node-public-imports",

@@ -109,7 +109,8 @@ function exec(cmd, args, { env = {}, quiet = false } = {}) {
 
 function pinnedImages() {
   const out = {};
-  for (const f of ["node-consumer", "python-consumer", "runner", "ui"]) {
+  for (const f of readdirSync(join(testbedDir, "services"))) {
+    if (!existsSync(join(testbedDir, "services", f, "Dockerfile"))) continue;
     const text = readFileSync(join(testbedDir, "services", f, "Dockerfile"), "utf-8");
     const m = /^ARG (?:NODE|PYTHON|PLAYWRIGHT)_IMAGE=(\S+)/m.exec(text);
     if (m) out[f] = m[1];
@@ -272,16 +273,8 @@ async function main() {
     // 3. Start services with a bounded readiness wait.
     console.log(`== start services (wait <= ${opts.waitTimeout}s)`);
     if (
-      (await compose(
-        "up",
-        "-d",
-        "--wait",
-        "--wait-timeout",
-        String(opts.waitTimeout),
-        "ui",
-        "node-consumer",
-        "python-consumer",
-      )) !== 0
+      // No service names: every default-profile service, including the fragments' (browser consumer, #195).
+      (await compose("up", "-d", "--wait", "--wait-timeout", String(opts.waitTimeout))) !== 0
     ) {
       console.error("services did not become healthy; last logs:");
       await compose("logs", "--no-color", "--tail", "40");
@@ -323,13 +316,24 @@ function summarize(outDir, provenance, exitCode) {
     node: artifactOf("smoke.node-core-active"),
     python: artifactOf("smoke.python-core-active"),
   };
+  let browserLane = null;
+  try {
+    // Written by the Playwright browser lane (#195): supported/pass | blocked-by-packaging | failed.
+    browserLane = JSON.parse(readFileSync(join(outDir, "reports", "browser-lane.json"), "utf-8"));
+  } catch {
+    // no browser lane report: reported as absent, never as passed
+  }
   const report = {
     schema: "redact-secret-adapters/testbed-report-v1",
     runId: provenance.runId,
     mode: provenance.mode,
     exitCode,
     scenarios,
+    browserLane,
   };
+  if (browserLane) provenance.runtimeArtifact.browser = browserLane.runtime?.piiOff?.artifact ?? null;
+  if (browserLane) provenance.browserLane = { status: browserLane.status, provenance: browserLane.provenance ?? null };
+  console.log(`browser lane: ${browserLane ? browserLane.status : "NOT REPORTED (failed)"}`);
   writeFileSync(join(outDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   writeFileSync(join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
   console.log(`\nreports: ${outDir}\n  provenance.json  report.json  reports/`);

@@ -1,4 +1,29 @@
 {
   "namespace": "browser",
-  "scenarios": []
+  "scenarios": [
+    {
+      "id": "browser.packaging-evidence",
+      "host": "browser"
+    },
+    {
+      "id": "browser.wasm-pii-off",
+      "host": "browser"
+    },
+    {
+      "id": "browser.wasm-pii-on",
+      "host": "browser"
+    },
+    {
+      "id": "browser.context-isolation",
+      "host": "browser"
+    },
+    {
+      "id": "browser.server-parity",
+      "host": "browser"
+    },
+    {
+      "id": "browser.no-external-network",
+      "host": "browser"
+    }
+  ]
 }
