@@ -90,9 +90,9 @@ Attribute names are not allowlisted, so OpenInference (`llm.input_messages`,
 …) are covered without hardcoding either convention.
 
 **This is a trace processor only.** A `LogRecord` never passes through it and
-reaches its exporter as it was written. There is no OpenTelemetry Logs adapter
-yet; `@redact-secret/adapter-otel-logs` is a reserved name for one, not a
-package.
+reaches its exporter as it was written. For logs use
+[`@redact-secret/adapter-otel-logs`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-otel-logs),
+a separate package currently published as a beta (`0.1.0-beta.2`, dist-tag `beta`).
 
 When a value cannot be scanned, a fixed marker replaces it. See
 [`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#fail-closed-markers)

@@ -4,12 +4,14 @@ Keep secrets out of OpenTelemetry **logs**. Wrap the log record processor you
 already have, and each log record's body, severity text, event name and
 attribute values are redacted before they reach your exporter.
 
-> **Status: not published yet.** This package is on `develop` and marked
-> `"private": true`, so there is nothing to `npm install` and no version on
-> npm. Until a release, the only way to use it is to build it from this
-> repository. Nothing in this README is a promise about a release date.
+> **Status: beta.** `0.1.0-beta.2` is on npm under the dist-tag `beta`
+> (`npm install @redact-secret/adapter-otel-logs@beta`). It depends on
+> `@redact-secret/adapter` `^0.1.7`, which is not on npm yet and publishes in
+> the next release train, so the install fails to resolve until then. The
+> qualification below is unchanged from before publishing; a beta carries no
+> stability promise. Nothing in this README is a promise about a release date.
 > `@redact-secret/adapter-otel-trace` does **not** cover logs and never did;
-> this is the package that will.
+> this is the package that does.
 
 Built on the [Redact Secret](https://github.com/redact-secret/redact-secret)
 core, which does the detection.

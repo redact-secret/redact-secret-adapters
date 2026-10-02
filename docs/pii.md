@@ -68,7 +68,7 @@ application, as above.
 - **A factory given `pii` checks that it took effect.** It reads the core's
   `piiActivation()` afterwards and refuses if the active selection is not the
   one you asked for, instead of running with PII silently off.
-  - `adapter-pino`, `adapter-otel-trace` and `adapter-otel-logs` (unreleased)
+  - `adapter-pino`, `adapter-otel-trace` and `adapter-otel-logs` (beta)
     reject, with a fixed code:
     `PII_ACTIVATION_NOT_ACTIVE`, or `PII_ACTIVATION_UNSUPPORTED` against a core
     too old to report an activation.

@@ -33,6 +33,8 @@ on:
         value: ${{ jobs.plan.outputs.publish_adapter_otel_trace }}
       publish_adapter_otel:
         value: ${{ jobs.plan.outputs.publish_adapter_otel }}
+      publish_adapter_otel_logs:
+        value: ${{ jobs.plan.outputs.publish_adapter_otel_logs }}
       publish_adapter_ai_context:
         value: ${{ jobs.plan.outputs.publish_adapter_ai_context }}
       publish_adapter_mcp:
@@ -55,6 +57,10 @@ on:
         value: ${{ jobs.plan.outputs.adapter_otel_version }}
       adapter_otel_dist_tag:
         value: ${{ jobs.plan.outputs.adapter_otel_dist_tag }}
+      adapter_otel_logs_version:
+        value: ${{ jobs.plan.outputs.adapter_otel_logs_version }}
+      adapter_otel_logs_dist_tag:
+        value: ${{ jobs.plan.outputs.adapter_otel_logs_dist_tag }}
       adapter_ai_context_version:
         value: ${{ jobs.plan.outputs.adapter_ai_context_version }}
       adapter_ai_context_dist_tag:
@@ -80,6 +86,7 @@ jobs:
       publish_adapter_pino: ${{ steps.plan.outputs.publish_adapter_pino }}
       publish_adapter_otel_trace: ${{ steps.plan.outputs.publish_adapter_otel_trace }}
       publish_adapter_otel: ${{ steps.plan.outputs.publish_adapter_otel }}
+      publish_adapter_otel_logs: ${{ steps.plan.outputs.publish_adapter_otel_logs }}
       publish_adapter_ai_context: ${{ steps.plan.outputs.publish_adapter_ai_context }}
       publish_adapter_mcp: ${{ steps.plan.outputs.publish_adapter_mcp }}
       publish_python: ${{ steps.plan.outputs.publish_python }}
@@ -91,6 +98,8 @@ jobs:
       adapter_otel_trace_dist_tag: ${{ steps.plan.outputs.adapter_otel_trace_dist_tag }}
       adapter_otel_version: ${{ steps.plan.outputs.adapter_otel_version }}
       adapter_otel_dist_tag: ${{ steps.plan.outputs.adapter_otel_dist_tag }}
+      adapter_otel_logs_version: ${{ steps.plan.outputs.adapter_otel_logs_version }}
+      adapter_otel_logs_dist_tag: ${{ steps.plan.outputs.adapter_otel_logs_dist_tag }}
       adapter_ai_context_version: ${{ steps.plan.outputs.adapter_ai_context_version }}
       adapter_ai_context_dist_tag: ${{ steps.plan.outputs.adapter_ai_context_dist_tag }}
       adapter_mcp_version: ${{ steps.plan.outputs.adapter_mcp_version }}
@@ -126,6 +135,7 @@ jobs:
       needs.plan.outputs.publish_adapter_pino == 'true' ||
       needs.plan.outputs.publish_adapter_otel_trace == 'true' ||
       needs.plan.outputs.publish_adapter_otel == 'true' ||
+      needs.plan.outputs.publish_adapter_otel_logs == 'true' ||
       needs.plan.outputs.publish_adapter_ai_context == 'true' ||
       needs.plan.outputs.publish_adapter_mcp == 'true'
     runs-on: ubuntu-latest
@@ -161,6 +171,7 @@ jobs:
           PINO: ${{ needs.plan.outputs.publish_adapter_pino }}
           OTEL_TRACE: ${{ needs.plan.outputs.publish_adapter_otel_trace }}
           OTEL: ${{ needs.plan.outputs.publish_adapter_otel }}
+          OTEL_LOGS: ${{ needs.plan.outputs.publish_adapter_otel_logs }}
           AI_CONTEXT: ${{ needs.plan.outputs.publish_adapter_ai_context }}
           MCP: ${{ needs.plan.outputs.publish_adapter_mcp }}
           # The dist-tag each publish job passes as --tag (release-plan.mjs):
@@ -169,6 +180,7 @@ jobs:
           PINO_TAG: ${{ needs.plan.outputs.adapter_pino_dist_tag }}
           OTEL_TRACE_TAG: ${{ needs.plan.outputs.adapter_otel_trace_dist_tag }}
           OTEL_TAG: ${{ needs.plan.outputs.adapter_otel_dist_tag }}
+          OTEL_LOGS_TAG: ${{ needs.plan.outputs.adapter_otel_logs_dist_tag }}
           AI_CONTEXT_TAG: ${{ needs.plan.outputs.adapter_ai_context_dist_tag }}
           MCP_TAG: ${{ needs.plan.outputs.adapter_mcp_dist_tag }}
         run: |
@@ -177,6 +189,7 @@ jobs:
           [ "$PINO" = "true" ] && npm publish --workspace @redact-secret/adapter-pino --access public --tag "$PINO_TAG" --dry-run
           [ "$OTEL_TRACE" = "true" ] && npm publish --workspace @redact-secret/adapter-otel-trace --access public --tag "$OTEL_TRACE_TAG" --dry-run
           [ "$OTEL" = "true" ] && npm publish --workspace @redact-secret/adapter-otel --access public --tag "$OTEL_TAG" --dry-run
+          [ "$OTEL_LOGS" = "true" ] && npm publish --workspace @redact-secret/adapter-otel-logs --access public --tag "$OTEL_LOGS_TAG" --dry-run
           [ "$AI_CONTEXT" = "true" ] && npm publish --workspace @redact-secret/adapter-ai-context --access public --tag "$AI_CONTEXT_TAG" --dry-run
           [ "$MCP" = "true" ] && npm publish --workspace @redact-secret/adapter-mcp --access public --tag "$MCP_TAG" --dry-run
           true

@@ -10,14 +10,15 @@ A change to the range this package declares against
 entry, naming the test that backs the new range, never folded into a generic
 "bump dependency" line.
 
-This package is **not released**: its manifest says `"private": true` and it
-is absent from the release plan (`scripts/release-plan.mjs`), so no train
-publishes it. [RELEASING.md](../../RELEASING.md#a-brand-new-npm-package)
-describes how it is wired in. When it is, move this section's `Unreleased`
-entries under a new `## [x.y.z] - YYYY-MM-DD` heading matching the version in
-`package.json`.
+`0.1.0-beta.2` was published to npm by hand (dist-tag `beta`) and the package
+is in the release plan (`scripts/release-plan.mjs`), so the next train tags it
+without republishing it. It depends on `@redact-secret/adapter` `^0.1.7`, which
+publishes in that train. See
+[RELEASING.md](../../RELEASING.md#a-brand-new-npm-package).
 
 ## [Unreleased]
+
+## [0.1.0-beta.2] - 2026-10-02
 
 ### Added
 

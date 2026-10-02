@@ -44,11 +44,12 @@ Current versions:
 [![adapter-mcp](https://img.shields.io/npm/v/@redact-secret/adapter-mcp?label=adapter-mcp)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
 [![redact-secret-adapters](https://img.shields.io/pypi/v/redact-secret-adapters?label=redact-secret-adapters%20%28PyPI%29)](https://pypi.org/project/redact-secret-adapters/)
 
-Not covered by anything you can install today: OpenTelemetry **Logs** and
-metrics, and model output. A Logs adapter,
-[`adapter-otel-logs`](./packages/adapter-otel-logs#readme), is in this
-repository but is **not published** and cannot be installed from npm yet;
-`adapter-otel-trace` never covers logs. `@redact-secret/adapter-otel` is the deprecated old name of
+Not covered by anything you can install today: OpenTelemetry metrics and model
+output. A Logs adapter,
+[`adapter-otel-logs`](./packages/adapter-otel-logs#readme), is published as
+`0.1.0-beta.2` under the npm dist-tag `beta`; it depends on
+`@redact-secret/adapter` `^0.1.7`, which ships in the next release train, so it
+does not install from npm until then. `adapter-otel-trace` never covers logs. `@redact-secret/adapter-otel` is the deprecated old name of
 `adapter-otel-trace`; existing imports keep working.
 
 ## Quick start

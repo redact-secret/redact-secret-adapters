@@ -9,6 +9,7 @@
     "packages/adapter-pino/package.json",
     "packages/adapter-otel-trace/package.json",
     "packages/adapter-otel/package.json",
+    "packages/adapter-otel-logs/package.json",
     "packages/adapter-ai-context/package.json",
     "packages/adapter-mcp/package.json",
     "python/pyproject.toml"
@@ -187,6 +188,54 @@
         {
           "name": "@redact-secret/adapter-otel-trace",
           "range": "^0.1.2"
+        }
+      ]
+    },
+    {
+      "id": "adapter-otel-logs",
+      "ecosystem": "npm",
+      "name": "@redact-secret/adapter-otel-logs",
+      "version": "0.1.0-beta.2",
+      "channel": "beta",
+      "prerelease": true,
+      "gitTag": "adapter-otel-logs@0.1.0-beta.2",
+      "sourcePath": "packages/adapter-otel-logs",
+      "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-otel-logs",
+      "runtime": {
+        "name": "node",
+        "range": "20.x || 22.x || 24.x",
+        "tested": [
+          "20",
+          "22",
+          "24"
+        ]
+      },
+      "core": {
+        "name": "@redact-secret/core",
+        "range": "^0.1.0-beta.6",
+        "kind": "peerDependency",
+        "optional": false,
+        "tested": {
+          "lowest": "0.1.0-beta.6",
+          "highest": "0.1.0-beta.12"
+        }
+      },
+      "hosts": [
+        {
+          "name": "@opentelemetry/sdk-logs",
+          "range": ">=0.200.0 <=0.222.0",
+          "kind": "peerDependency",
+          "optional": false,
+          "tested": {
+            "lowest": "0.200.0",
+            "highest": "0.222.0"
+          }
+        }
+      ],
+      "dependsOn": [
+        {
+          "name": "@redact-secret/adapter",
+          "range": "^0.1.7"
         }
       ]
     },
