@@ -1,0 +1,6 @@
+{
+  "description": "pip install set for the Python consumer. The adapter wheel is built from python/ (candidate) or installed by pinned version (published). 'core' and 'hosts' map a distribution to an exact version; '@examples' reads examples/python-logging/requirements.txt (#181).",
+  "adapter": "redact-secret-adapters",
+  "core": { "redact-secret": "@examples" },
+  "hosts": {}
+}

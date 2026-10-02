@@ -1,0 +1,4 @@
+{
+  "description": "Regular expressions (JavaScript and Python compatible) for the fixed synthetic sentinels. Any of these appearing in a result string is replaced by a marker before the result leaves a consumer, so a failing scenario can never echo a sentinel. Add a file here for a new sentinel family; do not edit this one.",
+  "patterns": ["ghp_SYNTHETIC[A-Za-z0-9_]*", "SYNTHETIC[-_]?SENTINEL[A-Za-z0-9_-]*"]
+}

@@ -1,0 +1,57 @@
+{
+  "namespace": "aictx",
+  "scenarios": [
+    {
+      "id": "aictx.text-and-value-ok",
+      "host": "node"
+    },
+    {
+      "id": "aictx.build-context-parts",
+      "host": "node"
+    },
+    {
+      "id": "aictx.policy-warn-block",
+      "host": "node"
+    },
+    {
+      "id": "aictx.limits",
+      "host": "node"
+    },
+    {
+      "id": "aictx.unsupported-values",
+      "host": "node"
+    },
+    {
+      "id": "aictx.aborted",
+      "host": "node"
+    },
+    {
+      "id": "aictx.init-failure",
+      "host": "node"
+    },
+    {
+      "id": "aictx.stream-lifecycle",
+      "host": "node"
+    },
+    {
+      "id": "aictx.stream-producer-shutdown",
+      "host": "node"
+    },
+    {
+      "id": "aictx.downstream-forwarding",
+      "host": "node"
+    },
+    {
+      "id": "aictx.pii-isolated-processes",
+      "host": "node"
+    },
+    {
+      "id": "aictx.shared-baseline",
+      "host": "node"
+    },
+    {
+      "id": "aictx.candidate-features",
+      "host": "node"
+    }
+  ]
+}

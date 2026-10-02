@@ -1,0 +1,6 @@
+{
+  "description": "npm install set for the Node consumer. 'adapters' are workspace directory names under packages/ (packed in candidate mode, installed by name in published mode). 'hosts' map a package to an exact version; '@examples' reads the pin from the examples/*/package.json manifests (#181) so the testbed and the examples cannot disagree. Add a fragment file for more packages; do not edit this one.",
+  "adapters": ["adapter", "adapter-pino", "adapter-ai-context"],
+  "core": "@examples",
+  "hosts": { "pino": "@examples" }
+}

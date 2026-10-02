@@ -1,0 +1,23 @@
+{
+  "namespace": "pino",
+  "scenarios": [
+    { "id": "pino.paired-hooks-final-bytes", "host": "node" },
+    { "id": "pino.structured-and-serializers", "host": "node" },
+    { "id": "pino.host-hooks-composed", "host": "node" },
+    { "id": "pino.negative-controls", "host": "node" },
+    { "id": "pino.policy-warn", "host": "node" },
+    { "id": "pino.policy-block", "host": "node" },
+    { "id": "pino.policy-explicit", "host": "node" },
+    { "id": "pino.limits-walk", "host": "node" },
+    { "id": "pino.limits-record-budget", "host": "node" },
+    { "id": "pino.limits-line-ceiling", "host": "node" },
+    { "id": "pino.key-aware", "host": "node" },
+    { "id": "pino.injected-scanner-failure", "host": "node" },
+    { "id": "pino.invalid-line-fails-closed", "host": "node" },
+    { "id": "pino.pii-default", "host": "node" },
+    { "id": "pino.pii-global", "host": "node" },
+    { "id": "pino.pii-explicit-policy", "host": "node" },
+    { "id": "pino.pii-conflict", "host": "node" },
+    { "id": "pino.bounded-capture", "host": "node" }
+  ]
+}

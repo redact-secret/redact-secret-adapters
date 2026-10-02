@@ -1,0 +1,10 @@
+{
+  "description": "Synthetic values used by the AI-context server and browser lanes (#195) that are not ghp_SYNTHETIC tokens: the PII address, the PEM body, the key-aware example values, the warn-only value. None is real. Any of them in a result string is replaced by a marker, so a failing scenario can never echo one.",
+  "patterns": [
+    "jane\\.doe@acme-corp\\.io",
+    "U1lOVEhFVElDX1JFVk9LRURfQ09ORk9STUFOQ0U=",
+    "synthetic-example-value-0001",
+    "hunter2hunter2",
+    "한국어-가짜-비밀번호-1234"
+  ]
+}

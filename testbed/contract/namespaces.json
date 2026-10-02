@@ -1,0 +1,20 @@
+{
+  "schema": "redact-secret-adapters/testbed-namespaces-v1",
+  "description": "Fixed scenario-ID namespaces. A scenario ID is '<namespace>.<kebab-name>'. Each namespace has ONE owner and ONE committed ID list in contract/ids/<namespace>.json, so parallel work adds scenarios in separate files. A scenario module may only define IDs in a namespace that is allowed for its host.",
+  "namespaces": {
+    "smoke": {
+      "hosts": ["node", "python"],
+      "owner": "#192/#193",
+      "description": "service health, install isolation, public imports, core active"
+    },
+    "pino": { "hosts": ["node"], "owner": "#194", "description": "pino logging through the final destination" },
+    "pylog": { "hosts": ["python"], "owner": "#194", "description": "Python logging through the final handler output" },
+    "aictx": { "hosts": ["node"], "owner": "#195", "description": "AI-context server-side boundary" },
+    "browser": {
+      "hosts": ["browser"],
+      "owner": "#195/#196",
+      "description": "bundled browser/WASM consumer and Playwright journeys"
+    },
+    "ui": { "hosts": ["browser"], "owner": "#196", "description": "scenario UI journeys" }
+  }
+}
