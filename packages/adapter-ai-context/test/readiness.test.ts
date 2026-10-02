@@ -92,7 +92,13 @@ test("success without pii: an application's own activation is accepted and repor
 
 test("a core that reports no activation is ready without one", async () => {
   core.hasIdentity = false;
-  expect(await checkAiContextReady()).toEqual({ ready: true, status: "ready", core: "ok", pii: "skipped", probe: "ok" });
+  expect(await checkAiContextReady()).toEqual({
+    ready: true,
+    status: "ready",
+    core: "ok",
+    pii: "skipped",
+    probe: "ok",
+  });
 });
 
 test("an activation identity outside the documented shape is not reported", async () => {
@@ -105,7 +111,13 @@ test("an activation identity outside the documented shape is not reported", asyn
 test("initialization failure: fixed status, no exception text", async () => {
   core.initializeError = () => Object.assign(new Error(SENTINEL), { code: "INITIALIZATION_FAILED" });
   const outcome = await checkAiContextReady();
-  expect(outcome).toEqual({ ready: false, status: "initialization_failed", core: "failed", pii: "skipped", probe: "skipped" });
+  expect(outcome).toEqual({
+    ready: false,
+    status: "initialization_failed",
+    core: "failed",
+    pii: "skipped",
+    probe: "skipped",
+  });
   expect(leaks(outcome)).toBe(false);
   expect(core.scans).toEqual([]);
 });
@@ -163,7 +175,17 @@ test("a probe the core cannot scan, or leaves in plaintext, is not ready", async
 });
 
 test("malformed options are a fixed status and never touch the core", async () => {
-  for (const options of [null, "x", { pii: "pii:global" }, { pii: [1] }, { get pii(): never { throw new Error(SENTINEL); } }]) {
+  for (const options of [
+    null,
+    "x",
+    { pii: "pii:global" },
+    { pii: [1] },
+    {
+      get pii(): never {
+        throw new Error(SENTINEL);
+      },
+    },
+  ]) {
     const outcome = await checkAiContextReady(options as never);
     expect(outcome).toMatchObject({ ready: false, status: "invalid_options" });
     expect(leaks(outcome)).toBe(false);
@@ -172,7 +194,11 @@ test("malformed options are a fixed status and never touch the core", async () =
 });
 
 test("every result uses a documented status, whatever the core throws", async () => {
-  core.initializeError = () => ({ get code(): never { throw new Error(SENTINEL); } });
+  core.initializeError = () => ({
+    get code(): never {
+      throw new Error(SENTINEL);
+    },
+  });
   const outcome = await checkAiContextReady();
   expect(READINESS_STATUSES).toContain(outcome.status);
   expect(leaks(outcome)).toBe(false);

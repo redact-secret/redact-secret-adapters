@@ -153,7 +153,10 @@ export async function checkAiContextReady(options: ReadinessOptions = {}): Promi
 
   let activation: string | undefined;
   try {
-    activation = await activateCore(core as Parameters<typeof activateCore>[0], requested ? { pii: selection.pii } : {});
+    activation = await activateCore(
+      core as Parameters<typeof activateCore>[0],
+      requested ? { pii: selection.pii } : {},
+    );
   } catch (error) {
     if (error instanceof CoreActivationError) {
       const status =
