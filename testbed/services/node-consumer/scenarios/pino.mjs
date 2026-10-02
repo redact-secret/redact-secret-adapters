@@ -22,7 +22,6 @@ import {
   logEverywhere,
   logger,
   MIXIN,
-  WARN_VALUE,
   PEM,
   parseLines,
   requireFeature,
@@ -30,6 +29,7 @@ import {
   Sink,
   TOKEN,
   verdict,
+  WARN_VALUE,
 } from "./_pino-lib.mjs";
 
 const PROFILE = import.meta.resolve("./_pino-profile.mjs");
