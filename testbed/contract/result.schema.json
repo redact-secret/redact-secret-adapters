@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "redact-secret-adapters/testbed-result-v1",
+  "title": "Testbed scenario result envelope",
+  "description": "One result of one fixed scenario. Strings are bounded and carry no plaintext sentinel; evidence is small, fixed-shape data about the final observed output, never the output itself when it could hold a secret.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "scenarioId",
+    "host",
+    "classification",
+    "title",
+    "status",
+    "startedAt",
+    "durationMs",
+    "assertions",
+    "evidence"
+  ],
+  "properties": {
+    "schema": { "const": "redact-secret-adapters/testbed-result-v1" },
+    "scenarioId": {
+      "type": "string",
+      "pattern": "^(smoke|pino|pylog|aictx|browser|ui)\\.[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 80
+    },
+    "host": { "enum": ["node", "python", "browser"] },
+    "classification": { "enum": ["install-check", "qualification", "negative-control", "failure-injection"] },
+    "title": { "type": "string", "maxLength": 200 },
+    "status": { "enum": ["pass", "fail", "error", "unsupported"] },
+    "startedAt": { "type": "string", "maxLength": 40 },
+    "durationMs": { "type": "number", "minimum": 0 },
+    "assertions": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "ok"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 120 },
+          "ok": { "type": "boolean" },
+          "detail": { "type": "string", "maxLength": 240 }
+        }
+      }
+    },
+    "evidence": { "type": "object" },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "maxLength": 80 },
+        "message": { "type": "string", "maxLength": 240 }
+      }
+    }
+  }
+}

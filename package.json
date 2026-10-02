@@ -43,6 +43,9 @@
     "feed:generate": "node scripts/generate-site-feed.mjs",
     "examples:check": "node scripts/check-examples.mjs",
     "examples:run": "node scripts/check-examples.mjs --run",
+    "testbed": "node testbed/run.mjs",
+    "testbed:check": "node testbed/scripts/check-pack-isolation.mjs && node testbed/scripts/check-registry.mjs",
+    "testbed:test": "node --test testbed/test/*.test.mjs",
     "feed:check": "node scripts/generate-site-feed.mjs --check"
   },
   "devDependencies": {

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adapter consumer testbed</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { max-width: 56rem; margin: 2rem auto; padding: 0 1rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid #8884; vertical-align: top; }
+  .status { font-weight: 600; }
+  .pass { color: #0a7d33; } .fail, .error { color: #c0261b; } .unsupported { color: #9a6700; }
+  code { font-size: .9em; }
+</style>
+</head>
+<body>
+<h1>Adapter consumer testbed</h1>
+<p>Developer tooling: runs fixed synthetic scenarios against packages installed in clean consumer containers.
+It does not accept input and does not claim leak prevention or detection completeness.</p>
+<table>
+  <thead><tr><th>Scenario</th><th>Host</th><th>Kind</th><th>Status</th><th></th></tr></thead>
+  <tbody id="rows" data-testid="scenario-rows"></tbody>
+</table>
+<script>
+const rows = document.getElementById("rows");
+function cell(text, cls) { const td = document.createElement("td"); td.textContent = text; if (cls) td.className = cls; return td; }
+async function load() {
+  const { scenarios } = await (await fetch("/api/scenarios")).json();
+  for (const s of scenarios) {
+    const tr = document.createElement("tr");
+    tr.dataset.scenario = s.id;
+    const name = cell(""); const code = document.createElement("code"); code.textContent = s.id; name.append(code, document.createElement("br"), s.title);
+    const status = cell("not run", "status"); status.dataset.testid = "status";
+    const button = document.createElement("button"); button.textContent = "Run"; button.dataset.testid = "run";
+    button.addEventListener("click", async () => {
+      button.disabled = true; status.textContent = "running";
+      try {
+        const r = await (await fetch("/api/run/" + s.id, { method: "POST" })).json();
+        status.textContent = r.status ?? "error"; status.className = "status " + (r.status ?? "error");
+      } catch { status.textContent = "error"; status.className = "status error"; }
+      button.disabled = false;
+    });
+    const action = document.createElement("td"); action.append(button);
+    tr.append(name, cell(s.host), cell(s.classification), status, action);
+    rows.append(tr);
+  }
+}
+load();
+</script>
+</body>
+</html>
