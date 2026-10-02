@@ -57,6 +57,14 @@ export {
   type AiContextLimits,
   withDefaultLimits,
 } from "./defaults.js";
+export {
+  checkAiContextReady,
+  READINESS_STATUSES,
+  type ReadinessOptions,
+  type ReadinessResult,
+  type ReadinessStage,
+  type ReadinessStatus,
+} from "./readiness.js";
 export type {
   AbortedOutcome,
   AiContextBoundary,

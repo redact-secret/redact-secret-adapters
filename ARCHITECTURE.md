@@ -371,6 +371,12 @@ it returns fails every operation closed with the core's mapped error, so an
 application that skips its own error handling still cannot fall back to
 sending raw input.
 
+Because a resolved factory is not a ready service, `checkAiContextReady` is the
+explicit, input-free question to ask instead (#182): fixed status codes, a fixed
+synthetic probe, no callbacks, no state, and no effect on any boundary. It is
+specific to this package; the logging and tracing factories keep their own
+shapes rather than share an interface.
+
 It is JavaScript only. No Python AI-context adapter exists yet; one would
 replay the same vendored fixture (the core already runs its Python twin of
 the runner against every wheel), and `walkStrict` would get a Python twin
