@@ -351,6 +351,24 @@
       "how": "packages/adapter-otel-logs/README.md names what is not covered: the resource, the instrumentation scope, attribute and map keys, ids, timestamps and severity number, a processor registered ahead of the wrapper (the SDK shares one record object in registration order), and spans and metrics"
     },
     {
+      "host": "Core WebAssembly fallback (artifact() === \"wasm\") outside the Linux x64 omit-optional lane",
+      "versions": "all",
+      "enforcement": "documented",
+      "how": "docs/compatibility.md (Platforms and artifacts): the fallback is exercised on Linux x64, Node 22, by installing without the platform addon packages and asserting artifact() is wasm; macOS, Windows, other Node lines and other causes of the fallback are core-supported and not qualified here"
+    },
+    {
+      "host": "macOS x64, Linux arm64 and musl, Windows arm64, and Node 20 and 22 on macOS and Windows",
+      "versions": "all",
+      "enforcement": "documented",
+      "how": "the per-platform clean-tarball smoke runs on macOS (arm64 runner) and Windows (x64 runner), Node 24, native addon only; the core supports more platforms and owns that matrix"
+    },
+    {
+      "host": "Browser runtimes and bundlers (adapter-ai-context only)",
+      "versions": "all",
+      "enforcement": "documented",
+      "how": "adapter-ai-context is the only package intended for a browser bundle, qualified by npm run smoke-test:browser (esbuild, run on Node's WebAssembly engine); real browsers, Vite, webpack, Rollup, Workers, Deno, Bun and SSR builds are unqualified, and every other package is Node-only"
+    },
+    {
       "host": "@redact-secret/core",
       "versions": "<0.1.0-beta.6 or >=0.2.0-0",
       "enforcement": "refused",

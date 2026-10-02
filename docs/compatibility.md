@@ -26,6 +26,50 @@ and exercises, at both ends of the declared range.
 
 Runtimes: Node.js 20.x, 22.x and 24.x; CPython 3.10 through 3.14.
 
+## Platforms and artifacts: tested, versus core-only
+
+The core supports more platforms than these adapters test, and the core's own
+CI owns that matrix. What this repository adds is a small set of
+adapter-and-host checks per platform and per core artifact, so a statement
+here means an adapter ran there, not only that the core did.
+
+| Combination | Status | Evidence |
+| --- | --- | --- |
+| Node 20, 22, 24 on Linux x64 (glibc), native addon | Tested | The whole suite and both range endpoints, every push (`ci.yml`: `node`, `range-endpoints`) |
+| Node 22 on Linux x64, **WebAssembly fallback** | Tested | `npm run smoke-test:platform -- parity`: a clean install of the packed packages with `omit=optional`, so no platform addon is installed and `initialize()` falls back. The probe asserts `core.artifact() === "wasm"` (and `"addon"` in the addon lane), then compares the sanitized outputs of both lanes document for document, PII off and on |
+| macOS (arm64 runner) and Windows (x64 runner), Node 24, native addon | Tested | `platform-smoke` in `ci.yml`: the packed packages installed outside the workspace, every public factory run against its real host (pino, `sdk-trace-base`, `sdk-logs`, the MCP boundary), `artifact() === "addon"` asserted |
+| `adapter-ai-context` bundled for a browser | Tested, narrowly | `npm run smoke-test:browser`: a clean install bundled with esbuild (`platform: "browser"`), run on Node's WebAssembly engine with the core's `.wasm` served as an application would serve it; `artifact() === "wasm"` asserted; Unicode, key-aware values, every stream split, limits, block, PII off and on |
+
+The equivalence the parity check holds for the shared synthetic cases: the
+same findings with the same code-unit offsets, the same redacted text, the
+same `blocked` and `limit_exceeded` outcomes and fixed error codes, for Unicode
+ranges (Korean, astral emoji, combining marks, right-to-left text, a NUL, an
+invisible character inside a token), key-aware structured values, and an
+incremental stream split at every position (a split inside a surrogate pair is
+the one boundary the core refuses, with `UNPAIRED_SURROGATE`, in both lanes).
+
+**Not qualified** (the adapters may work; nothing here shows it, and no claim
+is made):
+
+- the WebAssembly fallback on macOS or Windows, on Node 20 or 22 for the
+  platform legs, or via a cause other than the missing addon package (an
+  unloadable addon, an unsupported platform such as an old glibc or musl);
+- Linux arm64, musl, and Windows arm64 for any adapter, and macOS x64;
+- Node 20 and 22 on macOS and Windows, which the core supports;
+- a real browser (Chrome, Firefox, Safari), any bundler other than esbuild
+  (Vite, webpack, Rollup), Cloudflare Workers, Deno, Bun, and a framework's SSR
+  build, for `adapter-ai-context` and for every other package;
+- the browser for `adapter`, `adapter-pino`, `adapter-otel-trace`,
+  `adapter-otel-logs` and `adapter-mcp`: they are Node integrations and are not
+  claimed for a browser. (`adapter-ai-context` imports nothing from Node and is
+  the only package intended for a browser bundle; it is what the check above
+  qualifies.)
+
+CI cost is deliberately bounded: Windows and macOS each run one job once per
+pull request on the newest Node, in the addon lane only; the WebAssembly and
+browser checks are two extra steps in the existing Ubuntu install-smoke job;
+and the core's own native-artifact matrix is not repeated.
+
 [`compatibility.json`](../compatibility.json) is the machine-readable form of
 this table: every declared range, the endpoints CI installs, the runtimes it
 exercises, and the test files that qualify each package.

@@ -194,6 +194,8 @@ npm run feed:check
 | `npm run compat:check` | `compatibility.json`, the package manifests and `ci.yml` agree |
 | `npm run feed:check` | The generated release feed in `site-feed/` is up to date |
 | `npm run smoke-test` | Packs every package, installs it outside the repository, and runs the README examples against the real core |
+| `npm run smoke-test:platform -- parity` | The same install on the addon and on the core's WebAssembly fallback (`omit=optional`), `artifact()` asserted, sanitized outputs compared. CI also runs `-- addon` on macOS and Windows |
+| `npm run smoke-test:browser` | `adapter-ai-context` bundled for a browser from a clean install |
 
 For the Python package, install the test requirements used by CI and run
 `pytest` from the repository root. For the 80% statement-coverage floor CI
