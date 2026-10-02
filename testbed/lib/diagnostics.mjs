@@ -35,7 +35,7 @@ const MAX = { failures: 40, assertions: 8, journeys: 80, packages: 40, label: 12
 /** Keeps only characters that appear in authored titles and labels; everything else becomes '?'. */
 export function plainLabel(value, max = MAX.label) {
   return String(value ?? "")
-    .replace(/[^A-Za-z0-9 .,:;_()/'+=\-[\]#]/g, "?")
+    .replace(/[^A-Za-z0-9 .,:;_()/'+=@\-[\]#]/g, "?")
     .slice(0, max);
 }
 
