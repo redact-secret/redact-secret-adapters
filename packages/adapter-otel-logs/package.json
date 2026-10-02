@@ -1,0 +1,51 @@
+{
+  "name": "@redact-secret/adapter-otel-logs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A redacting OpenTelemetry JS LogRecordProcessor (logs only) over the Redact Secret core.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redact-secret/redact-secret-adapters.git",
+    "directory": "packages/adapter-otel-logs"
+  },
+  "homepage": "https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-otel-logs#readme",
+  "bugs": {
+    "url": "https://github.com/redact-secret/redact-secret-adapters/issues"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@redact-secret/adapter": "^0.1.7"
+  },
+  "peerDependencies": {
+    "@opentelemetry/sdk-logs": ">=0.200.0 <=0.222.0",
+    "@redact-secret/core": "^0.1.0-beta.6"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/otlp-transformer": "^0.222.0",
+    "@opentelemetry/sdk-logs": ">=0.200.0 <=0.222.0",
+    "@redact-secret/core": "^0.1.0-beta.6"
+  }
+}

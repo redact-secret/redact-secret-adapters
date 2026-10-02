@@ -139,6 +139,44 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run smoke-test
+      # adapter-otel-logs (#178) is private until released, so its tarball and
+      # README example are checked from a clean install at both ends of the
+      # sdk-logs range here, outside the checkout.
+      - run: npm run smoke-test:otel-logs -- highest
+      - run: npm run smoke-test:otel-logs -- lowest
+      # #179: the Node WASM fallback, proven by core.artifact() in a clean
+      # install that leaves the platform addon packages out (`omit=optional`),
+      # with the sanitized outputs compared to the addon lane's, PII off and on;
+      # and the AI-context boundary bundled for a browser from a clean install.
+      - run: npm run smoke-test:platform -- parity
+      - run: npm run smoke-test:browser
+
+  platform-smoke:
+    # The clean-tarball install on the other platforms the core ships a native
+    # addon for. One Node version (the newest), one lane (the addon), and no
+    # repeat of the core's own artifact matrix: what has to hold per platform is
+    # that the packed packages install outside the workspace and their public
+    # factories run on that platform's addon. Ubuntu is covered above, with the
+    # WASM lane, on Node 22.
+    name: Clean install smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run smoke-test:platform -- addon
 
   published-combination:
     # The smoke test pairs every tarball with its siblings' tarballs. A
@@ -342,6 +380,7 @@ jobs:
       - python
       - pack-contents
       - npm-install-smoke
+      - platform-smoke
       - published-combination
       - python-wheel-smoke
       - python-range-endpoints

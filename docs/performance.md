@@ -86,3 +86,31 @@ package's packed and unpacked size, and its initialization time in a fresh
 process (importing the package, the core's own `initialize()` alone, and the
 package's live factory end to end), so the adapter's share of start-up is
 separable from the core's.
+
+## OpenTelemetry Logs adapter (#178)
+
+`adapter-otel-logs` is not yet part of `measure-overhead.mjs` or the
+`redact-secret-benchmarks` baseline, and it has no previous release to compare
+with. A local, single-machine measurement was recorded with
+`npm run build && node scripts/measure-otel-logs-overhead.mjs` on 2026-10-01
+(Node 22.16.0, `@opentelemetry/sdk-logs` 0.222.0, core `0.1.0-beta.12`, an
+Apple-silicon laptop, 20 000 records per repetition, median of 7). The record
+is a body of about 190 characters and eight short attributes, two of the strings
+carrying a synthetic token shape (microseconds per record, median):
+
+| Mode | Microseconds per record |
+| --- | --- |
+| `host`: a real `LoggerProvider` and a no-op processor, no wrapper | 0.75 |
+| `adapter`: the wrapper over a scanner that finds nothing (its own traversal) | 1.04 |
+| `adapter-core`: the wrapper over the real core | 23.94 |
+| `core-direct`: the real core scanning the same eight string leaves | 22.38 |
+
+Read as a record, not a verdict. Two runs on the same machine differed by up to
+25 percent, so only the order of magnitude means anything: the wrapper's own
+traversal is a fraction of a microsecond a record, and the cost of protecting a
+record is the core's scan of its string leaves (about 2 microseconds each). `measure-footprint.mjs`
+reports the package at 13 764 bytes packed, and 10.5 ms to import against
+9.6 ms for `adapter-otel-trace` (core alone: 10.2 ms; live factory: 14.0 ms).
+Absolute numbers depend on the machine; compare runs only on one machine.
+Moving this into the shared harness, with a benchmarks baseline and an A/A
+noise floor, is follow-up work in `redact-secret-benchmarks`.

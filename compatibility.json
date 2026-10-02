@@ -142,6 +142,46 @@
       ]
     },
     {
+      "name": "@redact-secret/adapter-otel-logs",
+      "registry": "npm",
+      "manifest": "packages/adapter-otel-logs/package.json",
+      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "ciExercised": ["20", "22", "24"] },
+      "requires": [
+        {
+          "name": "@opentelemetry/sdk-logs",
+          "range": ">=0.200.0 <=0.222.0",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "0.200.0", "highest": "0.222.0" }
+        },
+        {
+          "name": "@redact-secret/core",
+          "range": "^0.1.0-beta.6",
+          "kind": "peerDependency",
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.12" }
+        }
+      ],
+      "lifecycle": [
+        "unreleased: marked private and absent from the release plan, so nothing here is installable from npm yet (#178)",
+        "SimpleLogRecordProcessor and BatchLogRecordProcessor wrapped by the redacting processor, on a real LoggerProvider",
+        "body (string, structured, bytes), severity text, event name, and string, array, map and byte attribute values",
+        "the OTLP JSON bytes an exporter sends, for the injected processor and the live factory on the real core",
+        "exceptions as exception.* attributes, Unicode, and a custom downstream processor",
+        "PII off and on through the live factory on the real core, one process each, and the factory's activation orderings against a mocked core",
+        "injected scanner failures and block findings, an exporter that fails through its result callback or by throwing, with SDK diagnostics captured",
+        "a record the SDK already made read-only is dropped, never forwarded; rewriting an attribute is not reported as a dropped attribute",
+        "forceFlush and shutdown forwarding, records emitted after shutdown, and interleaved async emitters",
+        "logs only: spans and metrics are not covered, and neither are the resource, the instrumentation scope, or attribute keys",
+        "the clean-install smoke test (npm run smoke-test:otel-logs) at both sdk-logs endpoints, and the package README example run verbatim at the highest"
+      ],
+      "qualifiedBy": [
+        "packages/adapter-otel-logs/test/otel-host.test.ts",
+        "packages/adapter-otel-logs/test/exporter-bytes.test.ts",
+        "packages/adapter-otel-logs/test/log-record-processor.test.ts",
+        "packages/adapter-otel-logs/test/pii-live.test.ts",
+        "packages/adapter-otel-logs/test/pii-activation.test.ts"
+      ]
+    },
+    {
       "name": "@redact-secret/adapter-ai-context",
       "registry": "npm",
       "manifest": "packages/adapter-ai-context/package.json",
@@ -293,10 +333,40 @@
       "how": "peerDependencies ^2.0.0: npm 7 and later stop with ERESOLVE (checked 2026-09-25 with npm 11.4.1: adapter-otel@0.1.0 with sdk-trace-base@1 fails) unless --legacy-peer-deps or --force overrides it; adapter-otel-trace declares the same range"
     },
     {
-      "host": "OpenTelemetry JS Logs (@opentelemetry/sdk-logs, LogRecord)",
+      "host": "OpenTelemetry JS Logs (@opentelemetry/sdk-logs, LogRecord) through the span packages",
       "versions": "all",
       "enforcement": "documented",
-      "how": "adapter-otel-trace and adapter-otel are span processors: a LogRecord never passes through them. Their READMEs, and the repository README, say that OpenTelemetry Logs are not protected; @redact-secret/adapter-otel-logs is a reserved name, not a package (#49)"
+      "how": "adapter-otel-trace and adapter-otel are span processors: a LogRecord never passes through them. Their READMEs, and the repository README, say that OpenTelemetry Logs are not protected by them. @redact-secret/adapter-otel-logs is the separate Logs package (#178); it is unreleased (private, absent from the release plan), so nothing installable from npm protects Logs yet"
+    },
+    {
+      "host": "@opentelemetry/sdk-logs",
+      "versions": "<0.200.0 or >0.222.0",
+      "enforcement": "refused",
+      "how": "peerDependencies >=0.200.0 <=0.222.0 on adapter-otel-logs, an explicit span because the SDK is 0.x (a caret on 0.200.0 admits one minor): npm 7 and later stop with ERESOLVE unless --legacy-peer-deps or --force overrides it. The cap is the highest tested release: a newer one is unqualified until it is added as an endpoint here. Releases between the two endpoints are inside the range and not exercised individually"
+    },
+    {
+      "host": "OpenTelemetry Logs content outside the log record's own fields (adapter-otel-logs)",
+      "versions": "all qualified versions",
+      "enforcement": "documented",
+      "how": "packages/adapter-otel-logs/README.md names what is not covered: the resource, the instrumentation scope, attribute and map keys, ids, timestamps and severity number, a processor registered ahead of the wrapper (the SDK shares one record object in registration order), and spans and metrics"
+    },
+    {
+      "host": "Core WebAssembly fallback (artifact() === \"wasm\") outside the Linux x64 omit-optional lane",
+      "versions": "all",
+      "enforcement": "documented",
+      "how": "docs/compatibility.md (Platforms and artifacts): the fallback is exercised on Linux x64, Node 22, by installing without the platform addon packages and asserting artifact() is wasm; macOS, Windows, other Node lines and other causes of the fallback are core-supported and not qualified here"
+    },
+    {
+      "host": "macOS x64, Linux arm64 and musl, Windows arm64, and Node 20 and 22 on macOS and Windows",
+      "versions": "all",
+      "enforcement": "documented",
+      "how": "the per-platform clean-tarball smoke runs on macOS (arm64 runner) and Windows (x64 runner), Node 24, native addon only; the core supports more platforms and owns that matrix"
+    },
+    {
+      "host": "Browser runtimes and bundlers (adapter-ai-context only)",
+      "versions": "all",
+      "enforcement": "documented",
+      "how": "adapter-ai-context is the only package intended for a browser bundle, qualified by npm run smoke-test:browser (esbuild, run on Node's WebAssembly engine); real browsers, Vite, webpack, Rollup, Workers, Deno, Bun and SSR builds are unqualified, and every other package is Node-only"
     },
     {
       "host": "@redact-secret/core",

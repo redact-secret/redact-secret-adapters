@@ -17,6 +17,7 @@ and exercises, at both ends of the declared range.
 | --- | --- | --- |
 | `adapter-pino` | `pino ^10.0.0` | a real `pino` logger: captured stream, sonic-boom async destination, worker-thread transport, concurrent loggers, a failing destination |
 | `adapter-otel-trace` | `@opentelemetry/sdk-trace-base ^2.0.0` | real spans through `SimpleSpanProcessor` and `BatchSpanProcessor`, the OTLP JSON bytes the exporter sends, concurrent spans, a failing exporter, flush and shutdown. Traces only |
+| `adapter-otel-logs` (**unreleased**, not installable from npm) | `@opentelemetry/sdk-logs >=0.200.0 <=0.222.0` | real log records through `SimpleLogRecordProcessor` and `BatchLogRecordProcessor` on a real `LoggerProvider`, the OTLP JSON bytes the exporter sends, structured and byte bodies, exceptions, Unicode, PII off and on on the real core, injected scanner failures, a failing exporter, a record the SDK already made read-only, flush and shutdown. Logs only: not spans, not metrics, not the resource or the instrumentation scope |
 | `adapter-otel` (deprecated name) | `@opentelemetry/sdk-trace-base ^2.0.0` | the same export list and objects as `adapter-otel-trace`, and the same OTLP JSON bytes for one span; the clean-install smoke test also compares the release on npm |
 | `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger`: filter before formatter, `QueueHandler`/`QueueListener`, threads sharing one handler, a failing handler |
 | `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | real spans through simple and batch processors, spans from threads, a failing exporter, flush and shutdown |
@@ -24,6 +25,50 @@ and exercises, at both ends of the declared range.
 | `adapter-mcp` | `@modelcontextprotocol/sdk >=1.26.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
 
 Runtimes: Node.js 20.x, 22.x and 24.x; CPython 3.10 through 3.14.
+
+## Platforms and artifacts: tested, versus core-only
+
+The core supports more platforms than these adapters test, and the core's own
+CI owns that matrix. What this repository adds is a small set of
+adapter-and-host checks per platform and per core artifact, so a statement
+here means an adapter ran there, not only that the core did.
+
+| Combination | Status | Evidence |
+| --- | --- | --- |
+| Node 20, 22, 24 on Linux x64 (glibc), native addon | Tested | The whole suite and both range endpoints, every push (`ci.yml`: `node`, `range-endpoints`) |
+| Node 22 on Linux x64, **WebAssembly fallback** | Tested | `npm run smoke-test:platform -- parity`: a clean install of the packed packages with `omit=optional`, so no platform addon is installed and `initialize()` falls back. The probe asserts `core.artifact() === "wasm"` (and `"addon"` in the addon lane), then compares the sanitized outputs of both lanes document for document, PII off and on |
+| macOS (arm64 runner) and Windows (x64 runner), Node 24, native addon | Tested | `platform-smoke` in `ci.yml`: the packed packages installed outside the workspace, every public factory run against its real host (pino, `sdk-trace-base`, `sdk-logs`, the MCP boundary), `artifact() === "addon"` asserted |
+| `adapter-ai-context` bundled for a browser | Tested, narrowly | `npm run smoke-test:browser`: a clean install bundled with esbuild (`platform: "browser"`), run on Node's WebAssembly engine with the core's `.wasm` served as an application would serve it; `artifact() === "wasm"` asserted; Unicode, key-aware values, every stream split, limits, block, PII off and on |
+
+The equivalence the parity check holds for the shared synthetic cases: the
+same findings with the same code-unit offsets, the same redacted text, the
+same `blocked` and `limit_exceeded` outcomes and fixed error codes, for Unicode
+ranges (Korean, astral emoji, combining marks, right-to-left text, a NUL, an
+invisible character inside a token), key-aware structured values, and an
+incremental stream split at every position (a split inside a surrogate pair is
+the one boundary the core refuses, with `UNPAIRED_SURROGATE`, in both lanes).
+
+**Not qualified** (the adapters may work; nothing here shows it, and no claim
+is made):
+
+- the WebAssembly fallback on macOS or Windows, on Node 20 or 22 for the
+  platform legs, or via a cause other than the missing addon package (an
+  unloadable addon, an unsupported platform such as an old glibc or musl);
+- Linux arm64, musl, and Windows arm64 for any adapter, and macOS x64;
+- Node 20 and 22 on macOS and Windows, which the core supports;
+- a real browser (Chrome, Firefox, Safari), any bundler other than esbuild
+  (Vite, webpack, Rollup), Cloudflare Workers, Deno, Bun, and a framework's SSR
+  build, for `adapter-ai-context` and for every other package;
+- the browser for `adapter`, `adapter-pino`, `adapter-otel-trace`,
+  `adapter-otel-logs` and `adapter-mcp`: they are Node integrations and are not
+  claimed for a browser. (`adapter-ai-context` imports nothing from Node and is
+  the only package intended for a browser bundle; it is what the check above
+  qualifies.)
+
+CI cost is deliberately bounded: Windows and macOS each run one job once per
+pull request on the newest Node, in the addon lane only; the WebAssembly and
+browser checks are two extra steps in the existing Ubuntu install-smoke job;
+and the core's own native-artifact matrix is not repeated.
 
 [`compatibility.json`](../compatibility.json) is the machine-readable form of
 this table: every declared range, the endpoints CI installs, the runtimes it
