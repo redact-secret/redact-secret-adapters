@@ -53,6 +53,7 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - run: npm run build
       - run: npm run testbed:check
       - run: npm run testbed:test
       # Builds, packs, installs in clean consumers, starts the services, runs the scenarios and

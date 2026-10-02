@@ -151,9 +151,7 @@ def policy_warn(ctx, rec):
     make_logger(handler).info("password=%s", PASSWORD)
     keep(ctx, "pylog.policy-warn", out.getvalue())
     rec.check("the warn value is in the handler text (expected, documented)", PASSWORD in out.getvalue())
-    rec.compare(
-        "warn value in the handler output", "unchanged (warn)", "unchanged (warn)" if PASSWORD in out.getvalue() else "changed", "warn"
-    )
+    rec.compare("warn value left unchanged in the handler output", True, PASSWORD in out.getvalue(), "warn")
     rec.check("verifier reports it as LEAKED, expected for a warn", verdict(out.getvalue(), [PASSWORD]) == "LEAKED")
     v = outcomes[0].values
     rec.check("the finding was reported, nothing redacted", v.findings > 0 and v.redacted == 0)
@@ -185,9 +183,7 @@ def policy_explicit(ctx, rec):
     logger.info("key %s", PEM)
     keep(ctx, "pylog.policy-explicit", out.getvalue())
     rec.check("the former warn value is masked", PASSWORD not in out.getvalue())
-    rec.compare(
-        "former warn value under an explicit policy", "masked", "plaintext" if PASSWORD in out.getvalue() else "masked", "policy"
-    )
+    rec.compare("former warn value masked under an explicit policy", True, PASSWORD not in out.getvalue(), "policy")
     rec.check("verdict is PROTECTED", verdict(out.getvalue()) == "PROTECTED")
     rec.check("block is still honoured under the explicit policy", BLOCK_MARKER in out.getvalue())
 

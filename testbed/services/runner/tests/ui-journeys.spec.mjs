@@ -159,7 +159,7 @@ test("ui.final-output-agreement: Pino and Python logging show the destination's 
   ]);
   expect(warn.mode).toContain("negative control");
   await journey(page, request, "python", "pylog.policy-warn", [
-    r("warn value in the handler output", "warn", "unchanged (warn)"),
+    r("warn value left unchanged in the handler output", "warn", "true"),
   ]);
   await guard.assertClean();
 });
