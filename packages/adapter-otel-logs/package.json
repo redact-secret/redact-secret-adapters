@@ -36,7 +36,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@redact-secret/adapter": "^0.1.6"
+    "@redact-secret/adapter": "^0.1.7"
   },
   "peerDependencies": {
     "@opentelemetry/sdk-logs": ">=0.200.0 <=0.222.0",

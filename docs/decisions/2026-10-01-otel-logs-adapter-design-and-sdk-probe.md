@@ -19,7 +19,7 @@ later scope.
 
 - No change to `@redact-secret/adapter` or the core, and no logging SDK
   dependency in either. The package depends on the released
-  `@redact-secret/adapter` `^0.1.6` (the first line whose `Limits` carry
+  `@redact-secret/adapter` `^0.1.7` (`^0.1.5` is the first line whose `Limits` carry
   `maxNodes`) and declares `@redact-secret/core` `^0.1.0-beta.6` like every
   other package.
 - `adapter-otel-trace` is not touched, and its docs still say it does not
