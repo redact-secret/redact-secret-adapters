@@ -260,7 +260,10 @@ The pino, OpenTelemetry, AI-context and MCP factories take `pii`, and so do the
 Python `RedactSecretFilter` and `create_redacting_span_processor`. It is
 process-wide and can be set once.
 Under the core's default policy only high-confidence PII is redacted; pass your
-own `policy` to mask the rest. [PII guide](./docs/pii.md).
+own `policy` to mask the rest. To see credentials only, PII on, and an explicit
+policy side by side on one synthetic input, run
+[`examples/policy-js`](./examples/policy-js) or
+[`examples/policy-python`](./examples/policy-python). [PII guide](./docs/pii.md).
 
 ### Counting what happened
 

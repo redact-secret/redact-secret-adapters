@@ -96,6 +96,57 @@ You can see it happen:
 - In `adapter-ai-context` and `adapter-mcp`, an `ok` outcome whose `findings`
   is non-empty but whose `value` equals the input is exactly this case.
 
+## See the difference
+
+Two runnable comparisons run **one** synthetic input under three configurations,
+each in its own process because activation is process-wide and one-shot: credentials
+only (PII off), PII activated with the core's default policy, and PII activated with
+an explicit core `policy`.
+
+- [JavaScript](../examples/policy-js): `adapter-ai-context` (findings and their
+  actions) and `adapter-pino` (counters).
+- [Python](../examples/policy-python): `logging` with `on_outcome` counters.
+
+The configurations, as the JavaScript example defines them:
+
+<!-- snippet: examples/policy-js/index.mjs#configurations -->
+```js
+// An explicit core policy. It replaces the built-in one for EVERY finding, so keep `block` for the
+// type the built-in policy blocks. This is an example choice, not a recommendation.
+const explicitPolicy = {
+  evaluate: (finding) => (finding.type === "private_key" ? "block" : "redact"),
+};
+
+const CONFIGURATIONS = {
+  default: {}, // credentials only: PII stays off
+  pii: { pii: ["pii:global"] }, // PII activated, the core's default policy
+  policy: { pii: ["pii:global"], policy: explicitPolicy }, // PII activated, your policy
+};
+```
+
+What the runs show, with the pinned core `0.1.0-beta.12`:
+
+| Configuration | Credential | Email next to a context word (PII, high) | `password=...` (a `warn`) |
+| --- | --- | --- | --- |
+| credentials only | redacted | unchanged, and no finding | unchanged, finding with action `warn` |
+| PII on, default policy | redacted | redacted | unchanged, still `warn` |
+| PII on, explicit policy | redacted | redacted | redacted |
+
+- `redact` replaces the matched part. `warn` reports a finding and leaves the text
+  alone. `block` replaces the whole value (`blocked` in AI-context and MCP,
+  `[REDACTED:BLOCKED]` in logs and spans).
+- The `warn` row is a credential-shaped value, not PII: none of the PII samples tried
+  with that core resolved to `warn`, so the guide claims no stable PII `warn` case.
+  Which PII is detected, and at what confidence, is the core's decision and can change
+  with its version. A masked example does not show that every PII type is supported.
+- `findings` counts what the scans reported, once per scan pass (`adapter-pino` scans a
+  record in two hooks), so it is not a count of distinct secrets. An `ok` result, or a
+  clean counter, is not a guarantee that nothing was missed.
+- The examples use only options in released adapters (`pii` and `policy` in the npm
+  adapters, `redact_secret.initialize(pii=...)` and `policy=` in Python 0.1.3). Newer
+  options such as `scanLimits`, `ruleset`, `placeholderFormatter` or the Python `pii=`
+  factory argument have no example until they are published.
+
 ## Building your own integration
 
 `@redact-secret/adapter` exports the activation step every live factory runs:
