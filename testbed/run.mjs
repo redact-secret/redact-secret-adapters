@@ -20,8 +20,13 @@
  *   --no-cache                   build images without the Docker layer cache
  *   --keep                       leave services running and images in place (prints the cleanup command)
  *   --wait-timeout <s>           bounded readiness wait (default 90)
+ *   --run-timeout <s>            bound on the in-network scenario and browser stage (default 900)
+ *   --headed-debug               build and start, publish the services on extra loopback ports, skip the
+ *                                in-network tests and leave everything running so Playwright can run
+ *                                headed from the host (testbed/README.md, "Headed debugging")
  *   --fault <name>               self-test only: missing-artifact | missing-peer | wrong-mode |
- *                                broken-exports | startup-failure. The run must then exit non-zero.
+ *                                broken-exports | startup-failure | wrong-expectation | ui-wrong-response.
+ *                                The run must then exit non-zero.
  *   --candidate-dir <dir>        self-test only: use a prepared artifacts directory instead of packing
  */
 
@@ -31,13 +36,32 @@ import { createServer } from "node:net";
 import { arch, platform } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadSentinels, makeScrubber } from "./contract/envelope.mjs";
+import { buildDiagnostics, filterServiceLogs, installFailureLine } from "./lib/diagnostics.mjs";
 import { resolvePlans } from "./lib/pins.mjs";
 import { checkoutIdentity, stageArtifacts } from "./lib/stage.mjs";
 
 const testbedDir = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = join(testbedDir, "..");
-const FAULTS = ["missing-artifact", "missing-peer", "wrong-mode", "broken-exports", "startup-failure"];
+const FAULTS = [
+  "missing-artifact",
+  "missing-peer",
+  "wrong-mode",
+  "broken-exports",
+  "startup-failure",
+  "wrong-expectation",
+  "ui-wrong-response",
+];
+const RUNTIME_FAULTS = [
+  "missing-peer",
+  "wrong-mode",
+  "broken-exports",
+  "startup-failure",
+  "wrong-expectation",
+  "ui-wrong-response",
+];
 const KEEP_RUNS = 5;
+const MAX_CAPTURE = 400_000;
 
 function parseArgs(argv) {
   const o = {
@@ -47,6 +71,8 @@ function parseArgs(argv) {
     noCache: false,
     keep: false,
     waitTimeout: 90,
+    runTimeout: 900,
+    headedDebug: false,
     fault: null,
     candidateDir: null,
   };
@@ -62,6 +88,8 @@ function parseArgs(argv) {
     else if (a === "--no-cache") o.noCache = true;
     else if (a === "--keep") o.keep = true;
     else if (a === "--wait-timeout") o.waitTimeout = Number(next());
+    else if (a === "--run-timeout") o.runTimeout = Number(next());
+    else if (a === "--headed-debug") o.headedDebug = true;
     else if (a === "--fault") o.fault = next();
     else if (a === "--candidate-dir") o.candidateDir = next();
     else usage(`unknown option ${a}`);
@@ -71,6 +99,8 @@ function parseArgs(argv) {
   if (o.port !== null && !(Number.isInteger(o.port) && o.port > 1023 && o.port < 65536))
     usage("--port must be 1024-65535");
   if (!(o.waitTimeout > 0 && o.waitTimeout <= 600)) usage("--wait-timeout must be 1-600 seconds");
+  if (!(o.runTimeout > 0 && o.runTimeout <= 3600)) usage("--run-timeout must be 1-3600 seconds");
+  if (o.headedDebug) o.keep = true;
   return o;
 }
 
@@ -92,16 +122,38 @@ function freePort(start) {
 }
 
 const children = new Set();
-function exec(cmd, args, { env = {}, quiet = false } = {}) {
+/**
+ * Runs a command. `capture` (optional) receives the combined output while it is still echoed;
+ * `timeoutMs` kills the command (exit 124) so no stage can hang forever.
+ */
+function exec(cmd, args, { env = {}, quiet = false, capture = null, timeoutMs = 0 } = {}) {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
-      stdio: quiet ? ["ignore", "ignore", "ignore"] : "inherit",
+      stdio: quiet ? ["ignore", "ignore", "ignore"] : capture ? ["ignore", "pipe", "pipe"] : "inherit",
       env: { ...process.env, ...env },
     });
     children.add(child);
+    let timedOut = false;
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          child.kill("SIGTERM");
+        }, timeoutMs)
+      : null;
+    if (capture) {
+      child.stdout.on("data", (d) => {
+        process.stdout.write(d);
+        capture(d.toString());
+      });
+      child.stderr.on("data", (d) => {
+        process.stderr.write(d);
+        capture(d.toString());
+      });
+    }
     child.on("close", (code) => {
+      if (timer) clearTimeout(timer);
       children.delete(child);
-      resolve(code ?? 1);
+      resolve(timedOut ? 124 : (code ?? 1));
     });
     child.on("error", () => resolve(127));
   });
@@ -164,7 +216,7 @@ async function main() {
   const fragments = readdirSync(join(testbedDir, "services"))
     .filter((d) => existsSync(join(testbedDir, "services", d, "compose.yaml")))
     .map((d) => join("services", d, "compose.yaml"));
-  const composeArgs = [
+  let composeArgs = [
     "compose",
     "-p",
     project,
@@ -179,12 +231,27 @@ async function main() {
     TESTBED_UI_PORT: String(port),
     TESTBED_UID: String(process.getuid?.() ?? 1000),
     TESTBED_GID: String(process.getgid?.() ?? 1000),
-    TESTBED_FAULT: ["missing-peer", "wrong-mode", "broken-exports", "startup-failure"].includes(opts.fault)
-      ? opts.fault
-      : "",
+    TESTBED_FAULT: RUNTIME_FAULTS.includes(opts.fault) ? opts.fault : "",
   };
   mkdirSync(env.TESTBED_OUT_DIR, { recursive: true });
   const compose = (...a) => exec("docker", [...composeArgs, ...a], { env });
+  /** The last service log lines, reduced to the allowlisted ones (see lib/diagnostics.mjs). */
+  const readServiceLogs = () => {
+    try {
+      const text = execFileSync("docker", [...composeArgs, "logs", "--no-color", "--tail", "200"], {
+        env: { ...process.env, ...env },
+        encoding: "utf-8",
+        maxBuffer: 4_000_000,
+        timeout: 30000,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return filterServiceLogs(text);
+    } catch {
+      return null;
+    }
+  };
+  let debugPorts = null;
+  const post = { stage: "stage-artifacts", installFailure: null, logs: null };
 
   let cleaned = false;
   const cleanup = () => {
@@ -241,6 +308,7 @@ async function main() {
   let exitCode = 2;
   try {
     // 1. Stage clean artifacts (#193).
+    post.stage = "stage-artifacts";
     try {
       const staged = stageArtifacts({
         repoRoot,
@@ -265,19 +333,54 @@ async function main() {
 
     // 2. Build the consumer images: this is the clean install, verified inside the build.
     console.log("== build images (clean install in isolated consumers)");
-    if ((await compose("--profile", "runner", "build", ...(opts.noCache ? ["--no-cache"] : []))) !== 0) {
+    post.stage = "build";
+    let buildOutput = "";
+    const buildCode = await exec(
+      "docker",
+      [...composeArgs, "--profile", "runner", "build", ...(opts.noCache ? ["--no-cache"] : [])],
+      {
+        env,
+        capture: (chunk) => {
+          if (buildOutput.length < MAX_CAPTURE) buildOutput += chunk;
+        },
+      },
+    );
+    if (buildCode !== 0) {
+      post.installFailure = installFailureLine(buildOutput);
       console.error("image build failed (install or verification failure above)");
       return 2;
     }
 
     // 3. Start services with a bounded readiness wait.
     console.log(`== start services (wait <= ${opts.waitTimeout}s)`);
+    post.stage = "start";
+    if (opts.headedDebug) {
+      // Opt-in, loopback only: the consumers' scenario API (never the control API) next to the UI,
+      // so the journeys can run on the host with a visible browser.
+      debugPorts = { ui: port };
+      let next = port;
+      for (const name of ["node-consumer", "python-consumer", "browser-consumer"]) {
+        next = await freePort(next + 1);
+        debugPorts[name] = next;
+      }
+      const override = join(outDir, "debug-ports.compose.yaml");
+      writeFileSync(
+        override,
+        `services:\n${Object.entries(debugPorts)
+          .filter(([n]) => n !== "ui")
+          .map(([n, p]) => `  ${n}:\n    ports: ["127.0.0.1:${p}:8080"]\n`)
+          .join("")}`,
+      );
+      composeArgs = [...composeArgs, "-f", override];
+    }
     if (
       // No service names: every default-profile service, including the fragments' (browser consumer, #195).
       (await compose("up", "-d", "--wait", "--wait-timeout", String(opts.waitTimeout))) !== 0
     ) {
-      console.error("services did not become healthy; last logs:");
-      await compose("logs", "--no-color", "--tail", "40");
+      console.error("services did not become healthy; allowlisted service log lines:");
+      post.logs = readServiceLogs();
+      for (const line of post.logs?.kept ?? []) console.error(`  ${line}`);
+      console.error(`  (${post.logs?.withheld ?? "?"} other lines withheld; see diagnostics.json)`);
       return 2;
     }
 
@@ -292,19 +395,41 @@ async function main() {
     }
     writeProvenance();
 
-    // 5. Scenarios and Playwright inside the compose network.
+    if (opts.headedDebug) {
+      const base = `http://127.0.0.1`;
+      console.log(`
+== headed debugging: services are up and left running
+UI                  ${base}:${debugPorts.ui}
+node consumer API   ${base}:${debugPorts["node-consumer"]}   python ${base}:${debugPorts["python-consumer"]}   browser ${base}:${debugPorts["browser-consumer"]}
+Run the journeys with a visible browser (Linux/Chromium only):
+  cd testbed/services/runner && npm ci && npx playwright install chromium
+  TESTBED_UI_URL=${base}:${debugPorts.ui} TESTBED_CONSUMER_URLS=node=${base}:${debugPorts["node-consumer"]},python=${base}:${debugPorts["python-consumer"]} \\
+    TESTBED_BROWSER_URL=${base}:${debugPorts["browser-consumer"]} TESTBED_OUT=${join(outDir, "reports-headed")} \\
+    npx playwright test --headed ui-journeys   # add --debug to step through`);
+      post.stage = "run";
+      exitCode = 0;
+      return exitCode;
+    }
+
+    // 5. Scenarios and Playwright inside the compose network, bounded.
     console.log("== run scenarios and Playwright");
-    const runnerCode = await compose("run", "--rm", "--no-deps", "runner");
+    post.stage = "run";
+    const runnerCode = await exec("docker", [...composeArgs, "run", "--rm", "--no-deps", "runner"], {
+      env,
+      timeoutMs: opts.runTimeout * 1000,
+    });
+    if (runnerCode === 124)
+      console.error(`the test stage exceeded --run-timeout (${opts.runTimeout}s) and was stopped`);
     exitCode = runnerCode === 0 ? 0 : 1;
-    if (exitCode !== 0) await compose("logs", "--no-color", "--tail", "40", "node-consumer", "python-consumer");
+    if (exitCode !== 0) post.logs = readServiceLogs();
   } finally {
-    summarize(outDir, provenance, exitCode);
+    summarize(outDir, provenance, exitCode, post);
     cleanup();
   }
   return exitCode;
 }
 
-function summarize(outDir, provenance, exitCode) {
+function summarize(outDir, provenance, exitCode, post) {
   let scenarios = null;
   try {
     scenarios = JSON.parse(readFileSync(join(outDir, "reports", "scenario-results.json"), "utf-8"));
@@ -336,7 +461,42 @@ function summarize(outDir, provenance, exitCode) {
   console.log(`browser lane: ${browserLane ? browserLane.status : "NOT REPORTED (failed)"}`);
   writeFileSync(join(outDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   writeFileSync(join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
-  console.log(`\nreports: ${outDir}\n  provenance.json  report.json  reports/`);
+  // Sanitized failure diagnostics (#197): allowlisted fields only, in the #186 support-summary format.
+  let playwright = null;
+  try {
+    playwright = JSON.parse(readFileSync(join(outDir, "reports", "playwright.json"), "utf-8"));
+  } catch {
+    // the browser stage never wrote a report
+  }
+  const scrub = makeScrubber(loadSentinels(join(testbedDir, "contract")));
+  const diagnostics = buildDiagnostics({
+    provenance,
+    exitCode,
+    stage: post.stage,
+    scenarios,
+    playwright,
+    browserLane,
+    installFailure: post.installFailure,
+    logs: post.logs,
+    arch: arch(),
+    scrub,
+  });
+  writeFileSync(join(outDir, "diagnostics.json"), `${JSON.stringify(diagnostics, null, 2)}\n`);
+  if (post.logs)
+    writeFileSync(
+      join(outDir, "service-logs.txt"),
+      `${[...post.logs.kept, `(${post.logs.withheld} other log lines withheld by the allowlist)`].join("\n")}\n`,
+    );
+  if (exitCode !== 0) {
+    const f = diagnostics.scenarios.failures;
+    console.log(`\nfailed stage: ${diagnostics.failedStage ?? "unknown"}; outcome: ${diagnostics.outcome}`);
+    if (diagnostics.installFailure) console.log(`install failure: ${diagnostics.installFailure}`);
+    for (const x of f.slice(0, 10))
+      console.log(`  ${x.status} ${x.id}${x.failedAssertions.length ? `: ${x.failedAssertions.join("; ")}` : ""}`);
+    for (const j of diagnostics.journeys.filter((x) => x.status !== "passed").slice(0, 10))
+      console.log(`  journey ${j.status}: ${j.title}`);
+  }
+  console.log(`\nreports: ${outDir}\n  diagnostics.json  provenance.json  report.json  reports/`);
   console.log(exitCode === 0 ? "TESTBED PASS" : `TESTBED FAIL (exit ${exitCode})`);
   console.log("Linux containers only: this does not qualify macOS or Windows, and claims no general leak prevention.");
 }

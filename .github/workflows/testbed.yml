@@ -1,0 +1,180 @@
+name: Testbed
+
+# The Docker consumer testbed (testbed/README.md, epic #190). Two suites, deliberately small:
+#
+#   PR suite       one Ubuntu job: the candidate (this checkout, packed) installed in clean
+#                  consumers, every registered scenario, and the Playwright journeys. It runs
+#                  only when something it exercises changes. It is NOT part of the `CI passed`
+#                  gate: a path-filtered check that is skipped cannot be a required check, and
+#                  the gate stays exactly what it was. Promote it deliberately (add the job to
+#                  ci.yml `needs`) once it has a record of stable runs.
+#   Extended suite manual or weekly: published versions, a no-cache candidate run, and every
+#                  deliberate-failure self-test, which must each exit non-zero.
+#
+# Linux and Chromium only. No OS or Node matrix is added; the platform matrices stay in ci.yml.
+# Retries never hide a failure (Playwright retries are 0, the jobs are not re-run).
+
+on:
+  pull_request:
+    branches: [develop, main, release]
+    paths:
+      - "testbed/**"
+      - "packages/**"
+      - "python/**"
+      - "examples/**"
+      - "scripts/support-summary.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/testbed.yml"
+  schedule:
+    - cron: "41 5 * * 3"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: testbed-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-suite:
+    name: Testbed PR suite
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run testbed:check
+      - run: npm run testbed:test
+      # Builds, packs, installs in clean consumers, starts the services, runs the scenarios and
+      # the Playwright journeys, and cleans up. Non-zero on any install, startup or assertion
+      # failure. The stage bounds keep a hung step from using the whole job timeout.
+      - name: Run the testbed (candidate)
+        run: npm run testbed -- --wait-timeout 120 --run-timeout 600
+      # The small, allowlisted files that say what was tested: versions, hashes, outcome.
+      - name: Upload run summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testbed-pr-summary
+          path: |
+            testbed/out/*/diagnostics.json
+            testbed/out/*/provenance.json
+            testbed/out/*/report.json
+          if-no-files-found: ignore
+          retention-days: 7
+      # Playwright report, traces, screenshots and the sanitized service log lines, on failure only.
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testbed-pr-failure
+          path: |
+            testbed/out/*/service-logs.txt
+            testbed/out/*/reports/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  extended-published:
+    name: Testbed extended (published versions)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # The released versions pinned by examples/. This says nothing about the checkout.
+      - name: Run the testbed (published)
+        run: npm run testbed -- --mode published --wait-timeout 120 --run-timeout 600
+      - name: Upload run summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testbed-published-summary
+          path: |
+            testbed/out/*/diagnostics.json
+            testbed/out/*/provenance.json
+            testbed/out/*/report.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testbed-published-failure
+          path: |
+            testbed/out/*/service-logs.txt
+            testbed/out/*/reports/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+  extended-candidate:
+    name: Testbed extended (no cache and failure paths)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # No Docker layer cache: proves the images are rebuilt from the packed artifacts alone.
+      - name: Run the testbed (candidate, no cache)
+        run: npm run testbed -- --no-cache --wait-timeout 120 --run-timeout 600
+      - name: Upload run summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testbed-candidate-summary
+          path: |
+            testbed/out/*/diagnostics.json
+            testbed/out/*/provenance.json
+            testbed/out/*/report.json
+          if-no-files-found: ignore
+          retention-days: 14
+      # The runner keeps the last five runs, so the run above is uploaded before the failure self-tests.
+      # Each deliberate break must make the run fail; a run that passes here is the failure.
+      - name: Every deliberate failure is caught
+        run: |
+          for fault in missing-artifact missing-peer wrong-mode broken-exports startup-failure wrong-expectation ui-wrong-response; do
+            echo "::group::fault $fault"
+            if npm run testbed -- --fault "$fault" --wait-timeout 60 --run-timeout 300; then
+              echo "::endgroup::"
+              echo "::error::the deliberate fault '$fault' did not fail the testbed"
+              exit 1
+            fi
+            echo "::endgroup::"
+          done
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testbed-candidate-failure
+          path: |
+            testbed/out/*/service-logs.txt
+            testbed/out/*/reports/**
+          if-no-files-found: ignore
+          retention-days: 14
