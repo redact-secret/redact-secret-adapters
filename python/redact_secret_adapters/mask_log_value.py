@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from ._walk import walk
+from .scan_options import resolve_scan_config
 
 __all__ = ["mask_log_value_with"]
 
@@ -19,6 +20,10 @@ def mask_log_value_with(
     *,
     policy: Optional[Any] = None,
     limits: Optional[dict[str, int]] = None,
+    operation_limits: Optional[dict[str, int]] = None,
+    scan_limits: Optional[Any] = None,
+    ruleset: Optional[Any] = None,
+    placeholder_formatter: Optional[Callable[..., Any]] = None,
 ) -> Any:
     """Recursively masks every string (and every exception's message/stack)
     inside a dict/list/tuple/exception tree. ``scan_and_redact`` is called
@@ -27,4 +32,11 @@ def mask_log_value_with(
     """
     if not callable(scan_and_redact):
         raise TypeError("mask_log_value_with: scan_and_redact must be callable")
-    return walk(scan_and_redact, data, policy=policy, limits=limits)
+    return walk(
+        scan_and_redact,
+        data,
+        policy=policy,
+        limits=limits,
+        operation_limits=operation_limits,
+        scan_config=resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter),
+    )

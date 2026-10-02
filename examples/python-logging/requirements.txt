@@ -1,0 +1,3 @@
+# Exact pins. redact-secret is a beta release, so it must be named explicitly.
+redact-secret==0.1.0b12
+redact-secret-adapters==0.1.3

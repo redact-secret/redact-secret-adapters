@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adapter consumer testbed</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <h1>Adapter consumer testbed</h1>
+  <p>Developer tooling: runs fixed synthetic scenarios against packages installed in clean consumer containers.
+  It accepts no input, uploads nothing, and makes no claim of leak prevention, detection accuracy or performance.
+  Every value below is shown as text.</p>
+</header>
+<main>
+  <section aria-labelledby="env-h">
+    <h2 id="env-h">Environment</h2>
+    <p id="env-status" role="status" data-testid="env-status">Loading environment…</p>
+    <div id="env" data-testid="environment"></div>
+  </section>
+
+  <section aria-labelledby="list-h">
+    <h2 id="list-h">Scenarios</h2>
+    <p id="list-status" role="status" data-testid="list-status">Loading scenarios…</p>
+    <p><button type="button" id="retry" data-testid="retry" hidden>Retry</button></p>
+    <p><label for="filter">Filter scenarios by ID or title</label>
+       <input id="filter" type="search" data-testid="filter" maxlength="60" autocomplete="off"></p>
+    <table aria-describedby="list-status">
+      <caption class="sr">Fixed scenarios. Each row has a Run button.</caption>
+      <thead><tr><th scope="col">Scenario</th><th scope="col">Host</th><th scope="col">Kind</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+      <tbody id="rows" data-testid="scenario-rows"></tbody>
+    </table>
+  </section>
+
+  <section aria-labelledby="res-h">
+    <h2 id="res-h">Result</h2>
+    <div id="result" data-testid="result" aria-live="polite" tabindex="-1"><p>No scenario run yet.</p></div>
+  </section>
+</main>
+<script src="/app.js" type="module"></script>
+</body>
+</html>

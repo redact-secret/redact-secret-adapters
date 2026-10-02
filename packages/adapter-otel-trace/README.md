@@ -1,7 +1,30 @@
 # @redact-secret/adapter-otel-trace
 
-A redacting OpenTelemetry JS `SpanProcessor` for **traces**, over the
-[Redact Secret](https://github.com/redact-secret/redact-secret) core.
+[![npm version](https://img.shields.io/npm/v/@redact-secret/adapter-otel-trace)](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace)
+[![npm downloads](https://img.shields.io/npm/dm/@redact-secret/adapter-otel-trace)](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace)
+[![OpenTelemetry SDK peer range](https://img.shields.io/npm/dependency-version/@redact-secret/adapter-otel-trace/peer/@opentelemetry/sdk-trace-base)](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace?activeTab=dependencies)
+[![Node.js](https://img.shields.io/node/v/@redact-secret/adapter-otel-trace)](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace)
+[![types included](https://img.shields.io/npm/types/@redact-secret/adapter-otel-trace)](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace)
+[![CI](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-adapters/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-adapters)
+[![License: MIT](https://img.shields.io/npm/l/@redact-secret/adapter-otel-trace)](https://github.com/redact-secret/redact-secret-adapters/blob/main/LICENSE)
+
+Keep secrets out of OpenTelemetry **traces**. Wrap the span processor you
+already have, and span names, attributes, events and links are redacted before
+they reach your exporter.
+
+Built on the [Redact Secret](https://github.com/redact-secret/redact-secret)
+core, which does the detection.
+
+## Install
+
+```bash
+npm install @redact-secret/core @redact-secret/adapter-otel-trace @opentelemetry/sdk-trace-base
+```
+
+Needs Node.js 20, 22 or 24 and `@opentelemetry/sdk-trace-base ^2.0.0`. ESM only.
+
+## Quick start
 
 ```js
 import { NodeTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-node";
@@ -12,21 +35,7 @@ const provider = new NodeTracerProvider({
 });
 ```
 
-## What it covers, and what it does not
-
-**Spans only.** This package plugs into the tracing pipeline and sees what a
-`SpanProcessor` sees. It does **not** protect OpenTelemetry **Logs**: a
-`LogRecord` emitted through `@opentelemetry/sdk-logs` (or a log bridge such as
-the pino or winston instrumentation) never passes through it and reaches its
-exporter as it was written. There is no OpenTelemetry Logs adapter yet;
-`@redact-secret/adapter-otel-logs` is a reserved name for one, not a package.
-Metrics are not covered either.
-
-This package was published as
-[`@redact-secret/adapter-otel`](https://www.npmjs.com/package/@redact-secret/adapter-otel) up to `0.1.2`. That name keeps working — its
-releases after `0.1.2` re-export this package — but new code should import
-from here; see
-[Migrating from `@redact-secret/adapter-otel`](#migrating-from-redact-secretadapter-otel).
+A complete, runnable example:
 
 <!-- smoke-test:example -->
 ```js
@@ -57,95 +66,112 @@ await provider.shutdown();
 // ...{"name":"deploy <SECRET_1>",...,"attributes":[{"key":"llm.input_messages","value":{"stringValue":"deploy with token <SECRET_1>"}}],...
 ```
 
-The clean-install smoke test (`npm run smoke-test`) runs this block verbatim
-from a throwaway project outside the repository, against the real core, and
-inspects the exporter's bytes.
+CI runs this block verbatim from a clean install outside the repository
+(`npm run smoke-test`), against the real core, and inspects the exporter's
+bytes.
 
-## What is redacted
+To check that your own provider and exporter are covered, run the
+[placement recipe](https://github.com/redact-secret/redact-secret-adapters/tree/main/examples/placement-js):
+it serializes a span with a synthetic token the way an exporter would and
+includes a processor registered ahead of the redacting one as a negative control.
 
-In `onEnd`, before the span reaches the next processor, the processor redacts
-the span name, every string and string-array attribute (a `null` hole in an
-array is kept in place), every event's name and attributes, the status message,
-and every link's attributes. Attribute names are not
-allowlisted, so OpenInference (`llm.input_messages`, `input.value`, …) and GenAI
-semantic-convention attributes (`gen_ai.prompt`, …) are covered without
-hardcoding either convention.
+## What is covered
 
-## The load-bearing assumption
+| Covered | Not covered |
+| --- | --- |
+| The span name | OpenTelemetry **Logs** (`LogRecord`s from `@opentelemetry/sdk-logs` or a log bridge) |
+| Every string and string-array attribute (a `null` hole in an array stays in place) | Metrics |
+| Every event's name and attributes | Attribute **names**, which are never scanned on their own or rewritten (a name is only context for the string value under it). Do not put a secret in an attribute key |
+| The status message | Spans the wrapped processor never receives: sampled out, or handled by a processor registered ahead of this one |
+| Every link's attributes | |
+
+Attribute names are not allowlisted, so OpenInference (`llm.input_messages`,
+`input.value`, …) and GenAI semantic-convention attributes (`gen_ai.prompt`,
+…) are covered without hardcoding either convention.
+
+**This is a trace processor only.** A `LogRecord` never passes through it and
+reaches its exporter as it was written. For logs use
+[`@redact-secret/adapter-otel-logs`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter-otel-logs),
+a separate package currently published as a beta (`0.1.0-beta.2`, dist-tag `beta`).
+
+When a value cannot be scanned, a fixed marker replaces it. See
+[`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#fail-closed-markers)
+for the markers.
+
+### A span that cannot be redacted is dropped
+
+(Other markers and limits, and what to do about each:
+[troubleshooting](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/troubleshooting.md#logs-and-spans-markers).)
 
 `ReadableSpan`'s fields are typed `readonly` but are plain writable objects at
-runtime, and this processor writes the masked values back in place. Every write
-is read back; if one does not take (for example, an earlier processor froze the
-attributes), the span is **dropped** — not exported, and nothing is thrown out
-of `span.end()` — and a one-time process warning
+runtime, and this processor writes the masked values back in place. Every
+write is read back. If one does not take (for example, an earlier processor
+froze the attributes), the span is **dropped**: not exported, and nothing is
+thrown out of `span.end()`. A one-time process warning
 (`REDACT_SECRET_SPAN_DROPPED`) names the field, never its value.
+
 `test/otel-host.test.ts` builds a real span, passes it through a real
 `BasicTracerProvider`, and asserts the exporter saw redacted fields. That
 assertion is not optional.
 
-## Exports
-
-| Export | Purpose |
-| --- | --- |
-| `createRedactingSpanProcessor(next, options?)` | Live: awaits the core's `initialize()`, wraps `next` |
-| `RedactingSpanProcessorWith` | `new (next, scanAndRedact, options?)` — injected scanner |
-| `redactAttributesWith(scanAndRedact, attributes, options?)` | Mutates one attribute bag in place; throws a `TypeError` (naming no value) if it cannot |
-
-`options` is `{ policy, maxStringLength }` — `MaskLeafOptions`, re-exported
-here — plus `onOutcome` and, on the live factory, `pii` — every option
-`adapter-otel` `0.1.2` had. The older `RedactAttributesOptions` alias is deprecated. See
-[`@redact-secret/adapter`](../adapter#fail-closed-markers) for the markers.
-
-**Attribute names are not scanned.** The processor masks attribute *values*
-(and the span name, event names, and status message). Every attribute key,
-on the span, its events, and its links, reaches the exporter unchanged, so an
-attribute *named* after a secret keeps that name. Do not put a secret in an
-attribute key.
-
-## PII detection is opt-in
-
-The core detects credentials out of the box; PII detection is a
-separate activation, and it is process-wide and one-shot — the first selection
-wins, and a later *different* one fails with `PII_ACTIVATION_CONFLICT`.
-
-Either order works. Activate it yourself before building the provider:
+## Options
 
 ```js
-await initialize({ pii: ["pii:global"] });
-const processor = await createRedactingSpanProcessor(next); // accepted, not fought over
+await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLength, operationLimits, scanLimits, ruleset, placeholderFormatter });
 ```
 
-or let the factory do it, which is the order to prefer when this adapter is the
-first thing in the process to touch the core:
+| Option | What it does |
+| --- | --- |
+| `pii` | Turn on PII detection, e.g. `["pii:global"]`. See below |
+| `onOutcome` | A callback with counts per span, for your metrics. See below |
+| `policy` | The core's policy, passed through unchanged. It replaces the core's built-in policy for every finding, a `ruleset` detector's included |
+| `scanLimits` | The core's whole-input limits, `{ maxInputBytes, maxFindings }`, for every scan. See [Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options) |
+| `ruleset` | A declarative detector ruleset (text or bytes) |
+| `placeholderFormatter` | The core's placeholder formatter |
+| `maxStringLength` | Strings longer than this become `[REDACTED:LIMIT_EXCEEDED]` unscanned |
+| `operationLimits` | Override the aggregate budget of **one span**. See below |
+
+### One budget per span
+
+The span name, every attribute, every event and link, and the status message
+share **one** aggregate budget per span, so a span with many events and links
+cannot multiply the scanning even when each string is within `maxStringLength`.
+Past a bound every string not yet inspected becomes
+`[REDACTED:LIMIT_EXCEEDED]` unscanned and the span is still forwarded, never with
+text the budget did not allow to be inspected; nothing in `onOutcome` carries
+input. A key-context scan counts as a scan, and attribute names count as keys.
+A span ended re-entrantly inside the next processor has its own budget. Units,
+defaults and the caveat that this is a work counter and not a timeout are in
+[`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#aggregate-operation-budget).
+
+### PII detection
+
+The core detects credentials out of the box. PII detection is a separate
+activation:
 
 ```js
 const processor = await createRedactingSpanProcessor(next, { pii: ["pii:global"] });
 ```
 
-When you pass `pii`, the factory reads the core's `piiActivation()` afterwards
-and **rejects** if the active selection is not the one you asked for, rather
-than returning a processor that scans with PII silently off. The rejection
-carries a fixed `code` — `PII_ACTIVATION_NOT_ACTIVE`, or
-`PII_ACTIVATION_UNSUPPORTED` against a core too old to report an activation —
-and never echoes a selector, the input, or the core's own message. Omitting
-`pii` needs no newer core: the declared `@redact-secret/core` range is
-unchanged, and every other initialization failure still rejects exactly as it
-did.
+It is process-wide and one-shot. If the selection you asked for is not the
+one active, the factory **rejects** with a fixed `code`
+(`PII_ACTIVATION_NOT_ACTIVE` or `PII_ACTIVATION_UNSUPPORTED`) rather than
+returning a processor that scans with PII silently off.
 
-**Activation is not masking.** Under the core's default policy, PII types are
-confidence-gated rather than always redacted: a `High`-confidence finding
-redacts, while `Medium` and `Low` resolve to `warn` — and a `warn` finding
-leaves the text alone. Enabling PII therefore still lets lower-confidence PII
-reach the exporter as plaintext. Pass your own `policy` mapping those findings
-to `redact` if you need them masked; this package decides nothing about policy.
-The counters below make it visible: a span whose `values.findings` is non-zero
-while `values.redacted` stays at zero is exactly this case.
+**Activation is not masking.** Under the core's default policy only
+`High`-confidence PII is redacted; `Medium` and `Low` resolve to `warn`, which
+leaves the text alone. Pass your own `policy` if you need those masked. A span
+whose `values.findings` is non-zero while `values.redacted` stays at zero is
+exactly this case.
 
-## Counting what happened
+Full rules:
+[PII guide](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/pii.md).
 
-`onOutcome` reports one summary per **span**. It is
-observational: increment your own counters from it. This package creates no
-exporter or network client for you.
+### Counting what happened
+
+`onOutcome` reports one summary per **span**. It is observational: increment
+your own counters from it. This package creates no exporter or network client
+for you.
 
 ```js
 const processor = await createRedactingSpanProcessor(new BatchSpanProcessor(exporter), {
@@ -162,37 +188,47 @@ const processor = await createRedactingSpanProcessor(new BatchSpanProcessor(expo
   dropped: false }
 ```
 
-The counts are defined in
-[`@redact-secret/adapter`](../adapter#outcome-counters) — `findings` is not a
-count of distinct credentials, and `redacted` is lower than `findings` whenever
-a finding leaves text alone. Every string attribute, array element, event name
-and status message is its own counted leaf; attribute *names* are not scanned
-and not counted.
-
-`dropped` is **this processor's** decision: it did not hand the span to the
-next processor because a masked value would not write back (see the
-load-bearing assumption above). It does not mean the span was sampled out, and
-`dropped: false` does **not** mean the span was exported — whether the next
-processor kept it and whether an exporter succeeded are things this adapter
-never learns and does not report.
-
+- Every string attribute, array element, event name and status message is its
+  own counted leaf. Attribute *names* are not scanned and not counted.
+- `findings` is not a count of distinct credentials, and `redacted` is lower
+  than `findings` whenever a finding leaves text alone. The counts are defined
+  in
+  [`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#outcome-counters).
+- `dropped` is **this processor's** decision: it did not hand the span to the
+  next processor because a masked value would not write back. It does not mean
+  the span was sampled out, and `dropped: false` does **not** mean the span was
+  exported. Whether the next processor kept it and whether an exporter
+  succeeded are things this adapter never learns.
 - The observer runs once the span has been forwarded or dropped, so it cannot
-  change what is exported, and anything it throws is swallowed and never read.
-- It is re-entrancy- and thread-guarded: an observer that ends another span
-  does not recurse, and one thread's report never suppresses another's.
+  change what is exported. Anything it throws is swallowed and never read.
+- It is re-entrancy-guarded: an observer that ends another span does not
+  recurse.
 
-## Supported SDK versions
+## Exports
+
+| Export | Purpose |
+| --- | --- |
+| `createRedactingSpanProcessor(next, options?)` | Live: awaits the core's `initialize()`, wraps `next` |
+| `RedactingSpanProcessorWith` | `new (next, scanAndRedact, options?)`, with an injected scanner |
+| `redactAttributesWith(scanAndRedact, attributes, options?)` | Mutates one attribute bag in place; throws a `TypeError` (naming no value) if it cannot |
+
+`options` is `{ policy, maxStringLength }` (`MaskLeafOptions`, re-exported
+here) plus `onOutcome` and, on the live factory, `pii`. The older
+`RedactAttributesOptions` alias is deprecated.
+
+## Supported versions
 
 `@opentelemetry/sdk-trace-base ^2.0.0` and `@redact-secret/core`
 `^0.1.0-beta.6`. CI runs the real-host tests at both ends of each range. The
-SDK is imported as types only — it never enters this package's runtime graph.
+SDK is imported as types only. It never enters this package's runtime graph.
 
 ## Migrating from `@redact-secret/adapter-otel`
 
-`0.1.0` of this package is the code `@redact-secret/adapter-otel` `0.1.2`
-shipped: the same exports, options, outcome shape, peer ranges and fail-closed
-markers. Only the name changes, so migrating is a dependency swap and an import
-specifier:
+This package was published as
+[`@redact-secret/adapter-otel`](https://www.npmjs.com/package/@redact-secret/adapter-otel)
+up to `0.1.2`. `0.1.0` of this package is that same code: the same exports,
+options, outcome shape, peer ranges and fail-closed markers. Only the name
+changes, so migrating is a dependency swap and an import specifier:
 
 ```sh
 npm uninstall @redact-secret/adapter-otel
@@ -204,14 +240,19 @@ npm install @redact-secret/adapter-otel-trace
 +import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel-trace";
 ```
 
-Nothing breaks if you do not migrate yet. `@redact-secret/adapter-otel`
-`0.1.2` is this code under the old name, and its later releases re-export this
-package, so both names hand out the same functions and the same
-`RedactingSpanProcessorWith` class and mixing them in one process is safe.
-Those later releases mark every export `@deprecated`, which editors show as a
-strikethrough.
+Nothing breaks if you do not migrate yet. Later releases of
+`@redact-secret/adapter-otel` re-export this package, so both names hand out
+the same functions and the same `RedactingSpanProcessorWith` class, and mixing
+them in one process is safe. Those releases mark every export `@deprecated`,
+which editors show as a strikethrough.
 
 Neither name protects OpenTelemetry Logs, before or after migrating.
+
+## Contributing
+
+Issues and pull requests are welcome:
+[CONTRIBUTING.md](https://github.com/redact-secret/redact-secret-adapters/blob/main/CONTRIBUTING.md).
+Changes are listed in this package's `CHANGELOG.md`.
 
 ## License
 

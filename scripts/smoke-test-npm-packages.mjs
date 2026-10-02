@@ -227,6 +227,14 @@ function main() {
     }
     console.log("@redact-secret/adapter-otel-trace: README example ok");
 
+    // 5d2. The verified scan options (redact-secret-adapters#175), from a clean
+    // consumer: a synthetic ruleset, a custom formatter, low ceilings and policy
+    // precedence on the real core, through the packed packages.
+    writeFileSync(join(projectDir, "scan-options.mjs"), SCAN_OPTIONS_MJS);
+    console.log("+ node scan-options.mjs");
+    execFileSync(process.execPath, ["scan-options.mjs"], { cwd: projectDir, stdio: "inherit" });
+    console.log("@redact-secret/adapter, adapter-pino, adapter-otel-trace: scan options ok");
+
     // 5e. The same span through the live factory under every name a consumer
     // can import it by: this checkout's adapter-otel-trace and adapter-otel
     // tarballs, and the adapter-otel release on npm in a project of its own
@@ -318,6 +326,44 @@ export function fakeScanAndRedact(text) {
   }
   return { text, findings: [] };
 }
+`;
+
+// The scan options on the real core, imported the way a consumer would. The
+// ruleset format and token are made up; nothing here is a credential.
+const SCAN_OPTIONS_MJS = `import assert from "node:assert/strict";
+import { CoreOptionsError, createMaskSecrets } from "@redact-secret/adapter";
+import { createRedactingStreamWrite } from "@redact-secret/adapter-pino";
+
+const ruleset = ["ruleset-revision: 1", "detector: synthetic-example-token", "specificity: contextual",
+  'prefix: "SYNTH_"', "alphabet: alnum-dash", "run: at-least 20", "validator: none", ""].join("\\n");
+const token = "SYNTH_EXAMPLE-TOKEN-000000000001";
+const around = "value " + token + " end";
+const policy = (action) => ({ evaluate: () => action });
+
+// Policy precedence: the core's default policy only warns on a ruleset finding.
+assert.deepEqual((await createMaskSecrets({ ruleset }))([around]), [around]);
+assert.deepEqual((await createMaskSecrets({ ruleset, policy: policy("redact") }))([around]), ["value <SECRET_1> end"]);
+assert.deepEqual((await createMaskSecrets({ ruleset, policy: policy("block") }))([around]), ["[REDACTED:BLOCKED]"]);
+
+// A custom formatter, and the pino final-line hook on the same options.
+const formatter = (finding, context) => "[" + finding.type + "#" + context.placeholderIndex + "]";
+const formatted = (await createMaskSecrets({ ruleset, policy: policy("redact"), placeholderFormatter: formatter }))([around]);
+assert.match(formatted[0], /^value \\[[a-z_-]+#1\\] end$/);
+const write = await createRedactingStreamWrite({ ruleset, policy: policy("redact"), placeholderFormatter: formatter });
+assert.match(JSON.parse(write(JSON.stringify({ level: 30, msg: around }) + "\\n")).msg, /^value \\[[a-z_-]+#1\\] end$/);
+
+// Low ceilings are the core's: past them the leaf is the error marker.
+const limited = await createMaskSecrets({ scanLimits: { maxInputBytes: 40, maxFindings: 1 } });
+assert.deepEqual(limited(["short", "x".repeat(60)]), ["short", "[REDACTED:ERROR]"]);
+
+// A ruleset the core rejects is a fixed, input-free error at construction.
+await assert.rejects(createMaskSecrets({ ruleset: "ruleset-revision: 1\\nNOT-A-RULE-MARKER\\n" }), (error) => {
+  assert.ok(error instanceof CoreOptionsError);
+  assert.equal(error.coreCode, "INVALID_RULESET");
+  assert.ok(!JSON.stringify({ message: error.message, ...error }).includes("NOT-A-RULE-MARKER"));
+  return true;
+});
+console.log("scan options ok");
 `;
 
 // One span through `createRedactingSpanProcessor` imported from argv[2], a

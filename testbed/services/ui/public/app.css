@@ -1,0 +1,148 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.4;
+}
+body {
+  max-width: 64rem;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th,
+td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #8884;
+  vertical-align: top;
+}
+code {
+  font-size: 0.9em;
+}
+button {
+  font: inherit;
+  padding: 0.2rem 0.7rem;
+}
+:focus-visible {
+  outline: 3px solid #1a5fd0;
+  outline-offset: 2px;
+}
+.sr {
+  position: absolute;
+  left: -9999px;
+}
+.status {
+  font-weight: 600;
+}
+.s-pass {
+  color: #0a6b2d;
+}
+.s-fail,
+.s-error,
+.s-unavailable,
+.s-timed-out {
+  color: #b3200f;
+}
+.s-unsupported {
+  color: #8a5a00;
+}
+.s-running {
+  color: #1a5fd0;
+}
+.badge {
+  display: inline-block;
+  padding: 0 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 0.6rem;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+.k-masking {
+  color: #0a6b2d;
+}
+.k-warn {
+  color: #8a5a00;
+}
+.k-block {
+  color: #b3200f;
+}
+.k-limit {
+  color: #7a3fa0;
+}
+.k-init-failure {
+  color: #8c1d5a;
+}
+.k-cancellation {
+  color: #1a5fd0;
+}
+.k-stream {
+  color: #0b6b6b;
+}
+.k-policy {
+  color: #555;
+}
+.mismatch {
+  font-weight: 700;
+  color: #b3200f;
+}
+.hosts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem;
+}
+.host {
+  border: 1px solid #8886;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+}
+.host h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+.value {
+  font-family: ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.note {
+  border-left: 4px solid #8886;
+  padding-left: 0.6rem;
+  margin: 0.5rem 0;
+}
+@media (prefers-color-scheme: dark) {
+  .s-pass,
+  .k-masking {
+    color: #5fd38a;
+  }
+  .s-fail,
+  .s-error,
+  .s-unavailable,
+  .s-timed-out,
+  .k-block,
+  .mismatch {
+    color: #ff8b7d;
+  }
+  .s-unsupported,
+  .k-warn {
+    color: #e6b450;
+  }
+  .s-running,
+  .k-cancellation {
+    color: #7fb0ff;
+  }
+  .k-limit {
+    color: #d7a8f2;
+  }
+  .k-init-failure {
+    color: #f09ac8;
+  }
+  .k-stream {
+    color: #6fd6d6;
+  }
+  .k-policy {
+    color: #bbb;
+  }
+}

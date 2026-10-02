@@ -29,6 +29,7 @@ import type {
   JsonValue,
   OkOutcome,
 } from "@redact-secret/adapter-ai-context";
+import * as aiContext from "@redact-secret/adapter-ai-context";
 
 import type {
   JsonObject,
@@ -231,8 +232,19 @@ function restore(original: Record<string, unknown>, sanitized: Record<string, un
   return out;
 }
 
-function ok<T>(value: T, findings: OkOutcome<unknown>["findings"]): OkOutcome<T> {
-  return Object.freeze({ outcome: "ok", value, findings });
+/**
+ * `source` is the AI-context outcome whose findings this one carries
+ * unchanged: its occurrences (redact-secret/redact-secret-adapters#177) are
+ * forwarded to the new outcome, so `findingOccurrences` reads the same for an
+ * MCP outcome. Feature-detected, so an older `adapter-ai-context` that has no
+ * occurrences is simply a no-op rather than a failed import.
+ */
+function ok<T>(value: T, findings: OkOutcome<unknown>["findings"], source?: unknown): OkOutcome<T> {
+  const outcome: OkOutcome<T> = Object.freeze({ outcome: "ok", value, findings });
+  const attach = (aiContext as { attachFindingOccurrences?: (target: object, source: unknown) => unknown })
+    .attachFindingOccurrences;
+  if (source !== undefined) attach?.(outcome, source);
+  return outcome;
 }
 
 type Reassemble = ((clean: Record<string, unknown>) => Record<string, unknown>) | null;
@@ -441,7 +453,7 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
           : outcome.value[key],
       );
     }
-    return ok(value as JsonObject, outcome.findings);
+    return ok(value as JsonObject, outcome.findings, outcome);
   }
 
   function argumentsOutcome(args: unknown, signal?: CancellationSignal): McpOutcome<JsonObject | undefined> {
@@ -540,7 +552,7 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
           : outcome.value[key],
       );
     }
-    return ok(value as JsonObject, outcome.findings);
+    return ok(value as JsonObject, outcome.findings, outcome);
   }
 
   async function readOutcome(
@@ -672,7 +684,7 @@ export function createMcpBoundaryWith(boundary: AiContextBoundary, options: McpB
     }
     const outcome = stream.finalize();
     if (outcome.outcome !== "ok") return outcome;
-    return ok({ content: [{ type: "text", text: outcome.value }] }, outcome.findings);
+    return ok({ content: [{ type: "text", text: outcome.value }] }, outcome.findings, outcome);
   }
 
   /** What a server handler returns for an outcome. `aborted` gets the blocked result, which the SDK never sends for a cancelled request. */

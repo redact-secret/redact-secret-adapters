@@ -9,7 +9,7 @@
  */
 
 import type { MaskOptions, ScanAndRedact } from "@redact-secret/adapter";
-import { ERROR_MARKER, maskLogValueWith } from "@redact-secret/adapter";
+import { ERROR_MARKER, maskLogValueWith, withResolvedScanConfig } from "@redact-secret/adapter";
 import type { LogFn, Logger } from "pino";
 
 import { formatPinoMessage } from "./format-message.js";
@@ -116,13 +116,15 @@ export function createRedactingLogMethodWith(
   if (typeof scanAndRedact !== "function") {
     throw new TypeError("createRedactingLogMethodWith: scanAndRedact must be a function");
   }
+  // Validated and snapshotted once: a malformed scan option throws here.
+  const resolved = withResolvedScanConfig(options);
   return function redactingLogMethod(args, method, _level) {
     let redacted: unknown[];
     try {
-      redacted = redactArgs(scanAndRedact, Array.from(args), this?.msgPrefix, options);
+      redacted = redactArgs(scanAndRedact, Array.from(args), this?.msgPrefix, resolved);
     } catch {
       // e.g. formatting `%d` with a Symbol: log the marker, never the raw arguments.
-      if (options.counter !== undefined) options.counter.failed += 1;
+      if (resolved.counter !== undefined) resolved.counter.failed += 1;
       redacted = [ERROR_MARKER];
     }
     method.apply(this, redacted as Parameters<LogFn>);

@@ -20,14 +20,20 @@ test("escaped quotes and unicode escapes are decoded before scanning and re-enco
   expect(JSON.parse(out)).toEqual({ msg: 'say "<SECRET_1>"', raw: "tab\there é" });
 });
 
-test("an object key is never scanned or rewritten", () => {
+test("an object key is never scanned on its own or rewritten; it is only context for its value", () => {
   const seen: string[] = [];
   const spy: ScanAndRedact = (text) => {
     seen.push(text);
     return { text, findings: [] };
   };
-  createRedactingStreamWriteWith(spy)('{"SECRET_TOKEN_1" : "value"}');
-  expect(seen).toEqual(["value"]);
+  const out = createRedactingStreamWriteWith(spy)('{"SECRET_TOKEN_1" : "value"}');
+  expect(out).toBe('{"SECRET_TOKEN_1" : "value"}');
+  expect(seen).toEqual(["value", '{"SECRET_TOKEN_1":"value"}']);
+});
+
+test("a key the core would redact in a value's key context cannot be rewritten: the value is blocked, the key kept", () => {
+  const out = createRedactingStreamWriteWith(fakeScanAndRedact)('{"SECRET_TOKEN_1" : "value"}');
+  expect(out).toBe('{"SECRET_TOKEN_1" : "[REDACTED:BLOCKED]"}');
 });
 
 test("a scanner failure fails closed for that value only", () => {
