@@ -11,8 +11,8 @@ from redact_secret_adapters.logging_filter import RedactSecretFilter
 # credential-shaped value the core's default policy only warns about. None of them is real.
 TOKEN = "ghp_SYNTHETICREVOKED00000000000000000000"
 EMAIL = "jane.doe@acme-corp.io"
-PASSWORD = "hunter2hunter2"
-SAMPLE = f"token {TOKEN}; customer email: {EMAIL}; password={PASSWORD}"
+WARN_VALUE = "hunter2hunter2"
+SAMPLE = f"token {TOKEN}; customer email: {EMAIL}; password={WARN_VALUE}"
 
 
 # snippet:start configurations
@@ -87,17 +87,17 @@ def main() -> None:
             fail(f"{name}: an unexpected failure or block")
     # Default: credentials only. The email is untouched and the password is a reported warn.
     line = results["default"]["line"]
-    if EMAIL not in line or PASSWORD not in line:
+    if EMAIL not in line or WARN_VALUE not in line:
         fail("default: expected PII and the warn value to remain")
     # PII on: the email is redacted at high confidence, the warn value is still plaintext.
     line = results["pii"]["line"]
-    if EMAIL in line or PASSWORD not in line:
+    if EMAIL in line or WARN_VALUE not in line:
         fail("pii: expected the email redacted and the warn value unchanged")
     if results["pii"]["counts"]["findings"] <= results["default"]["counts"]["findings"]:
         fail("pii: expected one more finding than the default")
     # Explicit policy: everything is masked.
     line = results["policy"]["line"]
-    if EMAIL in line or PASSWORD in line:
+    if EMAIL in line or WARN_VALUE in line:
         fail("policy: a value was left unmasked")
     print("OK: the three configurations differ as documented")
 
