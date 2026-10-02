@@ -119,6 +119,41 @@ PII activation is process-wide and one-shot, so a scenario needing it must run
 in its own process (a separate service or child process), not in the shared
 consumer process.
 
+## AI-context server and browser/WASM lanes (#195)
+
+`aictx.*` (Node consumer, `scenarios/aictx.mjs`) runs the installed
+`adapter-ai-context` over the real core: text, key-aware structured values,
+multi-part contexts, ok / blocked / aborted, policy warn and block (default and
+explicit), whole-input / traversal / stream limits, initialization failures,
+unsupported values, and incremental `append` / `finalize` / `abort` with
+`accepting=false` producer shutdown and no release before `finalize`. A stub
+downstream recipient receives only `ok.value`. PII configurations run in
+their own child process (`lib/aictx-child.mjs`).
+
+The **browser lane** is separate: the `browser-consumer` service installs the
+same artifacts, bundles them with esbuild (`platform: "browser"`, ESM),
+serves the bundle and the core's real `.wasm` files over a same-origin-only
+CSP, and Playwright loads it in Chromium (one browser context per PII
+configuration). `browser.*` IDs are Playwright tests in
+`services/runner/tests/aictx-browser.spec.mjs`; the runner writes
+`reports/browser-lane.json` and `report.json` carries it as `browserLane`.
+
+- **Status is explicit**: `supported/pass`, `blocked-by-packaging` (the
+  bundle or the `.wasm` assets cannot be produced from the installed
+  release; the tests fail with that reason and no server request is
+  substituted), or `failed`. A missing lane report is reported as absent and
+  the run fails. Nothing is silently skipped.
+- **Parity**: the browser and the Node server hash the same shared synthetic
+  cases (`contract/aictx-cases.mjs`: Unicode, key-aware values, every stream
+  split, limits, block) with PII off and on; values themselves are never
+  recorded, and the test fails on any difference.
+- **Version awareness**: assertions cover only what the installed artifacts
+  support. `aictx.candidate-features` (occurrence provenance, operation
+  budget, readiness check) fails in candidate mode if missing and is reported
+  `unsupported` (counted separately, never a pass) against the pinned release.
+- **Not shown**: Chromium only, esbuild only, Linux containers. This verifies
+  consumer integration; the core's conformance suite stays authoritative.
+
 ## Updating pins
 
 Base images are pinned by tag and digest in the Dockerfiles

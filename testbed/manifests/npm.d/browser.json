@@ -1,0 +1,4 @@
+{
+  "description": "Extra npm packages for the browser/WASM consumer (#195). esbuild is the bundler the #179 browser smoke qualifies (same version as the repository's devDependency); it is installed through the manifest, never ad hoc. The browser lane bundles the SAME installed adapter and core artifacts as the Node consumer.",
+  "hosts": { "esbuild": "0.28.2" }
+}
