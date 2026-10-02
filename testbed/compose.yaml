@@ -96,6 +96,8 @@ services:
     environment:
       TESTBED_UI_URL: http://ui:8080
       TESTBED_CONTROL_URLS: http://node-consumer:8081,http://python-consumer:8081
+      # The consumers' own scenario API, read by the journeys to confirm what the UI shows (#196).
+      TESTBED_CONSUMER_URLS: node=http://node-consumer:8080,python=http://python-consumer:8080
       HOME: /tmp
     volumes:
       - ${TESTBED_OUT_DIR:?set by npm run testbed}:/out

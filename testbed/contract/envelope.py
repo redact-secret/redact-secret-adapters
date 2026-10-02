@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -17,7 +18,17 @@ from pathlib import Path
 RESULT_SCHEMA = "redact-secret-adapters/testbed-result-v1"
 SCENARIO_ID = re.compile(r"^(smoke|pino|pylog|aictx|browser|ui)\.[a-z0-9]+(-[a-z0-9]+)*$")
 CLASSIFICATIONS = ("install-check", "qualification", "negative-control", "failure-injection")
-LIMITS = {"assertions": 50, "name": 120, "detail": 240, "message": 240, "title": 200, "evidence_bytes": 8192}
+LIMITS = {
+    "assertions": 50,
+    "name": 120,
+    "detail": 240,
+    "message": 240,
+    "title": 200,
+    "evidence_bytes": 8192,
+    "comparisons": 12,
+    "comparison_value": 100,
+}
+COMPARISON_KINDS = ("masking", "warn", "block", "limit", "init-failure", "cancellation", "stream", "policy", "other")
 
 
 def load_sentinels(contract_dir: Path):
@@ -44,6 +55,7 @@ class Recorder:
         self.evidence = {}
         self.status = None
         self.overflow = False
+        self.comparisons = []
 
     def check(self, name, ok, detail=None):
         if len(self.assertions) < LIMITS["assertions"]:
@@ -54,6 +66,38 @@ class Recorder:
         else:
             self.overflow = True
         return ok is True
+
+    def compare(self, label, expected, actual, kind="other"):
+        """Expected-versus-actual pair for the scenario UI (#196) plus an equality assertion.
+
+        Values must be display-safe primitives (a sanitized output, a placeholder, or a fixed label),
+        never a raw input or warn/negative-control plaintext. The self-test fault `wrong-expectation`
+        replaces every expected value, so the run must fail.
+        """
+        want = "[wrong expectation injected]" if os.environ.get("TESTBED_FAULT") == "wrong-expectation" else expected
+
+        def show(v):
+            if v is None or isinstance(v, (bool, int, float)):
+                return v
+            if isinstance(v, str):
+                return self.scrub(v, LIMITS["comparison_value"])
+            return "[non-primitive]"
+
+        match = type(want) is type(actual) and want == actual
+        self.check(label, match, "expected and actual differ")
+        if len(self.comparisons) >= LIMITS["comparisons"]:
+            self.overflow = True
+            return match
+        self.comparisons.append(
+            {
+                "label": self.scrub(label, LIMITS["name"]),
+                "kind": kind if kind in COMPARISON_KINDS else "other",
+                "expected": show(want),
+                "actual": show(actual),
+                "match": match,
+            }
+        )
+        return match
 
     def unsupported(self, reason):
         self.status = "unsupported"
@@ -75,7 +119,8 @@ def run_scenario(definition, host, ctx, scrub):
     else:
         status = "pass" if rec.assertions and all(a["ok"] for a in rec.assertions) else "fail"
 
-    encoded = scrub(json.dumps(rec.evidence), 10**9)
+    raw_evidence = {**rec.evidence, "comparisons": rec.comparisons} if rec.comparisons else rec.evidence
+    encoded = scrub(json.dumps(raw_evidence), 10**9)
     evidence = {}
     if len(encoded.encode()) > LIMITS["evidence_bytes"]:
         status = "error"

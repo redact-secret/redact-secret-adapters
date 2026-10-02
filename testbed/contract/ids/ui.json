@@ -1,4 +1,53 @@
 {
   "namespace": "ui",
-  "scenarios": []
+  "scenarios": [
+    {
+      "id": "ui.environment-and-catalog",
+      "host": "browser"
+    },
+    {
+      "id": "ui.masking-journey",
+      "host": "browser"
+    },
+    {
+      "id": "ui.distinct-outcome-kinds",
+      "host": "browser"
+    },
+    {
+      "id": "ui.staged-stream",
+      "host": "browser"
+    },
+    {
+      "id": "ui.final-output-agreement",
+      "host": "browser"
+    },
+    {
+      "id": "ui.policy-fixtures",
+      "host": "browser"
+    },
+    {
+      "id": "ui.hostile-strings-render-as-text",
+      "host": "browser"
+    },
+    {
+      "id": "ui.hostile-strings-fixture",
+      "host": "browser"
+    },
+    {
+      "id": "ui.unavailable-and-retry",
+      "host": "browser"
+    },
+    {
+      "id": "ui.timeout-bounded",
+      "host": "browser"
+    },
+    {
+      "id": "ui.keyboard-and-labels",
+      "host": "browser"
+    },
+    {
+      "id": "ui.incorrect-response-fails-journey",
+      "host": "browser"
+    }
+  ]
 }

@@ -125,6 +125,8 @@ export const scenarios = [
       });
       rec.check("key-aware structured value is ok", keyed.outcome === "ok" && wellFormed(keyed));
       rec.check("a secret-named key redacts its value", keyed.value?.api_key === "<SECRET_1>");
+      rec.compare("sanitized Unicode text", "토큰 <SECRET_1> \u{1F680} 끝", text.value, "masking");
+      rec.compare("value under a secret-named key", "<SECRET_1>", keyed.value?.api_key, "masking");
       rec.check("a Korean value under a secret key is redacted", keyed.value?.client_secret === "<SECRET_1>");
       rec.check("a benign key keeps its value", keyed.value?.name === KEYED);
       rec.check("a token nested in an array is redacted", !JSON.stringify(keyed.value).includes(TOKEN));
@@ -212,6 +214,13 @@ export const scenarios = [
         "block: the same key in a structure is blocked",
         blockValue.outcome === "blocked" && blockValue.reason === "policy",
       );
+      rec.compare(
+        "default policy, password-shaped value",
+        "unchanged (warn)",
+        warn.value === WARN_ONLY && warn.findings?.[0]?.action === "warn" ? "unchanged (warn)" : "changed",
+        "warn",
+      );
+      rec.compare("default policy, private key", "blocked/policy", `${block.outcome}/${block.reason}`, "block");
       down.forward(warn);
       down.forward(block);
       down.forward(blockValue);
@@ -225,6 +234,7 @@ export const scenarios = [
       rec.check("explicit policy block: blocked/policy", bo.outcome === "blocked" && bo.reason === "policy");
       const redactAll = await boundary({ policy: { evaluate: () => "redact" } });
       const ro = redactAll.sanitizeText(WARN_ONLY);
+      rec.compare("explicit redact policy, same value", "password=<SECRET_1>", ro.value, "policy");
       rec.check(
         "explicit policy redact: the warn value is redacted",
         ro.outcome === "ok" && ro.value === "password=<SECRET_1>",
@@ -267,6 +277,7 @@ export const scenarios = [
           big.code === "INPUT_LIMIT_EXCEEDED" &&
           wellFormed(big),
       );
+      rec.compare("input over maxInputBytes", "blocked/limit_exceeded", `${big.outcome}/${big.reason}`, "limit");
       const wide = b.sanitizeValue([1, 2, 3, 4, 5, 6, 7]);
       rec.check(
         "more than maxNodes values is limit_exceeded",
@@ -279,6 +290,7 @@ export const scenarios = [
       );
       const within = b.sanitizeValue({ a: { b: { c: 1 } } });
       rec.check("a value within the limits is ok", within.outcome === "ok");
+      rec.compare("value within the limits", "ok", within.outcome, "limit");
       const ctxLimit = b.buildContext([
         { role: "user", text: "fine" },
         { role: "user", text: "a".repeat(65) },
@@ -368,6 +380,7 @@ export const scenarios = [
         ["sanitizeToolResult", b.sanitizeToolResult({ a: "x" }, { signal })],
         ["buildContext", b.buildContext([{ role: "user", text: "x" }], { signal })],
       ];
+      rec.compare("sanitizeText on a cancelled signal", "aborted", results[0][1].outcome, "cancellation");
       for (const [name, o] of results) {
         rec.check(`${name}: aborted`, o.outcome === "aborted" && wellFormed(o));
         down.forward(o);
@@ -384,6 +397,7 @@ export const scenarios = [
       mid.append(TOKEN.slice(12));
       const fin = mid.finalize();
       rec.check("...and finalizes as aborted, releasing nothing", fin.outcome === "aborted" && wellFormed(fin));
+      rec.compare("stream cancelled mid-way, finalize", "aborted", fin.outcome, "cancellation");
       down.forward(fin);
       rec.check("nothing reached the recipient", down.received.length === 0);
     },
@@ -410,6 +424,7 @@ export const scenarios = [
       };
       const failing = createAiContextBoundaryWith({ scanAndRedact: boom, createIncrementalSanitizer: boom }, TINY);
       const o = failing.sanitizeText(`x ${TOKEN}`);
+      rec.compare("failing core, sanitizeText", "blocked/core_error", `${o.outcome}/${o.reason}`, "init-failure");
       rec.check(
         "a failing core makes sanitizeText blocked/core_error",
         o.outcome === "blocked" && o.reason === "core_error" && wellFormed(o),
@@ -426,6 +441,12 @@ export const scenarios = [
       rec.check(
         "an unknown PII selector: every operation is blocked/core_error",
         [bad.text, bad.value, bad.context, bad.stream.final].every((x) => x.o === "blocked" && x.r === "core_error"),
+      );
+      rec.compare(
+        "unknown PII selector, sanitizeText",
+        "blocked/core_error",
+        `${bad.text.o}/${bad.text.r}`,
+        "init-failure",
       );
       rec.check("...and the stream is not accepting", bad.stream.accepting === false);
       rec.check("...and the core reports no active artifact", bad.artifact === null);
@@ -459,9 +480,12 @@ export const scenarios = [
       const fin = s.finalize();
       rec.check("finalize returns ok", fin.outcome === "ok" && wellFormed(fin));
       rec.check("the finalized value equals the whole-input value", fin.value === whole.value);
+      rec.compare("chunks that released output before finalize", 0, released, "stream");
+      rec.compare("finalized stream value equals the whole-input value", whole.value, fin.value, "stream");
       rec.check("the finalized value hides the token", !fin.value.includes(TOKEN));
       rec.check("stream findings use absolute offsets", fin.findings?.length === 1 && fin.findings[0].start === 17);
       rec.check("a finalized stream no longer accepts", s.accepting === false);
+      rec.compare("stream accepting after finalize", false, s.accepting, "stream");
       down.forward(fin);
       s.append("late chunk");
       const again = s.finalize();
@@ -604,6 +628,12 @@ export const scenarios = [
         "the warn-only value is a warn in both processes",
         plain.warn.o === "ok" && plain.warn.f[0].endsWith("/warn@9-23") && pii.warn.f[0].endsWith("/warn@9-23"),
       );
+      rec.compare(
+        "PII off vs on: only the address case differs",
+        true,
+        plain.digests.email !== pii.digests.email,
+        "policy",
+      );
       const policy = await child(ctx, "policy");
       rec.check(
         "explicit policy (PII on): the address is redacted",
@@ -619,6 +649,8 @@ export const scenarios = [
         "explicit policy: the private key still blocks",
         policy.pem.o === "blocked" && policy.pem.r === "policy",
       );
+      rec.compare("explicit policy, warn-only value", "password=<SECRET_1>", policy.warn.v, "policy");
+      rec.compare("explicit policy, private key", "blocked/policy", `${policy.pem.o}/${policy.pem.r}`, "block");
       const first = await child(ctx, "pii-first");
       rec.check(
         "PII activation is process-wide: a later PII-less boundary shares it",
@@ -628,6 +660,12 @@ export const scenarios = [
       rec.check(
         "PII requested after the core was initialized without it fails closed",
         late.late.o === "blocked" && late.late.r === "core_error",
+      );
+      rec.compare(
+        "PII requested after init without it",
+        "blocked/core_error",
+        `${late.late.o}/${late.late.r}`,
+        "init-failure",
       );
       rec.check(
         "...its stream does not accept and finalizes blocked",

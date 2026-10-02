@@ -32,6 +32,11 @@ services:
       retries: 15
       start_period: 2s
 
+  ui:
+    environment:
+      # The UI shows the browser lane's packaging and versions; it does not depend on it being up.
+      BROWSER_CONSUMER: http://browser-consumer:8080
+
   runner:
     environment:
       TESTBED_BROWSER_URL: http://browser-consumer:8080

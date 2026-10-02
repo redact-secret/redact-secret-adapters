@@ -177,6 +177,12 @@ export const scenarios = [
       log.info(`password=${PASSWORD}`);
       keep(ctx, "pino.policy-warn", sink.text);
       rec.check("the warn value is in the bytes (expected, documented)", sink.text.includes(PASSWORD));
+      rec.compare(
+        "warn value in the destination",
+        "unchanged (warn)",
+        sink.text.includes(PASSWORD) ? "unchanged (warn)" : "changed",
+        "warn",
+      );
       rec.check("verifier reports it as LEAKED, expected for a warn", verdict(sink.text, [PASSWORD]) === "LEAKED");
       rec.check(
         "nothing blocked or failed",
@@ -206,6 +212,7 @@ export const scenarios = [
       );
       rec.check("fixed BLOCKED marker present", sink.text.includes(BLOCK_MARKER));
       rec.check("structured field replaced by the marker", lines?.[1]?.pem === BLOCK_MARKER);
+      rec.compare("structured private-key field", BLOCK_MARKER, lines?.[1]?.pem, "block");
       rec.check(
         "blocked values were counted",
         counts.some((o) => o.values.blocked > 0),
@@ -224,6 +231,12 @@ export const scenarios = [
       log.info("key %s", PEM);
       keep(ctx, "pino.policy-explicit", sink.text);
       rec.check("the former warn value is masked", !sink.text.includes(PASSWORD));
+      rec.compare(
+        "former warn value under an explicit policy",
+        "masked",
+        sink.text.includes(PASSWORD) ? "plaintext" : "masked",
+        "policy",
+      );
       rec.check("verdict is PROTECTED", verdict(sink.text) === "PROTECTED");
       rec.check("block is still honoured under the explicit policy", sink.text.includes(BLOCK_MARKER));
     },
