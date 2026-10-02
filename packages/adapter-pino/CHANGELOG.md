@@ -19,6 +19,8 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-02
+
 ### Added
 
 - **One aggregate budget per log record** (redact-secret/redact-secret-adapters#173), shared by `logMethod` and `streamWrite` (and so by child bindings and `mixin()` output on the final line). `operationLimits` overrides it; the defaults are those of `@redact-secret/adapter`. A record logged from inside a getter while another is masked has its own budget. `createRedactingHooks` rejects a caller-owned `operation` (it owns the unit).

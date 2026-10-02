@@ -14,6 +14,8 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-02
+
 ### Added
 
 - `operationLimits` is accepted and passed to the AI-context boundary (redact-secret/redact-secret-adapters#173): one tool result is one operation, and a result over its aggregate budget is the fixed `blocked` / `limit_exceeded` outcome.

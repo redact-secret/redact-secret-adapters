@@ -50,10 +50,10 @@
       "id": "adapter-pino",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-pino",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-pino@0.1.3",
+      "gitTag": "adapter-pino@0.1.4",
       "sourcePath": "packages/adapter-pino",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-pino",
       "runtime": {
@@ -98,10 +98,10 @@
       "id": "adapter-otel-trace",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-otel-trace",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-otel-trace@0.1.1",
+      "gitTag": "adapter-otel-trace@0.1.2",
       "sourcePath": "packages/adapter-otel-trace",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-otel-trace",
       "runtime": {
@@ -146,10 +146,10 @@
       "id": "adapter-otel",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-otel",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-otel@0.1.4",
+      "gitTag": "adapter-otel@0.1.5",
       "sourcePath": "packages/adapter-otel",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-otel",
       "runtime": {
@@ -186,7 +186,7 @@
       "dependsOn": [
         {
           "name": "@redact-secret/adapter-otel-trace",
-          "range": "^0.1.0"
+          "range": "^0.1.2"
         }
       ]
     },
@@ -194,10 +194,10 @@
       "id": "adapter-ai-context",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-ai-context",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-ai-context@0.1.2",
+      "gitTag": "adapter-ai-context@0.1.3",
       "sourcePath": "packages/adapter-ai-context",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-ai-context",
       "runtime": {
@@ -231,10 +231,10 @@
       "id": "adapter-mcp",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-mcp",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-mcp@0.1.3",
+      "gitTag": "adapter-mcp@0.1.4",
       "sourcePath": "packages/adapter-mcp",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-mcp",
       "runtime": {
@@ -291,7 +291,7 @@
       "dependsOn": [
         {
           "name": "@redact-secret/adapter-ai-context",
-          "range": "^0.1.0-alpha.2"
+          "range": "^0.1.3"
         }
       ]
     },
@@ -299,10 +299,10 @@
       "id": "redact-secret-adapters",
       "ecosystem": "pypi",
       "name": "redact-secret-adapters",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "redact-secret-adapters@0.1.3",
+      "gitTag": "redact-secret-adapters@0.1.4",
       "sourcePath": "python",
       "registryUrl": "https://pypi.org/project/redact-secret-adapters/",
       "runtime": {

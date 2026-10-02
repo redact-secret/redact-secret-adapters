@@ -25,6 +25,8 @@ version numbers start again here, at `0.1.0`, and do not follow the old name's.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-02
+
 ### Added
 
 - **One aggregate budget per span** (redact-secret/redact-secret-adapters#173), shared by the span name, every attribute, event and link and the status message. `operationLimits` overrides it (defaults as in `@redact-secret/adapter`); `redactAttributesWith` takes it for its one bag. A span ended re-entrantly inside the next processor has its own budget.

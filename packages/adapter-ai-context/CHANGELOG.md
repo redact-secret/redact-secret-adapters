@@ -15,6 +15,8 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-02
+
 ### Added
 
 - **`checkAiContextReady({ pii? })`: an explicit, input-free readiness check** (redact-secret/redact-secret-adapters#182). Resolves, never rejects, with `{ ready, status, core, pii, probe, activation? }` where `status` is one of the fixed `READINESS_STATUSES` (`ready`, `invalid_options`, `core_unavailable`, `initialization_failed`, `pii_activation_unsupported`, `pii_activation_not_active`, `malformed_response`, `probe_failed`, `probe_not_redacted`). It loads the core, runs the factory's activation step, and scans one fixed synthetic probe under fixed limits and the core's default policy. It accepts no probe, limit, policy or callback, calls no application callback, and carries no input, exception text or path. Readiness at that moment only. Additive: `createAiContextBoundary` and every operation are unchanged and still fail closed. No new `@redact-secret/adapter` or core requirement.
