@@ -1,0 +1,17 @@
+{
+  "name": "redact-secret-example-pino",
+  "private": true,
+  "type": "module",
+  "description": "Standalone quickstart: keep a synthetic token out of pino log lines.",
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "scripts": {
+    "start": "node check.mjs"
+  },
+  "dependencies": {
+    "@redact-secret/adapter-pino": "0.1.3",
+    "@redact-secret/core": "0.1.0-beta.12",
+    "pino": "10.3.1"
+  }
+}

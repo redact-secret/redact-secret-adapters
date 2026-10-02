@@ -1,0 +1,11 @@
+{
+  "namespace": "smoke",
+  "scenarios": [
+    { "id": "smoke.node-public-imports", "host": "node" },
+    { "id": "smoke.node-install-isolation", "host": "node" },
+    { "id": "smoke.node-core-active", "host": "node" },
+    { "id": "smoke.python-public-imports", "host": "python" },
+    { "id": "smoke.python-install-isolation", "host": "python" },
+    { "id": "smoke.python-core-active", "host": "python" }
+  ]
+}

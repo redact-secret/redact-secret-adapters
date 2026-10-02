@@ -42,13 +42,29 @@ import { type AiContextBoundaryOptionsWithDefaults, withDefaultLimits } from "./
 import type { AiContextBoundary, AiContextCore } from "./types.js";
 
 export type { CoreActivation } from "@redact-secret/adapter";
-export { BLOCK_REASONS, createAiContextBoundaryWith, SAFE_FINDING_FIELDS } from "./boundary.js";
+export {
+  attachFindingOccurrences,
+  BLOCK_REASONS,
+  createAiContextBoundaryWith,
+  FINDING_OCCURRENCE_FIELDS,
+  findingOccurrences,
+  MAX_MEMO_ENTRIES,
+  SAFE_FINDING_FIELDS,
+} from "./boundary.js";
 export {
   AI_CONTEXT_DEFAULT_LIMITS,
   type AiContextBoundaryOptionsWithDefaults,
   type AiContextLimits,
   withDefaultLimits,
 } from "./defaults.js";
+export {
+  checkAiContextReady,
+  READINESS_STATUSES,
+  type ReadinessOptions,
+  type ReadinessResult,
+  type ReadinessStage,
+  type ReadinessStatus,
+} from "./readiness.js";
 export type {
   AbortedOutcome,
   AiContextBoundary,
@@ -63,9 +79,12 @@ export type {
   ContextMessage,
   ContextPart,
   FindingContext,
+  FindingOccurrence,
   JsonValue,
   OkOutcome,
   OperationOptions,
+  RangeScope,
+  RangeUnit,
   SafeFinding,
   TraversalLimits,
 } from "./types.js";

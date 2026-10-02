@@ -333,6 +333,19 @@ by hand as in steps 1–3 above
 train that would publish `adapter-otel` before `adapter-otel-trace` is
 released. Bump `adapter-otel` (to `0.1.3`, say) in the same train or a later
 one to ship the re-export; its publish job waits for `adapter-otel-trace`'s.
+`@redact-secret/adapter-otel-logs` (#178), the OpenTelemetry Logs adapter, went
+through the same path and is now wired: its `PACKAGES` entry (after `adapter`,
+which it depends on), publish job (`needs` `publish-adapter`, `--provenance`,
+the plan's dist-tag), rehearsal dry run, tag and report rows and release-notes
+entry are in place. Its first version, `0.1.0-beta.2`, was published by hand
+(access public, dist-tag `beta`), so the plan reads it as already on the
+registry: it skips the publish, `finalize` still tags
+`adapter-otel-logs@0.1.0-beta.2`, and reconcile passes. A prerelease `beta`
+maps to dist-tag `beta` (`distTagFor`). It requires `@redact-secret/adapter`
+`^0.1.7`, which publishes in the next train; until then the package does not
+install from the registry. Its later versions publish from `release.yml` via
+the trusted publisher.
+
 Once the re-export is on npm, mark the old name deprecated on the registry:
 
 ```bash

@@ -15,6 +15,27 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-02
+
+### Added
+
+- **`checkAiContextReady({ pii? })`: an explicit, input-free readiness check** (redact-secret/redact-secret-adapters#182). Resolves, never rejects, with `{ ready, status, core, pii, probe, activation? }` where `status` is one of the fixed `READINESS_STATUSES` (`ready`, `invalid_options`, `core_unavailable`, `initialization_failed`, `pii_activation_unsupported`, `pii_activation_not_active`, `malformed_response`, `probe_failed`, `probe_not_redacted`). It loads the core, runs the factory's activation step, and scans one fixed synthetic probe under fixed limits and the core's default policy. It accepts no probe, limit, policy or callback, calls no application callback, and carries no input, exception text or path. Readiness at that moment only. Additive: `createAiContextBoundary` and every operation are unchanged and still fail closed. No new `@redact-secret/adapter` or core requirement.
+- **`operationLimits`: an aggregate budget per operation** (redact-secret/redact-secret-adapters#173). One `sanitizeText`, `sanitizeValue` or `buildContext` (every part together) shares one budget over values visited, object keys, string leaves, `scanAndRedact` calls and their UTF-8 bytes (key-context views and key scans included; a memoized repeat is not a call) and findings (summed over occurrences). A bound reached is `blocked` / `limit_exceeded` with no value and no findings, never a partly approved context. Defaults are those of `@redact-secret/adapter`, except that `maxBytes` is never below four times `wholeInputLimits.maxInputBytes`. An open stream is bounded by `incrementalLimits` and by `maxFindings` alone.
+- `MAX_MEMO_ENTRIES` (1024): the per-operation memo now keeps at most that many results; past it a text is scanned again and not remembered. Output and findings accumulation are bounded by the same budget.
+
+- **Occurrence provenance for findings** (redact-secret/redact-secret-adapters#177). `findingOccurrences(outcome)` returns, for an `ok` outcome, one `FindingOccurrence` per finding at the same index as `ok.findings`: `partIndex` (the part index for `buildContext`, else `0`), `rangeScope` (`"text"`, `"leaf"`, `"stream"`, or `"key"` for telemetry only), `rangeUnit` (`"utf16-code-units"`) and, for a leaf or key, a zero-based `leafOrdinal` / `keyOrdinal` in document order. It says what `start`/`end` index into: the whole text, one leaf (a key-context finding already mapped back to it), or the stream's logical text with absolute offsets across chunks; it does not reinterpret them as whole-document offsets. Ordinals advance per visit, so repeated and memoized strings and shared references each have their own. `onFinding` takes the occurrence as a third argument, and for every finding in `ok.findings` it is called with that finding and its occurrence in the same order; key scans add `rangeScope: "key"` events that `ok.findings` never carries. Also exported: `FINDING_OCCURRENCE_FIELDS`, `attachFindingOccurrences`, and the `FindingOccurrence` / `RangeScope` / `RangeUnit` types.
+- Compatibility: additive and non-sensitive (ordinals and fixed labels only: no key, field path, value, secret-derived identifier or score). The outcome's JSON, the eight `SAFE_FINDING_FIELDS`, `start`/`end` and the telemetry `context` (`{ boundary }`) are unchanged, so the vendored core conformance replay is untouched; the occurrences are kept beside the outcome, not on it, so a serialized outcome does not carry them. `finding.id` stays unique per scan only; within one operation (`partIndex`, `rangeScope`, ordinal, `finding.id`) is unique.
+
+### Changed
+
+- Internal: the key-aware leaf scan is now the shared `scanLeafInKeyContext` primitive in `@redact-secret/adapter` (redact-secret/redact-secret-adapters#172), also used by the logging and tracing adapters. Behavior, the failure mapping and the leaf-offset contract are unchanged; the conformance replay and the new cross-adapter test confirm it.
+
+- **Behavior change with defaults:** an operation that stays inside `traversalLimits` and `wholeInputLimits` but visits more than 100,000 values or keys, scans more than 25,000 leaves or 50,000 times, or accumulates more than 100,000 findings, is now `blocked` / `limit_exceeded`. It is a work counter checked between scans, not a wall-clock interrupt.
+
+- `ruleset` and `scanLimits` are now rejected by name with a `TypeError` instead of being silently ignored (redact-secret/redact-secret-adapters#175): the core has no ruleset for an incremental session, and this boundary's whole-input limits are `wholeInputLimits`. They arrive only if passed, so no existing caller changes. `policy` and `placeholderFormatter` still reach both the whole-input and the incremental path.
+
+- **Dependency range raised: `@redact-secret/adapter` `^0.1.3` -> `^0.1.7`** (redact-secret/redact-secret-adapters#172, #173, #175). This release needs the key-context primitive, the operation budget and the scan options that `@redact-secret/adapter` 0.1.7 introduces, which no earlier published version has; against `0.1.3` the package fails to import. Backed by the `published-combination` CI job (`scripts/check-published-combination.mjs`), which installs this package with the lowest published sibling its range admits (and this checkout's tarball for a sibling not yet published). No `@redact-secret/core` range change.
+
 ## [0.1.2] - 2026-10-01
 ### Changed
 

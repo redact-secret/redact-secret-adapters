@@ -226,7 +226,9 @@ test("the policy option reaches scanAndRedact from both hooks", () => {
   const { method } = spyMethod();
   callHook(createRedactingLogMethodWith(spy, { policy }), {}, [{ a: "x" }, "msg %s", "y"], method, 30);
   createRedactingStreamWriteWith(spy, { policy })('{"a":"x"}');
-  expect(seen).toHaveLength(3);
+  // `{ a: "x" }` and `"a":"x"` are each scanned alone and in their key
+  // context (#172); the message is a keyless leaf, scanned once.
+  expect(seen).toHaveLength(5);
   expect(seen.every((received) => received === policy)).toBe(true);
 });
 

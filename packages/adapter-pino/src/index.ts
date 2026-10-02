@@ -34,11 +34,18 @@
  * activation is not the same as masking every PII value.
  */
 
-import { activateCore, type CoreActivation, type MaskOptions, type ScanAndRedact } from "@redact-secret/adapter";
+import {
+  activateCore,
+  type CoreActivation,
+  type MaskOptions,
+  resolveScanConfig,
+  type ScanAndRedact,
+  verifyScanOptions,
+} from "@redact-secret/adapter";
 
 import { createRedactingHooksWith, type RedactingHooks, type RedactingHooksOptions } from "./hooks.js";
 import { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
-import { createRedactingStreamWriteWith, type RedactingStreamWrite } from "./stream-write.js";
+import { createRedactingStreamWriteWith, type RedactingStreamWrite, type StreamWriteOptions } from "./stream-write.js";
 
 export { formatPinoMessage } from "./format-message.js";
 export {
@@ -50,13 +57,24 @@ export {
   type RedactingHooksOptions,
 } from "./hooks.js";
 export { createRedactingLogMethodWith, type RedactingLogMethod } from "./log-method.js";
-export { createRedactingStreamWriteWith, PINO_ERROR_LINE, type RedactingStreamWrite } from "./stream-write.js";
+export {
+  createRedactingStreamWriteWith,
+  DEFAULT_LINE_LIMITS,
+  PINO_ERROR_LINE,
+  PINO_LIMIT_LINE,
+  type PinoLineLimits,
+  type RedactingStreamWrite,
+  type StreamWriteOptions,
+} from "./stream-write.js";
 
 /** {@link RedactingHooksOptions} plus the live factory's PII activation. */
 export type CreateRedactingHooksOptions = RedactingHooksOptions & CoreActivation;
 
 /** {@link MaskOptions} plus the live single-hook factories' PII activation. */
 export type CreateRedactingHookOptions = MaskOptions & CoreActivation;
+
+/** {@link StreamWriteOptions} (walk options plus `lineLimits`) plus the live factory's PII activation. */
+export type CreateRedactingStreamWriteOptions = StreamWriteOptions & CoreActivation;
 
 /**
  * Reads `pii` by property, not by rest-destructuring: a property read follows
@@ -70,9 +88,17 @@ function activationOf(options: CoreActivation): CoreActivation {
   return options.pii === undefined ? {} : { pii: options.pii };
 }
 
-async function initializedScanner(activation: CoreActivation): Promise<ScanAndRedact> {
+async function initializedScanner(
+  activation: CoreActivation,
+  scanOptions: Parameters<typeof resolveScanConfig>[0],
+): Promise<ScanAndRedact> {
+  // Validated before the core is touched; then the installed core must honor
+  // any requested scan option (`scanLimits`, `ruleset`, `placeholderFormatter`)
+  // or this rejects with a fixed, input-free `CoreOptionsError`.
+  const config = resolveScanConfig(scanOptions);
   const loaded = await import("@redact-secret/core");
   await activateCore(loaded, activation);
+  verifyScanOptions(loaded, config);
   return loaded.scanAndRedact;
 }
 
@@ -92,7 +118,7 @@ async function initializedScanner(activation: CoreActivation): Promise<ScanAndRe
  * a selector or a core message — rather than run with PII off.
  */
 export async function createRedactingHooks(options: CreateRedactingHooksOptions = {}): Promise<RedactingHooks> {
-  return createRedactingHooksWith(await initializedScanner(activationOf(options)), options);
+  return createRedactingHooksWith(await initializedScanner(activationOf(options), options), options);
 }
 
 /**
@@ -104,7 +130,7 @@ export async function createRedactingHooks(options: CreateRedactingHooksOptions 
  * and for callers migrating from `0.1.0`.
  */
 export async function createRedactingLogMethod(options: CreateRedactingHookOptions = {}): Promise<RedactingLogMethod> {
-  return createRedactingLogMethodWith(await initializedScanner(activationOf(options)), options);
+  return createRedactingLogMethodWith(await initializedScanner(activationOf(options), options), options);
 }
 
 /**
@@ -115,7 +141,7 @@ export async function createRedactingLogMethod(options: CreateRedactingHookOptio
  * {@link createRedactingHooks}.
  */
 export async function createRedactingStreamWrite(
-  options: CreateRedactingHookOptions = {},
+  options: CreateRedactingStreamWriteOptions = {},
 ): Promise<RedactingStreamWrite> {
-  return createRedactingStreamWriteWith(await initializedScanner(activationOf(options)), options);
+  return createRedactingStreamWriteWith(await initializedScanner(activationOf(options), options), options);
 }

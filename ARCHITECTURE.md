@@ -62,6 +62,23 @@ If the core renames an action or reshapes a result, these packages fail to
 compile instead of running on while letting a `block`-worthy secret through as
 an inline placeholder.
 
+The list is about what an adapter *reads from a result*, and it does not grow.
+What an adapter may *pass in* is the options the core's own `scanAndRedact`
+documents, and only when the caller asked (#175): `policy` always, and
+`scanLimits` (the core's `limits`), `ruleset` and `placeholderFormatter` when
+given, validated and snapshotted once by `resolveScanConfig`
+(`packages/adapter/src/scan-options.ts`; Python: `scan_options.py`). Asking for
+one adds the only other read of the core, its `VERSION`, in the live factories,
+which check it against `SCAN_OPTION_CORE_FLOORS` and probe the options with one
+scan of the empty text, so an older core or a rejected ruleset is a fixed,
+input-free `CoreOptionsError` at construction rather than an option the core
+silently ignores. With none of them asked, nothing is read and nothing extra is
+passed, so the declared floor keeps working. They are whole-input options: the
+core has no ruleset for an incremental session, so `adapter-ai-context` rejects
+`ruleset` and `scanLimits` by name instead of claiming them. One policy decides:
+the caller's `policy` replaces the core's built-in policy, ruleset findings
+included, and is never combined with another.
+
 **The one exception: `@redact-secret/adapter-ai-context`.** The core's
 [AI-context boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/ai-context-boundary.md)
 (redact-secret/redact-secret#610) deliberately widens the surface for that
@@ -108,13 +125,36 @@ public API and move only in a major version. The reasons behind them:
   message can carry the input.
 - A value past a budget is never sent to the core, and elements or keys past a
   width limit are dropped rather than passed through unmasked.
-- Values are masked; **object keys and attribute names are not scanned** by the
-  logging and tracing adapters (`walkValue`, the Python walker, pino's
-  `streamWrite`, and both span processors). A key is kept as it is so the
-  value keeps its shape, and none of these adapters promises more than that. The
-  AI-context boundary is the exception: `walkStrict` hands every key to its
-  visitor, and that boundary scans keys. Scanning keys in the logging and
-  tracing adapters would be a behavior change with its own changelog entry.
+- Values are masked; **object keys and attribute names are not scanned on their
+  own** by the logging and tracing adapters (`walkValue`, the Python walker,
+  pino's `streamWrite`, and both span processors). A key is kept as it is so
+  the value keeps its shape. A key is, however, *context* for the string
+  directly under it (#172): detection of a credential such as `api_key` depends
+  on the field name, so the shared key-context primitive
+  (`packages/adapter/src/key-context.ts`, `python/.../key_context.py`) scans
+  such a leaf alone and, when that redacts or blocks nothing, once more as
+  `{"<key>":"<leaf>"}` and maps the answer back to leaf offsets. The core
+  decides detection and policy; no adapter holds a key list. The primitive was
+  extracted from the AI-context boundary, where it keeps its all-or-nothing
+  mapping (a finding that would rewrite the key blocks the value); the marker
+  adapters map the same case to a block marker on the leaf. The AI-context
+  boundary additionally scans every key on its own (`walkStrict` hands each key
+  to its visitor).
+- **Per-walk and per-string bounds do not bound a whole host operation**
+  (#173). A span has many fields, a log record is masked by two pino hooks, and
+  an AI context is built from many parts, each its own walk. One operation owns
+  one `OperationBudget` (`packages/adapter/src/budget.ts`,
+  `python/.../budget.py`), shared by every pass and field of it: both pino
+  stages and the child-binding and `mixin()` values on the final line, every
+  field of one span or `filter()` call, and every part of `buildContext`. It
+  counts UTF-8 bytes and scanner invocations as *actual calls* and nodes,
+  object keys, leaves and findings as *occurrences*, so a memoized repeat costs
+  no scan but still costs a visit; key-context scans and object keys count
+  explicitly. Exhaustion is sticky: the marker adapters mark the rest
+  `[REDACTED:LIMIT_EXCEEDED]`, the AI-context and MCP boundaries return
+  `blocked` / `limit_exceeded` with nothing partly approved. It is a work counter
+  checked between scans, not a wall-clock interrupt. The per-walk `maxNodes`
+  and `maxTotalLeaves` keep their meaning; this is their sum over the operation.
 - Every visit counts against `maxNodes`, not only string leaves. The walk
   tracks only the current path, which is enough to detect a cycle, so a shared
   reference is walked once per path. Budgeting leaves alone would let an
@@ -193,6 +233,22 @@ consequence worth naming: a host `streamWrite` receives pino's line
 copies the line elsewhere is handling plaintext even though what reaches the
 destination is masked.
 
+`streamWrite` has to lex the finished line into string values and `JSON.parse`
+each before the walker can bound anything, so it carries its own
+**pre-processing ceilings** (#174, `PinoLineLimits`): the longest line, the most
+value literals, and the most raw code units decoded, all in UTF-16 code units and
+all checked before anything proportional to the line is allocated (the line
+length first and unread, the span and decode counts as each span is found,
+before any literal is decoded). A line past one is the fixed
+`{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` line with the original's newline and is
+reported as one `limited` value with `lineReplaced: true`; a line that cannot be
+lexed stays `{"msg":"[REDACTED:ERROR]"}` and `failed`. Neither forwards the
+original, and the hook reads only the finished string, never a host
+serialization hook. These ceilings are deliberately separate from the aggregate
+budget above (which bounds the *scanning* of the values) and from the core's
+whole-input limits (which bound one scan): this one bounds the work that happens
+*before* the walker.
+
 Reporting an outcome per record (#45) rides on the same seam. The two hooks
 share a stack of in-flight records and the counter handed to the walkers is
 resolved per masking call, because this path is re-entrant in three different
@@ -210,9 +266,11 @@ took a test that logs from a getter to catch it.
 never reach it. The package was published as `@redact-secret/adapter-otel`
 up to `0.1.2`; that name is now a compatibility package that re-exports
 `adapter-otel-trace` unchanged and marks every export `@deprecated`, so
-existing imports keep working. `adapter-otel-logs` is reserved for a Logs
-integration once a `LogRecordProcessor` boundary has been designed and
-qualified against a real SDK; nothing implements it yet. The choice and its
+existing imports keep working. Logs have their own package,
+`adapter-otel-logs` (below): a `LogRecordProcessor`, a separate peer
+(`@opentelemetry/sdk-logs`) and a separate qualification. It is on `develop`
+unreleased (`"private": true`, absent from the release plan), so nothing
+installable protects Logs yet. The choice and its
 release consequences are recorded in
 [docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md](docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md).
 
@@ -245,6 +303,38 @@ missing field or a write that does not show through drops the span with a
 one-time `RuntimeWarning` rather than exporting it unredacted. The real-host
 test checks all of this at both ends of the Python SDK's declared range.
 
+### OpenTelemetry Logs
+
+`@redact-secret/adapter-otel-logs` is a **log** integration: a
+`LogRecordProcessor` over `@opentelemetry/sdk-logs`, a separate package with
+its own peer range (`>=0.200.0 <=0.222.0`, an explicit span because the SDK is
+`0.x`) and its own qualification. It is published as
+`0.1.0-beta.2` under the dist-tag `beta` (first publish by hand, then wired into
+the release plan) and requires `@redact-secret/adapter` `^0.1.7`, which ships
+in the next train. The SDK probe, the chosen
+endpoints and the alternatives are in
+[docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md](docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md).
+
+The SDK documents that a processor "may freely modify logRecord for the
+duration of the OnEmit call", and makes the record read-only once `emit`
+returns; a `BatchLogRecordProcessor` keeps the very object it is given. The
+processor therefore redacts in `onEmit`, before delegating, and is registered
+around the processor that owns the exporter. It redacts the body (a string, a
+structured value, bytes), the severity text, the event name and every
+attribute value. It does not touch the resource, the instrumentation scope,
+attribute keys, or spans and metrics.
+
+Writes use the record's own setters (`setBody`, `setSeverityText`,
+`setEventName`) and its public `attributes` bag; `setAttribute` is not used to
+rewrite, because at the low end of the range it would count the call as a
+further attribute and report a spurious `droppedAttributesCount`. Every write
+is read back (allowing the shorter string an SDK attribute-length limit
+leaves). A record that will not take a write is dropped with a one-time warning
+and never forwarded, as for spans. A scanner failure or a `block` finding is a
+fixed marker on that value, not a dropped record. The walk budgets are per
+record and shared by the body and every attribute, and a value past one is
+`[REDACTED:LIMIT_EXCEEDED]`, never passed through.
+
 ### AI context
 
 `adapter-ai-context` has no host SDK: its L3 is its own five operations
@@ -266,11 +356,28 @@ when partly masked:
 - **Fixed outcomes.** `ok` / `blocked` / `aborted`, with the contract's five
   reasons. Findings cross as allowlisted copies; error messages are never
   read.
+- **Occurrence provenance** (#177). A finding's `start`/`end` index into one
+  scanned string, never a whole document, and the core numbers findings per scan,
+  so a flattened `ok.findings` repeats ids. Each finding therefore has an
+  *occurrence*: `partIndex`, `rangeScope` (`text`, `leaf`, `stream`, and `key` for
+  telemetry only), `rangeUnit` (UTF-16 code units) and a leaf or key ordinal that
+  advances per visit, so a memoized repeat or a shared reference still has its own.
+  It is additive and non-sensitive (ordinals and fixed labels only), reaches
+  `onFinding` as a third argument and `findingOccurrences(outcome)` as an array
+  aligned with `ok.findings`, and is kept *beside* the outcome (a `WeakMap`)
+  rather than on it, because the outcome's JSON shape is the core's contract and
+  the vendored fixture replays it byte for byte.
 
 The live factory never rejects for an initialization failure: the boundary
 it returns fails every operation closed with the core's mapped error, so an
 application that skips its own error handling still cannot fall back to
 sending raw input.
+
+Because a resolved factory is not a ready service, `checkAiContextReady` is the
+explicit, input-free question to ask instead (#182): fixed status codes, a fixed
+synthetic probe, no callbacks, no state, and no effect on any boundary. It is
+specific to this package; the logging and tracing factories keep their own
+shapes rather than share an interface.
 
 It is JavaScript only. No Python AI-context adapter exists yet; one would
 replay the same vendored fixture (the core already runs its Python twin of
@@ -457,9 +564,9 @@ so that is a test, not an assumption.
   never patches a client.
 - **LangChain**, and any other framework integration whose host contract has not
   been read and tested here.
-- **OpenTelemetry Logs and metrics.** `adapter-otel-trace` is a span
-  processor. A `LogRecordProcessor` needs its own design and real-SDK
-  qualification; `adapter-otel-logs` is reserved for it, not implemented.
+- **OpenTelemetry metrics.** Neither OpenTelemetry package touches them.
+  (Logs are covered by `adapter-otel-logs`, a beta; `adapter-otel-trace`
+  is a span processor and never sees a log record.)
 - **A Langfuse package.** Masking-callback hosts need the shared walker and one
   line of user code; a package would add a release surface and change nothing.
 
@@ -469,10 +576,11 @@ so that is a test, not an assumption.
 packages/
   adapter/              @redact-secret/adapter          shared L1 + L2, TypeScript
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
-  adapter-otel-trace/   @redact-secret/adapter-otel-trace  L3 + live wrapper, traces only (unreleased)
+  adapter-otel-trace/   @redact-secret/adapter-otel-trace  L3 + live wrapper, traces only
   adapter-otel/         @redact-secret/adapter-otel     deprecated name: re-exports adapter-otel-trace
-  adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper (unreleased)
-  adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context (unreleased)
+  adapter-otel-logs/    @redact-secret/adapter-otel-logs  LogRecordProcessor + live wrapper, logs only; 0.1.0-beta.2 (beta)
+  adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper
+  adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context
 python/
   redact_secret_adapters/                               shared + logging + otel extra
 fixtures/                                               cross-language contract, shared

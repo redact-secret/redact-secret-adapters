@@ -1,289 +1,184 @@
 # Redact Secret adapters
 
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15002/badge)](https://www.bestpractices.dev/projects/15002)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-adapters/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-adapters)
 [![CI](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/codeql.yml/badge.svg?branch=develop)](https://github.com/redact-secret/redact-secret-adapters/actions/workflows/codeql.yml)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15002/badge)](https://www.bestpractices.dev/projects/15002)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/redact-secret/redact-secret-adapters/badge)](https://scorecard.dev/viewer/?uri=github.com/redact-secret/redact-secret-adapters)
 [![License: MIT](https://img.shields.io/github/license/redact-secret/redact-secret-adapters)](./LICENSE)
 
-**Python(PyPI)**
-[![PyPI: redact-secret-adapters](https://img.shields.io/pypi/v/redact-secret-adapters?label=redact-secret-adapters)](https://pypi.org/project/redact-secret-adapters/)
+Keep API keys, tokens and passwords out of your logs, traces and AI prompts.
 
-**JavaScript(npm)**
-[![npm: @redact-secret/adapter](https://img.shields.io/npm/v/@redact-secret/adapter?label=%40redact-secret%2Fadapter)](https://www.npmjs.com/package/@redact-secret/adapter)
-[![npm: @redact-secret/adapter-pino](https://img.shields.io/npm/v/@redact-secret/adapter-pino?label=%40redact-secret%2Fadapter-pino)](https://www.npmjs.com/package/@redact-secret/adapter-pino)
-[![npm: @redact-secret/adapter-otel-trace](https://img.shields.io/npm/v/@redact-secret/adapter-otel-trace?label=%40redact-secret%2Fadapter-otel-trace&registry_uri=https%3A%2F%2Fregistry.npmjs.org)](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace)
-[![npm: @redact-secret/adapter-otel](https://img.shields.io/npm/v/@redact-secret/adapter-otel?label=%40redact-secret%2Fadapter-otel)](https://www.npmjs.com/package/@redact-secret/adapter-otel)
-[![npm: @redact-secret/adapter-ai-context](https://img.shields.io/npm/v/@redact-secret/adapter-ai-context?label=%40redact-secret%2Fadapter-ai-context&registry_uri=https%3A%2F%2Fregistry.npmjs.org)](https://www.npmjs.com/package/@redact-secret/adapter-ai-context)
-[![npm: @redact-secret/adapter-mcp](https://img.shields.io/npm/v/@redact-secret/adapter-mcp?label=%40redact-secret%2Fadapter-mcp&registry_uri=https%3A%2F%2Fregistry.npmjs.org)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
+These packages plug [Redact Secret](https://github.com/redact-secret/redact-secret)
+into the tools you already use. You add a few lines of setup; secrets are
+replaced before they leave your process.
 
+```js
+logger.info("deploy with token %s", token);
+// before: {"level":30,…,"msg":"deploy with token ghp_SYNTHETICREVOKED00000000000000000000"}
+// after:  {"level":30,…,"msg":"deploy with token <SECRET_1>"}
+```
 
-Host integrations for [Redact Secret](https://github.com/redact-secret/redact-secret):
-installable packages that wire a logging, tracing, or AI-context host into the
-deterministic core, so a secret never reaches a log line, a span attribute, an
-observability backend, or a model's context.
-
-> The core decides what a secret is. These packages decide nothing — they carry
-> text into the core and carry the core's answer back out.
-
-## Why this repository exists
-
-The core repository ships worked examples of these integrations, but a consumer
-could only copy a file out of it. From that moment they owned a fork: no
-version, no changelog, no notice when the host SDK's contract moved, and no way
-for this project to fix wiring it had written itself.
-
-These packages close that gap without moving the wiring into the core. The
-core's release matrix, its lockstep versioning, and its side-effect-free
-boundary are unchanged. Adapters version independently, on the cadence their
-hosts actually move at.
+The core decides what a secret is. The adapters only carry text into the core
+and carry its answer back out.
 
 ## Which package do I need?
 
-| I want to protect | Install | Status | Where it attaches | Not covered |
-| --- | --- | --- | --- | --- |
-| **pino** log lines | `npm i @redact-secret/core @redact-secret/adapter-pino pino` | released | `pino({ hooks })` — both hooks, from one `createRedactingHooks()` call | object *keys*; anything a destination or transport adds after `streamWrite` |
-| **OpenTelemetry JS** traces (spans) | `npm i @redact-secret/core @redact-secret/adapter-otel-trace @opentelemetry/sdk-trace-base` | released (`adapter-otel-trace`; `adapter-otel` is the deprecated name) | wraps the next `SpanProcessor` in your provider's `spanProcessors` | OpenTelemetry **Logs** and metrics; attribute names; spans the wrapped processor never receives (sampled out, a processor registered ahead of it) |
-| Python **`logging`** records | `pip install redact-secret redact-secret-adapters` | released | `handler.addFilter(...)` on **every emitting handler** | record attributes not named in `extra_fields`; handlers without the filter |
-| **OpenTelemetry Python** traces (spans) | `pip install redact-secret "redact-secret-adapters[otel]"` | released | wraps the next span processor | as OpenTelemetry JS, plus: a span whose private fields will not take the write is **dropped**, not exported |
-| OpenTelemetry **Logs** (`LogRecord`s, JS or Python) | — | **not covered** | nothing here sees a log record | everything: `adapter-otel-logs` is a reserved name, not a package |
-| A host that hands you a value to **mask** (Langfuse and similar) | `npm i @redact-secret/core @redact-secret/adapter` / `pip install redact-secret redact-secret-adapters` | released | the host's `mask` callback | whatever the host does not route through that callback |
-| **AI context** — user input, tool results, a built context, streamed text | `npm i @redact-secret/core @redact-secret/adapter-ai-context` | released | your own code, where the context is built | binary/non-JSON values and encoded text (refused, not decoded); model *output* |
-| **MCP** `tools/call` and `resources/read` results | `npm i @redact-secret/core @redact-secret/adapter-mcp` | released | around your `callTool` / tool handler | MCP methods other than those two; binary payloads (blocked by default) |
+| I want to protect | Install | Guide |
+| --- | --- | --- |
+| [pino](#pino) log lines | `npm i @redact-secret/core @redact-secret/adapter-pino pino` | [adapter-pino](./packages/adapter-pino#readme) |
+| [OpenTelemetry JS](#opentelemetry-traces-javascript) spans | `npm i @redact-secret/core @redact-secret/adapter-otel-trace @opentelemetry/sdk-trace-base` (the snippet below uses only this) | [adapter-otel-trace](./packages/adapter-otel-trace#readme) |
+| [Python `logging`](#python-logging) records | `pip install redact-secret redact-secret-adapters` | [python](./python#readme) |
+| [OpenTelemetry Python](#opentelemetry-traces-python) spans | `pip install redact-secret "redact-secret-adapters[otel]"` | [python](./python#opentelemetry-otel-extra) |
+| [AI context](#ai-context): user input, tool results, streamed text | `npm i @redact-secret/core @redact-secret/adapter-ai-context` | [adapter-ai-context](./packages/adapter-ai-context#readme) |
+| [MCP](#mcp) tool results and resource reads | `npm i @redact-secret/core @redact-secret/adapter-mcp` | [adapter-mcp](./packages/adapter-mcp#readme) |
+| [A `mask` callback](#masking-callbacks-langfuse-and-similar) (Langfuse and similar) | `npm i @redact-secret/core @redact-secret/adapter`, or the Python package above | [adapter](./packages/adapter#readme) |
 
-Statuses are not gradations of care — a prerelease publishes under the npm
-dist-tag `alpha`, not `latest`, so it is opt-in by tag or exact version until
-its consumer path is qualified. Detailed host behavior lives in each package's
-own README, linked from the quick starts below; **no finding is never proof
-that the input held no secret**.
+Requirements: Node.js 20, 22 or 24 for the npm packages, Python 3.10 or later
+for the PyPI package. The npm packages are ESM only.
 
-## Packages
+Current versions:
+[![adapter](https://img.shields.io/npm/v/@redact-secret/adapter?label=adapter)](https://www.npmjs.com/package/@redact-secret/adapter)
+[![adapter-pino](https://img.shields.io/npm/v/@redact-secret/adapter-pino?label=adapter-pino)](https://www.npmjs.com/package/@redact-secret/adapter-pino)
+[![adapter-otel-trace](https://img.shields.io/npm/v/@redact-secret/adapter-otel-trace?label=adapter-otel-trace)](https://www.npmjs.com/package/@redact-secret/adapter-otel-trace)
+[![adapter-ai-context](https://img.shields.io/npm/v/@redact-secret/adapter-ai-context?label=adapter-ai-context)](https://www.npmjs.com/package/@redact-secret/adapter-ai-context)
+[![adapter-mcp](https://img.shields.io/npm/v/@redact-secret/adapter-mcp?label=adapter-mcp)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
+[![redact-secret-adapters](https://img.shields.io/pypi/v/redact-secret-adapters?label=redact-secret-adapters%20%28PyPI%29)](https://pypi.org/project/redact-secret-adapters/)
 
-**This README describes `develop`.** The two columns are different claims: what
-you can install today, and what this branch declares for the next release
-train. A version in the second column exists only here until that train is cut.
-
-| Package | Registry | Host | Published — installable now | Declared on `develop` |
-| --- | --- | --- | --- | --- |
-| `@redact-secret/adapter` | npm | — (shared base) | `0.1.5`, beta | `0.1.5` |
-| `@redact-secret/adapter-pino` | npm | pino `^10.0.0` | `0.1.2`, beta | `0.1.2` |
-| `@redact-secret/adapter-otel-trace` | npm | `@opentelemetry/sdk-trace-base` `^2.0.0` (traces only) | `0.1.0` | `0.1.0` |
-| `@redact-secret/adapter-otel` | npm | deprecated name: re-exports `adapter-otel-trace` | `0.1.3`, deprecated re-export | `0.1.3` |
-| `redact-secret-adapters` | PyPI | stdlib `logging`, OpenTelemetry (extra) | `0.1.2`, beta | `0.1.2` |
-| `@redact-secret/adapter-ai-context` | npm | — (framework-neutral AI context) | `0.1.1`, beta | `0.1.1` |
-| `@redact-secret/adapter-mcp` | npm | MCP TypeScript SDK `>=1.26.0 <=1.30.1`, `2.0.0`–`2.1.0` | `0.1.2`, beta | `0.1.2` |
-
-A prerelease publishes under the npm dist-tag `alpha`, never `latest`, so it is
-opt-in by tag or exact version. pip skips a pre-release unless asked for one.
-Statuses are not gradations of care — see
-[Which package do I need?](#which-package-do-i-need).
-
-Every `0.1.0` was published on 2026-09-22 in release train
-[`2026.09.22`](https://github.com/redact-secret/redact-secret-adapters/releases/tag/train/2026.09.22);
-the published column above shipped in the trains after it. The
-[`0.1.0` README](https://github.com/redact-secret/redact-secret-adapters/blob/2368d8c99f6b10e18874df0bcfec1818afd588ec/README.md)
-describes exactly what that release contains.
-
-The opt-in [`pii` activation option](#pii-detection-is-opt-in) on every live
-factory, `adapter-pino`'s `createRedactingHooks`, the outcome counters under
-[Counting what happened](#counting-what-happened), and the Python package's
-corrected activation guidance shipped in train
-[`2026.09.29`](https://github.com/redact-secret/redact-secret-adapters/releases/tag/train/2026.09.29)
-(`adapter` `0.1.3`, `adapter-pino` and `adapter-otel` `0.1.2`,
-`redact-secret-adapters` `0.1.1`) and, for the two AI packages, in their
-`0.1.0` stable release.
-
-### Core versions
-
-Every package declares `@redact-secret/core` / `redact-secret`
-`0.1.0-beta.6` or later, and none of that changes here. Core
-`0.1.0-beta.12` / `0.1.0b12` is the newest, and is what the quick starts below
-are verified against; `0.1.0-beta.6` is the floor, and CI runs the real-host
-tests at both. Passing `pii` to a factory needs `0.1.0-beta.10` or later, the
-release that added opt-in PII detection; everything else works at the floor.
-From beta.11 the core loads its PII runtime only when `initialize({ pii })`
-names a selector, which needs nothing from the adapters. See
-[Supported host versions](#supported-host-versions).
-
-`@redact-secret/vault` `0.1.0-beta.1`, from the sibling vault repository, pins
-the core to `0.1.0-beta.10` **exactly**. An application that installs it
-alongside these adapters and moves to beta.11 therefore hits a peer conflict —
-not because either range is wrong, but because the pins have not yet met. Nothing here
-depends on the vault and an adapter release does not wait on it; see
-[Composing with the vault](#composing-with-the-vault).
-
-Every package declares a compatibility range against `@redact-secret/core` /
-`redact-secret` and is tested against the host versions it claims. Each host
-integration has a test against a real instance of its host, which CI runs at
-both ends of the declared range, and a release publishes only from a commit
-that passed CI ([RELEASING.md](./RELEASING.md)). See
-[Supported host versions](#supported-host-versions).
-
-`@redact-secret/adapter` is pulled in automatically by the host packages; install
-it directly only when building your own integration.
+Not covered by anything you can install today: OpenTelemetry metrics and model
+output. A Logs adapter,
+[`adapter-otel-logs`](./packages/adapter-otel-logs#readme), is published as
+`0.1.0-beta.2` under the npm dist-tag `beta`; it depends on
+`@redact-secret/adapter` `^0.1.7`, which ships in the next release train, so it
+does not install from npm until then. `adapter-otel-trace` never covers logs. `@redact-secret/adapter-otel` is the deprecated old name of
+`adapter-otel-trace`; existing imports keep working.
 
 ## Quick start
 
-Every example below is executed from a clean install outside this repository,
-against the real core, by `npm run smoke-test` and
-`python scripts/smoke-test-python-wheel.py` in CI. The values are synthetic.
+Find your host, copy the block, done. The values in these examples are
+synthetic. The pino, Python `logging` and AI-context blocks are the exact source
+of a complete project in [`examples/`](./examples) that installs the released
+packages from the registry and checks its own output: run one from an empty
+directory with the steps in [examples/README.md](./examples#run-one). CI runs
+them, and fails if a block here drifts from its source.
 
 ### pino
 
+<!-- snippet: examples/pino/app.mjs -->
 ```js
-import pino from "pino";
 import { createRedactingHooks } from "@redact-secret/adapter-pino";
+import pino from "pino";
 
-const logger = pino({
-  hooks: await createRedactingHooks(), // both hooks: the complete boundary
-  redact: ["req.headers.authorization"], // pino's own path-based redact still applies, on top
-});
+// Synthetic, revoked-shaped value only. Never put a real credential in an example.
+const token = "ghp_SYNTHETICREVOKED00000000000000000000";
 
-logger.child({ session: secretValue }).info("token is %s", secretValue);
-// neither the message nor the child binding reaches the transport
+const logger = pino({ base: null, timestamp: false, hooks: await createRedactingHooks() });
+
+logger.child({ session: token }).info("deploy with token %s", token);
 ```
 
-pino's own `redact` option censors by object *path*. It cannot see a token
-inside a message string or an error message. This adapter redacts by *value*,
-alongside that mechanism rather than instead of it.
+Prints `{"level":30,"session":"<SECRET_1>","msg":"deploy with token <SECRET_1>"}`.
+Runnable: [`examples/pino`](./examples/pino).
 
-`createRedactingHooks` returns **both** hooks pino needs, because neither
-covers the other's input: `hooks.logMethod` sees a call's arguments before
-pino serializes or formats anything but never sees child-logger bindings or
-`mixin()` output, and `hooks.streamWrite` sees the finished line but only
-after the host's own serializers and `formatters` have run on raw values.
-Installing one of them leaves a plaintext path. The cost of the pair is that
-each line's strings are scanned twice.
+Messages, merged objects, errors, child bindings and `mixin()` output are all
+covered. pino's own `redact` option still works alongside it.
+[Full guide](./packages/adapter-pino#readme).
 
-Pass your own hooks to compose with them rather than replace them —
-`createRedactingHooks({ hooks: myHooks })`; redaction runs last, closest to
-the bytes. `createRedactingHooks` needs `adapter-pino 0.1.2`;
-`0.1.1` exports `createRedactingLogMethod` and `createRedactingStreamWrite`
-separately, and `0.1.0` has no `streamWrite` hook at all. Full ordering rules,
-the executable example, and what stays outside the boundary: the
-[package README](./packages/adapter-pino#readme).
-
-### OpenTelemetry traces
+### OpenTelemetry traces (JavaScript)
 
 ```js
-import { NodeTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-node";
+import { BasicTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { createRedactingSpanProcessor } from "@redact-secret/adapter-otel-trace";
 
-const provider = new NodeTracerProvider({
+// `exporter` is the span exporter you already use.
+const provider = new BasicTracerProvider({
   spanProcessors: [await createRedactingSpanProcessor(new BatchSpanProcessor(exporter))],
 });
 ```
 
-Every string and string-array attribute on a span and its events is redacted
-before the span reaches the next processor. Since `0.1.1` the span
-name, event names, the status message and link attributes are redacted too
-(in the Python package since `0.1.1`). Attribute names are not
-allowlisted, so OpenInference (`llm.input_messages`, `input.value`, …) and GenAI
-semantic-convention attributes (`gen_ai.prompt`, …) are covered without
-hardcoding either convention.
-
-This is a **trace** processor. OpenTelemetry **Logs** — a `LogRecord` from
-`@opentelemetry/sdk-logs` or a log bridge — never pass through it and are not
-protected by anything in this repository; nor are metrics.
-
-The package was published as `@redact-secret/adapter-otel` up to `0.1.2`, and
-`@redact-secret/adapter-otel-trace` is its trace-only name from its first
-release, `0.1.0` (redact-secret/redact-secret-adapters#49). From `0.1.3`,
-`@redact-secret/adapter-otel` is deprecated on npm. Existing imports keep
-working: the old name re-exports the new one, and migrating is an import-specifier change —
-[migration guide](./packages/adapter-otel-trace#migrating-from-redact-secretadapter-otel).
+Wrap the processor you already have. Span names, attributes, events, links and
+the status message are redacted before export.
+[Full guide](./packages/adapter-otel-trace#readme).
 
 ### Python `logging`
 
+<!-- snippet: examples/python-logging/app.py -->
 ```python
 import logging
+
 from redact_secret_adapters.logging_filter import RedactSecretFilter
 
-redact = RedactSecretFilter()  # no per-record state: one instance can be shared
-for handler in (logging.StreamHandler(), logging.FileHandler("audit.log")):
-    handler.addFilter(redact)  # every emitting handler, not the logger
-    logging.getLogger().addHandler(handler)
+# Synthetic, revoked-shaped value only. Never put a real credential in an example.
+token = "ghp_SYNTHETICREVOKED00000000000000000000"
+
+handler = logging.StreamHandler()
+handler.addFilter(RedactSecretFilter())  # on the handler, not the logger
+logging.getLogger().addHandler(handler)
+
+logging.warning("deploy with token %s", token)
 ```
 
-Python's standard library has no value-based redaction at all. This filter adds
-it.
+Prints `deploy with token <SECRET_1>`. Runnable: [`examples/python-logging`](./examples/python-logging).
 
-A `logging.Filter` runs **only where it is attached**, so this is not global
-automatic protection — placement is the decision:
+Add the filter to **every handler** that writes somewhere. A handler without
+it writes plaintext. [Full guide](./python#readme).
 
-- Attach it to **every emitting handler**. Handlers run in order and the filter
-  mutates the record in place, so an unfiltered handler that runs *before* a
-  filtered one emits plaintext.
-- A filter on a **logger** does not run for records **propagated** from child
-  loggers. A filter on a handler does, wherever that handler is attached — but
-  not for a handler the child carries itself.
-- With `QueueHandler`/`QueueListener`, attach it to the **`QueueHandler`**, so
-  only masked records cross the queue. A filter on the listener's sink protects
-  the final destination but not the queue.
-- Record attributes are covered only when you name them:
-  `RedactSecretFilter(extra_fields=["user"])`.
+### OpenTelemetry traces (Python)
 
-Your formatters, `extra` configuration and exception logging keep working
-unchanged. The full table of placements, and the negative controls that assert
-plaintext really escapes each wrong one, are in the
-[package README](./python#readme).
+```python
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from redact_secret_adapters.otel import create_redacting_span_processor
 
-### AI context (prerelease)
+provider = TracerProvider()
+provider.add_span_processor(create_redacting_span_processor(BatchSpanProcessor(exporter)))
+```
 
+[Full guide](./python#opentelemetry-otel-extra).
+
+### AI context
+
+<!-- snippet: examples/ai-context/app.mjs -->
 ```js
 import { createAiContextBoundary } from "@redact-secret/adapter-ai-context";
 
-const boundary = await createAiContextBoundary(); // conservative documented default limits
+// Synthetic, revoked-shaped values only. Never put a real credential in an example.
+const userText = "deploy with API_KEY=ghp_SYNTHETICREVOKED00000000000000000000";
+const toolResult = { content: [{ type: "text", text: "build ok" }], exitCode: 0 };
+
+const boundary = await createAiContextBoundary();
 const context = boundary.buildContext([
   { role: "user", boundary: "user-input", text: userText },
   { role: "tool", boundary: "tool-result", value: toolResult },
 ]);
-if (context.outcome === "ok") callModel(context.value); // otherwise nothing of the input is returned
+
+if (context.outcome !== "ok") {
+  // `reason` and `code` are fixed labels, safe to log. There is no value to use.
+  throw new Error(`context refused: ${context.outcome} ${context.reason ?? ""}`);
+}
+
+// context.value is the only thing that may go to a model. This example prints it instead of calling one.
+console.log(JSON.stringify(context.value));
 ```
 
-The core's framework-neutral
-[AI-context boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/ai-context-boundary.md):
-user input, tool results, nested values, constructed context and staged
-streams, each ending in `ok` / `blocked` / `aborted`, fail-closed and
-all-or-nothing, with allowlisted finding metadata. It is qualified by
-replaying the core's own conformance fixture, pinned to a core commit.
+Call it where your code builds the prompt. The result is `ok` with a sanitized
+value, or `blocked` / `aborted` with no value at all. No model is called in the
+example. Runnable: [`examples/ai-context`](./examples/ai-context).
+[Full guide](./packages/adapter-ai-context#readme).
 
-The bounds are always in force; `AI_CONTEXT_DEFAULT_LIMITS` only means you no
-longer have to invent them before the first call, and any set can still be
-passed explicitly. There is no unbounded mode. Non-JSON values, binary content
-and encoded text are **blocked, not decoded** — convert them yourself, so what
-is scanned is exactly what you send. Published as `0.1.0` (`npm install @redact-secret/adapter-ai-context`);
-`createAiContextBoundary()` with no limits needs `0.1.0-alpha.2` or later. See the
-[package README](./packages/adapter-ai-context#readme).
-
-### MCP (prerelease)
+### MCP
 
 ```js
 import { createMcpBoundary, toCallToolResult } from "@redact-secret/adapter-mcp";
 
-const mcp = await createMcpBoundary(); // conservative documented default limits
+const mcp = await createMcpBoundary();
 const outcome = await mcp.sanitizeToolCall(({ signal }) => client.callTool(params, undefined, { signal }));
-const safe = toCallToolResult(outcome); // sanitized result, a fixed isError result, or null if cancelled
+const safe = toCallToolResult(outcome); // sanitized result, a fixed error result, or null if cancelled
 ```
 
-The core's [MCP boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/mcp-boundary.md),
-as a thin specialization of `adapter-ai-context`. It scans the whole tool
-result (text, `structuredContent`, `_meta`, resources, links) before the result
-is logged, persisted, or placed into model context. It also offers opt-in
-argument sanitation, streamed tool output that stops reading on failure, and
-fixed `isError` results in place of errors. Binary payloads (`image`, `audio`,
-a base64 `blob`) cannot be scanned, so they **block** the whole result by
-default; `binaryContent: "pass"` lets a string payload through unscanned at its
-original position instead. A content type no qualified protocol revision
-defines also blocks, and a cancelled call is `aborted` with nothing to deliver.
-It names every security non-goal in its
-[package README](./packages/adapter-mcp#readme). Published as `0.1.0` (`npm install @redact-secret/adapter-mcp`);
-`createMcpBoundary()` with no limits needs `0.1.0-alpha.2` or later.
+Wrap the tool call, then log, store or send to the model only `safe`.
+[Full guide](./packages/adapter-mcp#readme).
 
 ### Masking callbacks (Langfuse and similar)
-
-Hosts that hand you a value to mask need no dedicated package — the shared
-walker is the whole integration:
 
 ```js
 import { createMaskSecrets } from "@redact-secret/adapter";
@@ -300,18 +195,27 @@ langfuse = Langfuse(mask=mask_secrets)
 
 ## Fail-closed behavior
 
-Every adapter shares one primitive for masking a single string, and that
-primitive never lets an error put text on the wire. These markers are public
-API: they are what a host sees, and they change only in a major version.
+When something goes wrong, an adapter writes a fixed marker instead of the
+original text. It never falls back to plaintext. These markers are public API
+and change only in a major version.
 
-| Marker | When |
+| You see | It means |
 | --- | --- |
-| `[REDACTED:BLOCKED]` | A `block` finding — the **entire** leaf is replaced, not just the matched span |
-| `[REDACTED:ERROR]` | Any failure inside the core call, including an uninitialized core. Since `@redact-secret/adapter` `0.1.1`: also a malformed result, and any value that cannot be read (a throwing getter or `toJSON()`). Never the original text, never the error's own message |
-| `[REDACTED:LIMIT_EXCEEDED]` | A value past a walk budget. It is never scanned and never passed through unmasked |
+| `<SECRET_1>` | The core found a secret and replaced just that part |
+| `[REDACTED:BLOCKED]` | A `block` finding: the **whole** value is replaced, not just the matched part |
+| `[REDACTED:ERROR]` | The scan failed, or the value could not be read. Never the input, never the error's message |
+| `[REDACTED:LIMIT_EXCEEDED]` | The value is past a size limit. It was not scanned and not passed through |
 | `[REDACTED:CYCLE]` | A self-referencing object |
 
-Bounds (`DEFAULT_LIMITS`, overridable per call):
+The AI-context and MCP packages do not use markers. They return an outcome
+(`ok`, `blocked`, `aborted`) and give you no value unless it is `ok`.
+
+Each marker and outcome has a cause and a smallest safe correction, with the
+differences between the kinds of limit:
+[troubleshooting](./docs/troubleshooting.md#logs-and-spans-markers) (markers) and
+[outcomes](./docs/troubleshooting.md#ai-context-and-mcp-outcomes).
+
+Size limits (`DEFAULT_LIMITS`, overridable per call; snake case in Python):
 
 | Limit | Default |
 | --- | --- |
@@ -322,79 +226,52 @@ Bounds (`DEFAULT_LIMITS`, overridable per call):
 | `maxTotalLeaves` | 5000 |
 | `maxNodes` | 20000 |
 
-Elements and keys beyond a limit are dropped, not passed through. `maxNodes`
-counts every value visited, containers and leaves alike but not keys, once per
-path. It bounds the work for an in-process object graph with shared
-references, which the walk visits once per path. The Python walker uses the
-same limits in snake case (`max_nodes`, ...).
+Elements and keys beyond a limit are dropped, not passed through. Details:
+[`@redact-secret/adapter`](./packages/adapter#fail-closed-markers).
 
-## PII detection is opt-in
+## Four things to know before you rely on it
 
-The core detects credentials out of the box. **PII detection is a separate,
-explicit activation**, and it is process-wide and one-shot: the first selection
-wins, and a later *different* one fails with `PII_ACTIVATION_CONFLICT`. An
-empty selection is a different selection, not a neutral one.
+1. **No finding is not proof.** Detection belongs to the core and is not
+   complete. A clean log line does not prove the input held no secret.
+2. **Object keys and attribute names are not scanned on their own** by the
+   logging and tracing adapters, and are never rewritten. Do not put a secret
+   in a key. A key is used as *context* for the string directly under it, so a
+   credential whose detection depends on its field name (`api_key`,
+   `password`) is masked; the core decides, and the cost is one more scan for
+   each such string. (The AI-context and MCP packages do scan keys.)
+3. **Placement matters.** An adapter protects only what passes through it: a
+   Python handler without the filter, a span processor registered ahead of the
+   redacting one, or a pino transport that adds its own text are outside it.
+   Each package guide lists what it does not cover. To check your own output
+   path with a synthetic credential and a negative control, run a
+   [placement recipe](./examples#run-one):
+   [JavaScript](./examples/placement-js), [Python](./examples/placement-python).
+4. **PII is off by default.** The core detects credentials out of the box.
+   Detecting personal data is a separate switch; see below.
 
-Either order works. Activate it yourself and the factories accept it:
+## Options
 
-```js
-import { initialize } from "@redact-secret/core";
-
-await initialize({ pii: ["pii:global"] }); // the application's own choice
-const logger = pino({ hooks: await createRedactingHooks() }); // accepted, not fought over
-```
-
-Or let the factory activate it, which is the order to prefer when the adapter
-is the first thing in the process to touch the core:
+### PII detection
 
 ```js
 const logger = pino({ hooks: await createRedactingHooks({ pii: ["pii:global"] }) });
 ```
-
-`pii` is accepted by `createRedactingHooks`, `createRedactingLogMethod`,
-`createRedactingStreamWrite`, `createRedactingSpanProcessor`,
-`createAiContextBoundary` and `createMcpBoundary`. When you pass it, the
-factory reads the core's `piiActivation()` afterwards and **refuses** if the
-active selection is not the one you asked for, rather than running with PII
-silently off — as a rejection in `adapter-pino` and `adapter-otel-trace`, and as the
-usual fail-closed `blocked` / `core_error` in `adapter-ai-context` and
-`adapter-mcp`, which never reject. The refusal carries a fixed code
-(`PII_ACTIVATION_NOT_ACTIVE`, or `PII_ACTIVATION_UNSUPPORTED` against a core
-too old to report an activation) and never echoes a selector, the input, or the
-core's own message. Omitting `pii` needs no newer core: the declared
-`@redact-secret/core` range is unchanged.
-
-In Python there is no init step for credentials — the extension loads on
-`import redact_secret` — but PII is the same explicit call, and **placement is
-the whole rule**:
 
 ```python
 import redact_secret
 redact_secret.initialize(pii=["pii:global"])  # before the first record or span
 ```
 
-Handlers attach and tracer providers are built at import time, so a module
-imported earlier can emit before that line runs. Those records are scanned with
-PII off and report nothing, with no error. The adapters cannot close that
-window — the process owns the activation — so it is pinned as a known
-limitation in `python/tests/test_pii_activation.py` rather than hidden.
+The pino, OpenTelemetry, AI-context and MCP factories take `pii`, and so do the
+Python `RedactSecretFilter` and `create_redacting_span_processor`. It is
+process-wide and can be set once.
+Under the core's default policy only high-confidence PII is redacted; pass your
+own `policy` to mask the rest. To see credentials only, PII on, and an explicit
+policy side by side on one synthetic input, run
+[`examples/policy-js`](./examples/policy-js) or
+[`examples/policy-python`](./examples/policy-python). [PII guide](./docs/pii.md).
 
-**Activation is not masking.** Under the core's default policy, PII types are
-confidence-gated rather than always redacted: a `High`-confidence finding
-redacts, while `Medium` and `Low` resolve to `warn` — and a `warn` finding
-leaves the text alone. So enabling PII still lets lower-confidence PII reach a
-log line, a span or an AI context as plaintext. Supply your own `policy`
-mapping those findings to `redact` if you need them masked; this repository
-decides nothing about policy. The counters below make it observable: a value
-with a non-zero `findings` that is not counted in `redacted` is exactly this.
-
-## Counting what happened
-
-Every host adapter can report one **input-free** summary per unit of work — one
-pino log record, one span, one Python `logging` record — through the same
-contract, so a consumer can count sanitized, blocked, limited and failed values
-without the adapters coupling to a metrics backend. No adapter here creates a
-logger, an exporter or a network client for it; you increment your own counters.
+### Counting what happened
 
 ```js
 const hooks = await createRedactingHooks({
@@ -406,235 +283,68 @@ const hooks = await createRedactingHooks({
 handler.addFilter(RedactSecretFilter(on_outcome=lambda o: metrics.increment("log.records", level=o.level)))
 ```
 
-A summary carries six non-negative integers and nothing else — no value, no
-masked value, no field path, no key, no offset, no error message:
+`onOutcome` / `on_outcome` reports six counts per log record or span
+(`scanned`, `findings`, `redacted`, `blocked`, `limited`, `failed`) and no
+values, so you can feed your own metrics without leaking anything.
+[Counter reference](./packages/adapter#outcome-counters).
 
-| Count | Means |
+### Policy and limits
+
+Every factory passes the core's `policy` through, and the size limits can be
+overridden. The option names differ a little per package; each package guide
+has an options table.
+
+## Supported versions
+
+| Package | Works with |
 | --- | --- |
-| `scanned` | Values handed to the core. One a bound refused first is not counted here |
-| `findings` | Findings the core reported, summed. **Not** distinct credentials: one credential in five values is five findings |
-| `redacted` | Values whose text the core changed. Lower than `findings` when a finding leaves text alone (a `warn`) |
-| `blocked` | Values replaced whole by `[REDACTED:BLOCKED]` |
-| `limited` | Values past a bound: replaced by `[REDACTED:LIMIT_EXCEEDED]`, never scanned |
-| `failed` | Values replaced by `[REDACTED:ERROR]`, plus the cycle case |
+| `adapter-pino` | pino `^10.0.0` |
+| `adapter-otel-trace` | `@opentelemetry/sdk-trace-base` `^2.0.0` |
+| `adapter-mcp` | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.30.1`, or `@modelcontextprotocol/client` / `server` `>=2.0.0 <=2.1.0` |
+| `redact-secret-adapters` | CPython `>=3.10`; `opentelemetry-sdk>=1.16.0,<2` for the `[otel]` extra |
+| all of them | `@redact-secret/core` `^0.1.0-beta.6` / `redact-secret>=0.1.0b6,<0.2` |
 
-The unit is the host's, and so is the delivery field: pino reports one summary
-per **record** with both hooks' passes summed rather than double counted, plus
-`lineReplaced`; OpenTelemetry reports one per **span**, plus `dropped`.
-**Neither means "delivered"** — whether a destination, a handler or an exporter
-succeeded is something no adapter here learns, so none of them claims it.
-`dropped` is the adapter's own refusal to forward a span it could not redact,
-not a sampling decision.
-
-An observer runs after the value is masked and cannot change it; anything it
-throws is swallowed and never read; and it is re-entrancy-guarded, so an
-observer that logs through the logger it observes does not recurse.
-In the Python package since `0.1.1`. Details:
-[`@redact-secret/adapter`](./packages/adapter#outcome-counters).
-
-## Supported host versions
-
-A published adapter states the host range it supports and runs a test against a
-real instance of that host. The range is not a guess: it is what CI installs and
-exercises, at both ends of the declared range.
-
-| Adapter | Declared range | Verified by |
-| --- | --- | --- |
-| `adapter-pino` | `pino ^10.0.0` | a real `pino` logger: captured stream, sonic-boom async destination, worker-thread transport, concurrent loggers, a failing destination |
-| `adapter-otel-trace` | `@opentelemetry/sdk-trace-base ^2.0.0` | real spans through `SimpleSpanProcessor` and `BatchSpanProcessor`, the OTLP JSON bytes the exporter sends, concurrent spans, a failing exporter, flush and shutdown. Traces only |
-| `adapter-otel` (deprecated name) | `@opentelemetry/sdk-trace-base ^2.0.0` | the same export list and objects as `adapter-otel-trace`, and the same OTLP JSON bytes for one span; the clean-install smoke test also compares the release on npm |
-| `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger`: filter before formatter, `QueueHandler`/`QueueListener`, threads sharing one handler, a failing handler |
-| `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | real spans through simple and batch processors, spans from threads, a failing exporter, flush and shutdown |
-| `adapter-ai-context` (prerelease) | `@redact-secret/core ^0.1.0-beta.6` (no host) | the core's AI-context conformance fixture replayed on the real core before and after `initialize()`, and an end-to-end agent turn with every limit |
-| `adapter-mcp` (prerelease) | `@modelcontextprotocol/sdk >=1.26.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
-
-[`compatibility.json`](./compatibility.json) is the machine-readable form of
-this table: every declared range, the endpoints CI installs, the runtimes it
-exercises, and the test files that qualify each package.
-`npm run compat:check` fails CI when the record, the manifests, and `ci.yml`
-disagree.
-
-A declared range and a qualified endpoint are different claims. The range says
-what installs; `endpoints` names the two versions CI actually installs and runs
-the real-host tests against, and the semver expression between them is **not**
-evidence that every version inside it was tested. As of 2026-09-29 the core
-endpoints are `0.1.0-beta.6` and `0.1.0-beta.12` (`0.1.0b6` and `0.1.0b12` on
-PyPI). A newer core does not narrow
-the floor: a range is raised only when a package needs an API a lower core
-lacks, which the `published-combination` job enforces. A core version that is
-announced but not yet on the registry qualifies nothing —
-[RELEASING.md § Qualifying a new core release](./RELEASING.md#qualifying-a-new-core-release)
-is the procedure.
-
-`qualifiedBy` in that record lists the tests that make an endpoint evidence,
-and it is deliberately narrower than "the tests that cover this package". A
-test that injects or mocks the core proves nothing about either endpoint, so
-it is not listed there however thorough it is, and most of the activation
-tests are exactly that — a real core's PII selection is process-wide and
-one-shot, so a single test worker can exercise one ordering against it. The
-two that do run against a real core, one ordering per spawned process
-(`packages/adapter/test/activation-live.test.ts` and
-`python/tests/test_pii_activation.py`), are listed.
-
-### Combinations that are not claimed
-
-| Combination | Status |
-| --- | --- |
-| Core between the two endpoints, e.g. `0.1.0-beta.8` or `0.1.0-beta.10` | Installs; inside the declared range but not an endpoint CI runs. Not claimed. |
-| Core below `0.1.0-beta.6` | Refused at install (`ERESOLVE`, or pip). |
-| A factory's `pii` option on a core below `0.1.0-beta.10` | Refused at runtime with a fixed code. Omitting `pii` works at the floor. |
-| `@redact-secret/vault` `0.1.0-beta.1` with core `0.1.0-beta.11` | Peer conflict: the vault pins `0.1.0-beta.10` exactly. Its own bump is tracked in the vault repository. |
-| Any version in the "Declared on `develop`" column | Not published. Nothing installs it until the train is cut. |
-
-An unqualified host is either refused at install time or listed as
-unqualified there:
-
-- **Refused.** An out-of-range `pino`, `@opentelemetry/sdk-trace-base` or
-  `@redact-secret/core` stops `npm install` with `ERESOLVE`, unless you
-  override it with `--legacy-peer-deps` or `--force`. pip refuses an
-  `opentelemetry-sdk` or `redact-secret` outside the declared range, and any
-  CPython older than 3.10.
-- **Documented, not refused.** Node.js outside 20.x, 22.x and 24.x (`engines`
-  only warns) and CPython 3.15 or later install but are not tested.
-
-pino `9.x` is deliberately **not** in the declared range. It may work; it is not
-tested, so it is not claimed.
-
-## Operational overhead
-
-`scripts/measure-overhead.mjs` (pino, OpenTelemetry JS, `maskSecrets`, the
-AI-context boundary, and the MCP boundary, whole-input and streamed) and
-`scripts/measure-overhead.py` (`logging`, OpenTelemetry Python,
-`mask_secrets`) time the same workloads, built from
-[`fixtures/overhead-profiles.json`](./fixtures/overhead-profiles.json): typical
-log, span and payload events, a 1×/4×/16× scaling series, and events past each
-`DEFAULT_LIMITS` bound. Each harness keeps four costs apart: the host alone,
-the adapter's own traversal (over a scanner that finds nothing), the core's
-scan of exactly the leaves the adapter hands it, and the host plus adapter plus
-the real core. Each is measured in three separate passes: batch wall time,
-single-event latency (median, p95, p99, maximum), and memory (bytes allocated
-per event in JavaScript, tracemalloc's peak in Python, and garbage-collection
-count and pause).
-
-Neither harness carries a threshold or a verdict. The numbers depend on the
-host, so the baseline and any budget over it live in
-[redact-secret-benchmarks](https://github.com/redact-secret/redact-secret-benchmarks),
-not here.
-
-```bash
-npm run build && node scripts/measure-overhead.mjs --out overhead-js.json
-pip install -e "./python[otel]" && python scripts/measure-overhead.py --out overhead-python.json
-```
-
-### Comparing releases
-
-To compare against the previous release, install it into a prefix and pass
-`--baseline`. Each harness then interleaves the previous release's modes with
-the current build's in one session, sharing the host and the injected core, and
-records for every result a `change` from baseline to current (a record, not a
-verdict):
-
-```bash
-node scripts/install-overhead-baseline.mjs /tmp/overhead-baseline
-node scripts/measure-overhead.mjs --baseline /tmp/overhead-baseline --out overhead-js.json
-python scripts/install-overhead-baseline.py /tmp/overhead-baseline-python
-python scripts/measure-overhead.py --baseline /tmp/overhead-baseline-python --out overhead-python.json
-node scripts/summarize-overhead-change.mjs overhead-js.json overhead-python.json
-```
-
-`npm run bench:docker` (`-- --python` for the Python harness) does the same
-inside [`docker/bench.Dockerfile`](./docker/bench.Dockerfile) or
-[`docker/bench-python.Dockerfile`](./docker/bench-python.Dockerfile). The
-runtime, the OS libraries, the core's native addon and the previous release
-are pinned in the image, the container has no network, and the image id and
-source commit are recorded in the output (`-- --cpuset 2,3` also pins CPUs).
-The image fixes the software, not the hardware, so compare runs from different
-machines only by their same-session `change`, never by absolute microseconds,
-and never run it under emulation.
-
-Which values to read, in order:
-
-| Value | Why |
-| --- | --- |
-| `change.scannerCallsPerEvent` | Deterministic. If it moved, the two builds do different work, and a timing change between them is not like-for-like. |
-| `change.traversal` | The adapter's own code only (walker and seam), independent of the core. This is the one to optimize. |
-| `change.adapterCoreAllocatedBytesPerEvent` / `adapterCorePeakBytes` | Allocation moves first when a walker gets cheaper or more expensive. |
-| `change.adapterCoreLatencyP95` / `P99` | The tail a logger or tracer notices. |
-| `derived.adapterOverheadRatio` | Overhead as a fraction of the host's own time, for hosts that have one. |
-| the `limit-*-over` rows | The fail-closed path past each limit. It must stay cheap. |
-
-A change is only meaningful above the machine's noise floor. Measure it with an
-A/A run, the current build against a copy of itself:
-`npm run bench:docker -- --aa`, then `summarize-overhead-change.mjs` on its
-output.
-
-### One-off costs
-
-`scripts/measure-footprint.mjs` (`npm run footprint`) records each npm
-package's packed and unpacked size, and its initialization time in a fresh
-process (importing the package, the core's own `initialize()` alone, and the
-package's live factory end to end), so the adapter's share of start-up is
-separable from the core's.
-
-## Relationship to the core
-
-The logging and tracing packages depend on a narrow, deliberately small part
-of the core: `initialize()`, `scanAndRedact()` and its result shape, and
-whether a finding's action is `block` or `warn`. Nothing else. The AI-context
-package alone also uses the whole-input `policy`/`limits` options, the
-incremental session, `SecretScanError.code`, and the safe finding fields, as
-the core's AI-context contract allows
-([ARCHITECTURE.md § The core contract](./ARCHITECTURE.md#the-core-contract)). That surface is what the declared
-compatibility range protects, and — because these packages are written in
-TypeScript against the core's own exported types — a change to it fails the
-build rather than degrading silently.
-
-The core is released in lockstep across Rust, npm, PyPI and the CLI. These
-packages are not part of that lockstep: a new pino release moves
-`adapter-pino` and nothing else.
-
-## Composing with the vault
-
-`@redact-secret/vault`, from the sibling
-[`redact-secret-vault`](https://github.com/redact-secret/redact-secret-vault)
-repository, is opt-in, in-memory capture: it replaces a detected secret with a
-`<rsv_…>` token on the way to a model and restores the original value into a
-field the application designates. **Nothing here depends on it**, and the two
-compose in one order:
-
-1. **Capture first.** `capture()` and `createAiContextBoundary` sit on the same
-   seam — the path to the model — so the vault runs first and the adapter sees
-   already-tokenized text.
-2. **Adapters after.** A `<rsv_…>` token passes through every adapter here
-   byte for byte. No adapter parses, rewrites or restores one; a rewrite would
-   not leak anything, it would destroy a value the application still needs, and
-   `restore()` would answer `RESTORE_DENIED`.
-3. **Never route a restored value to an observability sink.** Restoration puts
-   plaintext back. Log it, attach it to a span, or put it back into model
-   context, and the capture bought nothing.
-
-Two paths deliberately do not preserve a token — a leaf past `maxStringLength`,
-and a core failure — because both replace the whole leaf with a marker. Both are
-pinned as tests, in both languages, along with the pass-through itself:
-[ARCHITECTURE.md § The vault boundary](./ARCHITECTURE.md#the-vault-boundary).
-
-## What this repository does not contain
-
-No detection: deciding what a secret is stays in the core. Also out of scope
-are stream adapters (Node `Transform` and Web `TransformStream` ship inside
-`@redact-secret/core` as `./node-stream` and `./web-stream`), MCP messages
-other than `tools/call`, model-vendor or LangChain wrappers, and a Langfuse package;
-[ARCHITECTURE.md § Deliberate exclusions](./ARCHITECTURE.md#deliberate-exclusions)
-gives the reason for each.
+CI runs every adapter against a real instance of its host at both ends of
+each range. What is and is not claimed, in detail:
+[docs/compatibility.md](./docs/compatibility.md).
 
 ## Contributing
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) first: it covers how to report a bug or
-request an enhancement, how to submit a change, and the requirements a change
-must meet, including tests. Then read [ARCHITECTURE.md](./ARCHITECTURE.md);
-every change must hold to its
-[Security boundary](./ARCHITECTURE.md#security-boundary). Report suspected
-vulnerabilities privately as described in [SECURITY.md](./SECURITY.md).
+New contributors are welcome, and you do not need to know the whole codebase.
+
+```sh
+git clone https://github.com/redact-secret/redact-secret-adapters.git
+cd redact-secret-adapters
+npm ci
+npm test
+```
+
+That builds every package and runs the JavaScript tests. From there,
+[CONTRIBUTING.md](./CONTRIBUTING.md) walks you through a first change: where
+the code lives, how to run one package's tests, the Python setup, and what a
+pull request needs.
+
+- Found a bug or have an idea? [Open an issue](https://github.com/redact-secret/redact-secret-adapters/issues).
+- A missed or false detection is the core's decision: report it to
+  [redact-secret/redact-secret](https://github.com/redact-secret/redact-secret/issues).
+- Found a vulnerability? Report it privately: [SECURITY.md](./SECURITY.md).
+- Never paste a real credential anywhere in this project. Use obviously fake values.
+
+## Learn more
+
+| Document | What is in it |
+| --- | --- |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | How the adapters are layered, the security boundary, what is deliberately excluded, and how they compose with [`@redact-secret/vault`](./ARCHITECTURE.md#the-vault-boundary) |
+| [docs/compatibility.md](./docs/compatibility.md) | Tested host and core versions, and combinations that are not claimed |
+| [docs/troubleshooting.md](./docs/troubleshooting.md) | What each marker and outcome means, and the smallest safe fix |
+| [examples/](./examples) | Runnable quickstarts, placement checks and a credential-versus-PII comparison |
+| [docs/pii.md](./docs/pii.md) | Turning on PII detection, and what it does not do |
+| [docs/performance.md](./docs/performance.md) | Measuring overhead and package footprint |
+| [RELEASING.md](./RELEASING.md) | Branches, release trains, how a version is published |
+| [ROADMAP.md](./ROADMAP.md) · [GOVERNANCE.md](./GOVERNANCE.md) · [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) | Where the project is going and how it is run |
+| [Security assurance case](./docs/assurance-case.md) | Why the security requirements are met, with evidence |
+
+Each package keeps its own `CHANGELOG.md` next to its README.
 
 ## License
 

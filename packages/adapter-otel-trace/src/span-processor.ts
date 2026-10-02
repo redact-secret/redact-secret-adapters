@@ -27,13 +27,23 @@
  */
 
 import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
-import type { MaskLeafOptions, OutcomeCounter, ScanAndRedact, ValueCounts } from "@redact-secret/adapter";
+import type {
+  MaskLeafOptions,
+  OperationBudget,
+  OperationLimits,
+  OutcomeCounter,
+  ScanAndRedact,
+  ValueCounts,
+} from "@redact-secret/adapter";
 import {
   countLeaf,
+  createOperationBudget,
   createOutcomeCounter,
   ERROR_MARKER,
+  LIMIT_MARKER,
   maskLeafOutcomeWith,
   notify,
+  resolveScanConfig,
   toValueCounts,
 } from "@redact-secret/adapter";
 
@@ -64,7 +74,16 @@ export interface OtelSpanOutcome {
   readonly dropped: boolean;
 }
 
-export interface RedactingSpanProcessorOptions extends MaskLeafOptions {
+export interface RedactingSpanProcessorOptions extends Omit<MaskLeafOptions, "budget"> {
+  /**
+   * Overrides for the aggregate budget of **one span** (see
+   * `@redact-secret/adapter`'s `budget.ts`), shared by the span name, every
+   * attribute, event and link and the status message. Past it, every string
+   * not yet inspected becomes `[REDACTED:LIMIT_EXCEEDED]` and the core is not
+   * called; the span is still forwarded, never with text the budget did not
+   * allow to be inspected. It is a work counter, not a wall-clock timeout.
+   */
+  readonly operationLimits?: Partial<OperationLimits> | undefined;
   /**
    * Observational: called once per span, synchronously at the end of `onEnd`,
    * after the span has either been forwarded or dropped. Increment your own
@@ -77,35 +96,55 @@ export interface RedactingSpanProcessorOptions extends MaskLeafOptions {
   readonly onOutcome?: (outcome: OtelSpanOutcome) => void;
 }
 
-type Mask = (text: string) => string;
+/** `key` is the attribute name the string sits directly under, when it has one. */
+type Mask = (text: string, key?: string) => string;
 
 /** A span field that did not take a masked write. The message names the field, never its value. */
 class UnredactableFieldError extends Error {}
 
+/** What one span is masked against: its counter (when reported) and its aggregate budget. */
+interface SpanState {
+  readonly counter: OutcomeCounter | undefined;
+  readonly budget: OperationBudget;
+}
+
 /**
- * `counter` is read on every call, not captured, so one masker serves every
- * span and the processor can swap in a fresh per-span counter.
+ * `state` is read on every call, not captured, so one masker serves every
+ * span and the processor can swap in a fresh per-span counter and budget.
  */
-function maskerFor(scanAndRedact: ScanAndRedact, options: MaskLeafOptions, counter?: () => OutcomeCounter): Mask {
-  return (text) => {
+function maskerFor(scanAndRedact: ScanAndRedact, options: MaskLeafOptions, state: () => SpanState): Mask {
+  return (text, key) => {
+    const { counter, budget } = state();
     try {
-      const leaf = maskLeafOutcomeWith(scanAndRedact, text, options);
-      if (counter !== undefined) countLeaf(counter(), leaf);
+      // One leaf of the span's budget; the scans it makes are charged inside.
+      if (!budget.chargeLeaf()) {
+        if (counter !== undefined) counter.limited += 1;
+        return LIMIT_MARKER;
+      }
+      const leaf = maskLeafOutcomeWith(scanAndRedact, text, { ...options, key, budget });
+      if (counter !== undefined) countLeaf(counter, leaf);
       return leaf.text;
     } catch {
-      if (counter !== undefined) counter().failed += 1;
+      if (counter !== undefined) counter.failed += 1;
       return ERROR_MARKER;
     }
   };
 }
 
 /** The masked value, or `value` itself when nothing in it changed. */
-function maskAttributeValue(mask: Mask, value: unknown): unknown {
-  if (typeof value === "string") return mask(value);
+function maskAttributeValue(mask: Mask, budget: OperationBudget, value: unknown, key: string): unknown {
+  // Every value, and every element of an array value, is a node of the span's budget.
+  budget.chargeNode();
+  if (typeof value === "string") return mask(value, key);
   if (Array.isArray(value)) {
     // OpenTelemetry allows null/undefined holes in a homogeneous array, so
     // every string element is masked and every other element kept in place.
-    const masked = value.map((item) => (typeof item === "string" ? mask(item) : item));
+    // An element is not directly under the attribute's name, so it is masked
+    // without key context, as an array element is everywhere else.
+    const masked = value.map((item) => {
+      budget.chargeNode();
+      return typeof item === "string" ? mask(item) : item;
+    });
     return masked.some((item, index) => item !== value[index]) ? masked : value;
   }
   // Numbers and booleans cannot carry a secret as free text.
@@ -124,10 +163,13 @@ function writeBack(target: object, key: string, value: unknown, field: string): 
   if (record[key] !== value) throw new UnredactableFieldError(`${field} did not take the masked write`);
 }
 
-function redactBag(mask: Mask, bag: object | null | undefined, field: string): void {
+function redactBag(mask: Mask, budget: OperationBudget, bag: object | null | undefined, field: string): void {
   if (bag == null) return;
   for (const key of Object.keys(bag)) {
-    writeBack(bag, key, maskAttributeValue(mask, (bag as Record<string, unknown>)[key]), field);
+    // Charged as a key occurrence. Failing it exhausts the budget, and every
+    // string from here on is replaced by a marker rather than inspected.
+    budget.chargeKey();
+    writeBack(bag, key, maskAttributeValue(mask, budget, (bag as Record<string, unknown>)[key], key), field);
   }
 }
 
@@ -140,28 +182,44 @@ export function redactAttributesWith(
   attributes: object | null | undefined,
   options: MaskLeafOptions = {},
 ): void {
+  const { operationLimits, ...leafOptions } = options as MaskLeafOptions & {
+    operationLimits?: Partial<OperationLimits>;
+  };
+  const budget = createOperationBudget(operationLimits);
+  const resolved = { ...leafOptions, scanConfig: leafOptions.scanConfig ?? resolveScanConfig(leafOptions) };
   try {
-    redactBag(maskerFor(scanAndRedact, options), attributes, "attributes");
+    redactBag(
+      maskerFor(scanAndRedact, resolved, () => ({ counter: undefined, budget })),
+      budget,
+      attributes,
+      "attributes",
+    );
   } catch {
     throw new TypeError("redactAttributesWith: a masked attribute could not be written back");
   }
 }
 
-function redactSpan(mask: Mask, span: ReadableSpan): void {
-  if (typeof span.name === "string") writeBack(span, "name", mask(span.name), "span.name");
-  redactBag(mask, span.attributes, "span.attributes");
+function redactSpan(mask: Mask, budget: OperationBudget, span: ReadableSpan): void {
+  if (typeof span.name === "string") {
+    budget.chargeNode();
+    writeBack(span, "name", mask(span.name), "span.name");
+  }
+  redactBag(mask, budget, span.attributes, "span.attributes");
   const status = span.status;
   if (typeof status?.message === "string") {
+    budget.chargeNode();
     const message = mask(status.message);
     // Replaced, not mutated: the status object may be the caller's own.
     if (message !== status.message) writeBack(span, "status", { ...status, message }, "span.status");
   }
   for (const [index, event] of (span.events ?? []).entries()) {
+    budget.chargeNode();
     if (typeof event.name === "string") writeBack(event, "name", mask(event.name), `span.events[${index}].name`);
-    redactBag(mask, event.attributes, `span.events[${index}].attributes`);
+    redactBag(mask, budget, event.attributes, `span.events[${index}].attributes`);
   }
   for (const [index, link] of (span.links ?? []).entries()) {
-    redactBag(mask, link.attributes, `span.links[${index}].attributes`);
+    budget.chargeNode();
+    redactBag(mask, budget, link.attributes, `span.links[${index}].attributes`);
   }
 }
 
@@ -176,6 +234,10 @@ export class RedactingSpanProcessorWith implements SpanProcessor {
   readonly #mask: Mask;
   readonly #onOutcome: ((outcome: OtelSpanOutcome) => void) | undefined;
   #counter: OutcomeCounter = createOutcomeCounter();
+  // The span being masked right now: one budget per `onEnd`, swapped like the
+  // counter so a downstream processor that ends a span re-entrantly has its own.
+  #budget: OperationBudget;
+  readonly #limits: Partial<OperationLimits> | undefined;
   #reporting = false;
   #warned = false;
 
@@ -186,13 +248,22 @@ export class RedactingSpanProcessorWith implements SpanProcessor {
     if (typeof scanAndRedact !== "function") {
       throw new TypeError("RedactingSpanProcessorWith: scanAndRedact must be a function");
     }
-    const { onOutcome, ...maskOptions } = options;
+    const { onOutcome, operationLimits, ...rawOptions } = options;
+    // Validated and snapshotted once, here: a malformed scan option is a
+    // programming error at construction, and every leaf is scanned with the
+    // one snapshot.
+    const maskOptions = { ...rawOptions, scanConfig: rawOptions.scanConfig ?? resolveScanConfig(rawOptions) };
     if (onOutcome !== undefined && typeof onOutcome !== "function") {
       throw new TypeError("RedactingSpanProcessorWith: onOutcome must be a function");
     }
     this.#next = next;
     this.#onOutcome = onOutcome;
-    this.#mask = maskerFor(scanAndRedact, maskOptions, onOutcome === undefined ? undefined : () => this.#counter);
+    this.#limits = operationLimits;
+    this.#budget = createOperationBudget(operationLimits);
+    this.#mask = maskerFor(scanAndRedact, maskOptions, () => ({
+      counter: onOutcome === undefined ? undefined : this.#counter,
+      budget: this.#budget,
+    }));
   }
 
   onStart(...args: Parameters<SpanProcessor["onStart"]>): void {
@@ -217,12 +288,14 @@ export class RedactingSpanProcessorWith implements SpanProcessor {
     // `SimpleSpanProcessor` over an instrumented exporter, or any processor
     // that emits a span of its own), which re-enters this method.
     const outer = this.#counter;
+    const outerBudget = this.#budget;
     if (counting) this.#counter = createOutcomeCounter();
+    this.#budget = createOperationBudget(this.#limits);
     let dropped = false;
     let counts: ValueCounts | undefined;
     try {
       try {
-        redactSpan(this.#mask, span);
+        redactSpan(this.#mask, this.#budget, span);
       } catch (error) {
         this.#warnDropped(error instanceof UnredactableFieldError ? error.message : "unexpected span shape");
         dropped = true;
@@ -233,6 +306,7 @@ export class RedactingSpanProcessorWith implements SpanProcessor {
       if (counting) counts = toValueCounts(this.#counter);
     } finally {
       this.#counter = outer;
+      this.#budget = outerBudget;
     }
     // Reported whether the span was forwarded or dropped, and after the next
     // processor has had it, so an observer cannot affect what is exported.

@@ -206,6 +206,59 @@ jobs:
           [ -n "$DIST_TAG" ] || { echo "::error::The plan gave no dist-tag for @redact-secret/adapter-otel-trace"; exit 1; }
           npm publish --workspace @redact-secret/adapter-otel-trace --access public --provenance --tag "$DIST_TAG"
 
+  publish-adapter-otel-logs:
+    # Depends on @redact-secret/adapter (^0.1.7), so it publishes after it.
+    # Its first version cannot come from here: npm only accepts a trusted
+    # publisher on a package that already exists, so 0.1.0-beta.2 was
+    # published by hand (RELEASING.md, A brand-new npm package) and the plan
+    # skips it; later versions publish from here under the plan's dist-tag.
+    name: Publish @redact-secret/adapter-otel-logs
+    needs: [rehearsal, publish-adapter]
+    if: >-
+      !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/release' &&
+      needs.rehearsal.result == 'success' && needs.publish-adapter.result != 'failure' &&
+      needs.rehearsal.outputs.publish_adapter_otel_logs == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+      - run: npm run build --workspace @redact-secret/adapter --workspace @redact-secret/adapter-otel-logs
+
+      - name: Upgrade npm for OIDC trusted publishing
+        # Trusted publishing needs npm >= 11.5.1; Node 22 bundles npm 10.
+        # Pinned, not @latest: this job holds id-token: write, so whatever
+        # npm resolves here runs with a token that can publish. Bump it
+        # deliberately, together with release-rehearsal.yml.
+        # Installed from .github/npm-tools/package-lock.json (`npm ci`, so
+        # the tarball is checked against its integrity hash), then put
+        # first on PATH for the later steps. Bump both files together.
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/npm-tools" --ignore-scripts
+          echo "$GITHUB_WORKSPACE/.github/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Publish
+        # --tag from the plan: `latest` for a release, the prerelease's name
+        # (alpha, beta, rc) otherwise, so a prerelease never moves `latest`.
+        env:
+          DIST_TAG: ${{ needs.rehearsal.outputs.adapter_otel_logs_dist_tag }}
+        run: |
+          set -euo pipefail
+          [ -n "$DIST_TAG" ] || { echo "::error::The plan gave no dist-tag for @redact-secret/adapter-otel-logs"; exit 1; }
+          npm publish --workspace @redact-secret/adapter-otel-logs --access public --provenance --tag "$DIST_TAG"
+
   publish-adapter-otel:
     # The deprecated name re-exports @redact-secret/adapter-otel-trace, so it
     # waits for that publish; a skipped one (already on the registry) does not
@@ -368,6 +421,7 @@ jobs:
       - publish-adapter-pino
       - publish-adapter-otel-trace
       - publish-adapter-otel
+      - publish-adapter-otel-logs
       - publish-adapter-ai-context
       - publish-adapter-mcp
     if: >-
@@ -377,6 +431,7 @@ jobs:
       needs.publish-adapter-pino.result != 'failure' &&
       needs.publish-adapter-otel-trace.result != 'failure' &&
       needs.publish-adapter-otel.result != 'failure' &&
+      needs.publish-adapter-otel-logs.result != 'failure' &&
       needs.publish-adapter-ai-context.result != 'failure' &&
       needs.publish-adapter-mcp.result != 'failure' &&
       needs.rehearsal.outputs.publish_python == 'true'
@@ -419,6 +474,7 @@ jobs:
       - publish-adapter-pino
       - publish-adapter-otel-trace
       - publish-adapter-otel
+      - publish-adapter-otel-logs
       - publish-adapter-ai-context
       - publish-adapter-mcp
       - publish-python
@@ -436,6 +492,7 @@ jobs:
       PINO_RESULT: ${{ needs.publish-adapter-pino.result }}
       OTEL_TRACE_RESULT: ${{ needs.publish-adapter-otel-trace.result }}
       OTEL_RESULT: ${{ needs.publish-adapter-otel.result }}
+      OTEL_LOGS_RESULT: ${{ needs.publish-adapter-otel-logs.result }}
       AI_CONTEXT_RESULT: ${{ needs.publish-adapter-ai-context.result }}
       MCP_RESULT: ${{ needs.publish-adapter-mcp.result }}
       PYTHON_RESULT: ${{ needs.publish-python.result }}
@@ -443,6 +500,7 @@ jobs:
       PINO_VERSION: ${{ needs.rehearsal.outputs.adapter_pino_version }}
       OTEL_TRACE_VERSION: ${{ needs.rehearsal.outputs.adapter_otel_trace_version }}
       OTEL_VERSION: ${{ needs.rehearsal.outputs.adapter_otel_version }}
+      OTEL_LOGS_VERSION: ${{ needs.rehearsal.outputs.adapter_otel_logs_version }}
       AI_CONTEXT_VERSION: ${{ needs.rehearsal.outputs.adapter_ai_context_version }}
       MCP_VERSION: ${{ needs.rehearsal.outputs.adapter_mcp_version }}
       PYTHON_VERSION: ${{ needs.rehearsal.outputs.python_version }}
@@ -491,6 +549,7 @@ jobs:
           PINO_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_pino == 'false' }}
           OTEL_TRACE_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_otel_trace == 'false' }}
           OTEL_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_otel == 'false' }}
+          OTEL_LOGS_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_otel_logs == 'false' }}
           AI_CONTEXT_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_ai_context == 'false' }}
           MCP_ON_REGISTRY: ${{ steps.registry.outputs.publish_adapter_mcp == 'false' }}
           PYTHON_ON_REGISTRY: ${{ steps.registry.outputs.publish_python == 'false' }}
@@ -523,6 +582,7 @@ jobs:
           tag_if_published "$PINO_RESULT" "$PINO_ON_REGISTRY" "adapter-pino@${PINO_VERSION}"
           tag_if_published "$OTEL_TRACE_RESULT" "$OTEL_TRACE_ON_REGISTRY" "adapter-otel-trace@${OTEL_TRACE_VERSION}"
           tag_if_published "$OTEL_RESULT" "$OTEL_ON_REGISTRY" "adapter-otel@${OTEL_VERSION}"
+          tag_if_published "$OTEL_LOGS_RESULT" "$OTEL_LOGS_ON_REGISTRY" "adapter-otel-logs@${OTEL_LOGS_VERSION}"
           tag_if_published "$AI_CONTEXT_RESULT" "$AI_CONTEXT_ON_REGISTRY" "adapter-ai-context@${AI_CONTEXT_VERSION}"
           tag_if_published "$MCP_RESULT" "$MCP_ON_REGISTRY" "adapter-mcp@${MCP_VERSION}"
           tag_if_published "$PYTHON_RESULT" "$PYTHON_ON_REGISTRY" "redact-secret-adapters@${PYTHON_VERSION}"
@@ -579,6 +639,7 @@ jobs:
             echo "| @redact-secret/adapter-pino | ${PINO_VERSION} | ${PINO_RESULT} | $(npm_registry_version "@redact-secret/adapter-pino" "$PINO_VERSION") |"
             echo "| @redact-secret/adapter-otel-trace | ${OTEL_TRACE_VERSION} | ${OTEL_TRACE_RESULT} | $(npm_registry_version "@redact-secret/adapter-otel-trace" "$OTEL_TRACE_VERSION") |"
             echo "| @redact-secret/adapter-otel | ${OTEL_VERSION} | ${OTEL_RESULT} | $(npm_registry_version "@redact-secret/adapter-otel" "$OTEL_VERSION") |"
+            echo "| @redact-secret/adapter-otel-logs | ${OTEL_LOGS_VERSION} | ${OTEL_LOGS_RESULT} | $(npm_registry_version "@redact-secret/adapter-otel-logs" "$OTEL_LOGS_VERSION") |"
             echo "| @redact-secret/adapter-ai-context | ${AI_CONTEXT_VERSION} | ${AI_CONTEXT_RESULT} | $(npm_registry_version "@redact-secret/adapter-ai-context" "$AI_CONTEXT_VERSION") |"
             echo "| @redact-secret/adapter-mcp | ${MCP_VERSION} | ${MCP_RESULT} | $(npm_registry_version "@redact-secret/adapter-mcp" "$MCP_VERSION") |"
             echo "| redact-secret-adapters (PyPI) | ${PYTHON_VERSION} | ${PYTHON_RESULT} | $(pypi_registry_version "redact-secret-adapters" "$PYTHON_VERSION") |"

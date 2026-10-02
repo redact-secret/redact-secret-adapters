@@ -1,0 +1,18 @@
+{
+  "name": "redact-secret-example-troubleshooting",
+  "private": true,
+  "type": "module",
+  "description": "Fail-closed outcomes of the AI-context boundary and pino markers, reproduced and corrected, plus fixed application-facing and user-facing messages.",
+  "engines": {
+    "node": "20.x || 22.x || 24.x"
+  },
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@redact-secret/adapter-ai-context": "0.1.2",
+    "@redact-secret/adapter-pino": "0.1.3",
+    "@redact-secret/core": "0.1.0-beta.12",
+    "pino": "10.3.1"
+  }
+}

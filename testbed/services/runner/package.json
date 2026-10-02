@@ -1,0 +1,10 @@
+{
+  "name": "redact-secret-testbed-runner",
+  "private": true,
+  "type": "module",
+  "description": "Playwright and scenario runner for the consumer testbed. Not published.",
+  "dependencies": {
+    "@playwright/test": "1.55.0",
+    "ajv": "8.20.0"
+  }
+}

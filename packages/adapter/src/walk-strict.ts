@@ -15,6 +15,7 @@
  * scan and may fail the walk with a failure of its own.
  */
 
+import type { OperationBudget } from "./budget.js";
 import { defineDataKey, isPlainObject } from "./walk.js";
 
 /**
@@ -66,11 +67,18 @@ export function isStrictWalkLimits(limits: unknown): limits is StrictWalkLimits 
  *
  * The walk never reads a value twice: each key's value is read once, so a
  * getter cannot hand the visitor one string and the copy another.
+ *
+ * `operation`, when given, is the host operation's aggregate budget
+ * (`./budget.ts`): every visited value is charged as a node and every object
+ * key as a key, and a charge that does not fit is `limit_exceeded`, like
+ * `maxNodes`. The strings are charged by the caller's visitor, which owns the
+ * scan.
  */
 export function walkStrict<F>(
   value: unknown,
   limits: StrictWalkLimits,
   visitors: StrictWalkVisitors<F>,
+  operation?: OperationBudget,
 ): StrictWalkResult<F> {
   if (!isStrictWalkLimits(limits)) throw new TypeError("walkStrict: limits must be non-negative safe integers");
   let nodes = 0;
@@ -88,7 +96,7 @@ export function walkStrict<F>(
   // and the root have none.
   const walk = (node: unknown, depth: number, key?: string): Step => {
     nodes += 1;
-    if (nodes > limits.maxNodes) return overLimit;
+    if (nodes > limits.maxNodes || (operation !== undefined && !operation.chargeNode())) return overLimit;
     if (typeof node === "string") {
       const visited = visit.string(node, key);
       return visited.ok ? { ok: true, value: visited.text } : visited;
@@ -125,6 +133,7 @@ export function walkStrict<F>(
       const source = node as Record<string, unknown>;
       const out = {};
       for (const key of Object.keys(source)) {
+        if (operation !== undefined && !operation.chargeKey()) return overLimit;
         const checked = visit.key(key);
         if (!checked.ok) return checked;
         const child = walk(source[key], depth + 1, key);

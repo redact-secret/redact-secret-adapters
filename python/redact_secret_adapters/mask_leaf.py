@@ -12,7 +12,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from ._limit import resolve_limit
+from .budget import utf8_byte_length
+from .key_context import KeyContextFailure, scan_leaf_in_key_context
 from .outcome import OutcomeCounter
+from .scan_options import ScanConfig, resolve_scan_config
 
 BLOCK_MARKER = "[REDACTED:BLOCKED]"
 ERROR_MARKER = "[REDACTED:ERROR]"
@@ -40,19 +44,6 @@ DEFAULT_LIMITS: dict[str, int] = {
 }
 
 
-def resolve_limit(value: Any, fallback: int) -> Any:
-    """``value`` if it is a usable bound, else ``fallback``, like
-    ``resolveLimit`` in ``mask-leaf.ts``. ``None``, ``NaN``, a negative
-    number, a ``bool``, or a non-number would otherwise raise out of a
-    walk, disable a bound (``len(text) > nan`` is never true), or turn a
-    slice bound negative (``[:-1]`` keeps almost everything)."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return fallback
-    if value != value or value < 0:  # NaN is the one value unequal to itself
-        return fallback
-    return value
-
-
 def resolve_limits(overrides: Optional[Any]) -> dict[str, Any]:
     """Per-key :func:`resolve_limit` over ``DEFAULT_LIMITS``; like
     ``resolveLimits`` in ``walk.ts``, anything that is not a mapping is no
@@ -67,6 +58,12 @@ def mask_leaf_with(
     *,
     policy: Optional[Any] = None,
     max_string_length: Optional[int] = None,
+    key: Optional[str] = None,
+    budget: Optional[Any] = None,
+    scan_limits: Optional[Any] = None,
+    ruleset: Optional[Any] = None,
+    placeholder_formatter: Optional[Callable[..., Any]] = None,
+    scan_config: Optional[ScanConfig] = None,
 ) -> str:
     """Masks one leaf string.
 
@@ -81,7 +78,19 @@ def mask_leaf_with(
     For a plain string log call the leaf *is* the message, and for a
     formatted field or an ``exc_text`` the leaf is that field's whole text.
     """
-    return mask_leaf_outcome_with(scan_and_redact, text, policy=policy, max_string_length=max_string_length).text
+    leaf = mask_leaf_outcome_with(
+        scan_and_redact,
+        text,
+        policy=policy,
+        max_string_length=max_string_length,
+        key=key,
+        budget=budget,
+        scan_limits=scan_limits,
+        ruleset=ruleset,
+        placeholder_formatter=placeholder_formatter,
+        scan_config=scan_config,
+    )
+    return leaf.text
 
 
 @dataclass(frozen=True)
@@ -105,10 +114,30 @@ def mask_leaf_outcome_with(
     *,
     policy: Optional[Any] = None,
     max_string_length: Optional[int] = None,
+    key: Optional[str] = None,
+    budget: Optional[Any] = None,
+    scan_limits: Optional[Any] = None,
+    ruleset: Optional[Any] = None,
+    placeholder_formatter: Optional[Callable[..., Any]] = None,
+    scan_config: Optional[ScanConfig] = None,
 ) -> MaskedLeaf:
     """:func:`mask_leaf_with`, plus what happened, for a host adapter that
     reports outcome counters. Nothing derived from the leaf's text is in the
     result besides the masked text itself.
+
+    ``budget`` is the operation's aggregate :class:`~redact_secret_adapters.budget.OperationBudget`
+    (see ``budget.py``): every scan this leaf makes, key-context view included, is
+    charged to it, and past it the leaf is ``LIMIT_MARKER`` and the core is not called.
+
+    ``scan_limits``, ``ruleset`` and ``placeholder_formatter`` are the core's
+    whole-input limits, declarative ruleset and placeholder formatter, passed
+    through (see ``scan_options.py``); ``scan_config`` is a configuration
+    already validated and snapshotted by ``resolve_scan_config``, for a host
+    that masks many leaves, and wins over ``policy`` and these three.
+
+    ``key`` is the mapping key (or attribute name) the leaf sits directly
+    under, when the host supplies one: context for detection only (see
+    ``key_context.py``), never rewritten, scanned on its own, or returned.
 
     The masking decisions are the same, with one deliberate difference from
     ``0.1.0``: counting the findings needs ``len(result.findings)``, so a
@@ -119,24 +148,55 @@ def mask_leaf_outcome_with(
     if not isinstance(text, str):
         raise TypeError("mask_leaf_with: text must be a str")
 
-    if len(text) > resolve_limit(max_string_length, DEFAULT_LIMITS["max_string_length"]):
+    # Validated and snapshotted once per call, or once per host when the caller
+    # passes the ``scan_config`` it built. A malformed option raises here, as a
+    # programming error, before any scan.
+    config = (
+        scan_config
+        if scan_config is not None
+        else resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter)
+    )
+    limit = resolve_limit(max_string_length, DEFAULT_LIMITS["max_string_length"])
+    if len(text) > limit:
+        return MaskedLeaf(LIMIT_MARKER, "limited")
+    keyed = key if isinstance(key, str) else None
+    if keyed is not None and len(keyed) > limit:
         return MaskedLeaf(LIMIT_MARKER, "limited")
 
+    def scan(candidate: str) -> tuple[str, Any]:
+        # Charged before the call, so an operation past its budget never
+        # reaches the core; the scan and its findings are charged as actual calls.
+        if budget is not None and not budget.charge_scan(utf8_byte_length(candidate)):
+            raise KeyContextFailure("limit")
+        try:
+            result = scan_and_redact(candidate, config.policy, **config.kwargs)
+            # Reading the result is inside the guard too: a malformed result
+            # must not raise into the host or pass the input through.
+            len(result.findings)  # no length (a generator) is a malformed result
+            findings = list(result.findings)
+            masked = result.text
+        except Exception:
+            raise KeyContextFailure("error") from None
+        if not isinstance(masked, str):
+            raise KeyContextFailure("error")
+        if budget is not None and not budget.charge_findings(len(findings)):
+            raise KeyContextFailure("limit")
+        return masked, findings
+
     try:
-        result = scan_and_redact(text, policy)
-        # Reading the result is inside the guard too: a malformed result
-        # must not raise into the host or pass the input through.
-        findings = len(result.findings)
-        if any(finding.action == "block" for finding in result.findings):
-            return MaskedLeaf(BLOCK_MARKER, "blocked", findings)
-        masked = result.text
-    except Exception:
+        masked, findings = scan_leaf_in_key_context(scan, text, keyed)
+    except KeyContextFailure as failure:
+        if failure.kind == "limit":
+            return MaskedLeaf(LIMIT_MARKER, "limited")
+        if failure.kind == "policy":
+            return MaskedLeaf(BLOCK_MARKER, "blocked")
         return MaskedLeaf(ERROR_MARKER, "failed")
-    if not isinstance(masked, str):
-        return MaskedLeaf(ERROR_MARKER, "failed")
+    count = len(findings)
+    if any(getattr(finding, "action", None) == "block" for finding in findings):
+        return MaskedLeaf(BLOCK_MARKER, "blocked", count)
     # A ``warn`` finding leaves the text alone, so a scan can report findings
     # and still be ``unchanged``. That is why the two are counted apart.
-    return MaskedLeaf(masked, "redacted" if masked != text else "unchanged", findings)
+    return MaskedLeaf(masked, "redacted" if masked != text else "unchanged", count)
 
 
 def count_leaf(counter: Optional[OutcomeCounter], leaf: MaskedLeaf) -> None:

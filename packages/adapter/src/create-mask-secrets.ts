@@ -23,6 +23,7 @@
 
 import { activateCore } from "./activation.js";
 import { maskSecretsWith } from "./mask-secrets.js";
+import { verifyScanOptions, withResolvedScanConfig } from "./scan-options.js";
 import type { CoreActivation, MaskOptions } from "./types.js";
 
 /** {@link MaskOptions} plus the live factory's PII activation. */
@@ -53,7 +54,13 @@ function activationOf(options: CoreActivation): CoreActivation {
  * activation (#57).
  */
 export async function createMaskSecrets(options: CreateMaskSecretsOptions = {}): Promise<(data: unknown) => unknown> {
+  // Validated and snapshotted before the core is touched: a malformed option
+  // is a programming error, and the snapshot is what every call scans with.
+  const resolved = withResolvedScanConfig(options);
   const loaded = await import("@redact-secret/core");
   await activateCore(loaded, activationOf(options));
-  return (data) => maskSecretsWith(loaded.scanAndRedact, data, options);
+  // The installed core must honor any requested scan option, or this rejects
+  // with a fixed, input-free `CoreOptionsError` rather than ignore it.
+  verifyScanOptions(loaded, resolved.scanConfig);
+  return (data) => maskSecretsWith(loaded.scanAndRedact, data, resolved);
 }

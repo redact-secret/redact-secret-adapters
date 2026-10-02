@@ -14,6 +14,14 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-02
+
+### Added
+
+- `operationLimits` is accepted and passed to the AI-context boundary (redact-secret/redact-secret-adapters#173): one tool result is one operation, and a result over its aggregate budget is the fixed `blocked` / `limit_exceeded` outcome.
+
+- `ok` outcomes forward the AI-context occurrences of the findings they carry (redact-secret/redact-secret-adapters#177): `findingOccurrences` from `@redact-secret/adapter-ai-context` works on them. Feature-detected, so an older `adapter-ai-context` without occurrences is a no-op. The outcome's JSON is unchanged.
+
 ## [0.1.3] - 2026-10-01
 ### Changed
 

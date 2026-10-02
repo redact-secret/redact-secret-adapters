@@ -1,0 +1,44 @@
+# Browser/WASM consumer (#195), auto-discovered by testbed/run.mjs. Paths are
+# relative to testbed/. Same hardening as the other consumers; on the internal
+# network only (no published port, no route out). The runner's Playwright
+# browser reaches it at http://browser-consumer:8080.
+services:
+  browser-consumer:
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    restart: "no"
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "2" }
+    build:
+      context: .
+      dockerfile: services/browser-consumer/Dockerfile
+      additional_contexts:
+        artifacts: ${TESTBED_ARTIFACTS_DIR:?set by npm run testbed}
+      args:
+        TESTBED_FAULT: ${TESTBED_FAULT:-}
+    environment:
+      TESTBED_FAULT: ${TESTBED_FAULT:-}
+    mem_limit: 256m
+    cpus: 0.5
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 2s
+
+  ui:
+    environment:
+      # The UI shows the browser lane's packaging and versions; it does not depend on it being up.
+      BROWSER_CONSUMER: http://browser-consumer:8080
+
+  runner:
+    environment:
+      TESTBED_BROWSER_URL: http://browser-consumer:8080
+    depends_on:
+      browser-consumer: { condition: service_healthy }

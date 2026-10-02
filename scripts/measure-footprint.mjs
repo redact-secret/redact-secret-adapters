@@ -38,6 +38,8 @@ const LIVE_FACTORIES = {
   // The deprecated name re-exports adapter-otel-trace (#49): its package size is the re-export alone.
   "@redact-secret/adapter-otel":
     "await m.createRedactingSpanProcessor({ onStart() {}, onEnd() {}, forceFlush: async () => {}, shutdown: async () => {} });",
+  "@redact-secret/adapter-otel-logs":
+    "await m.createRedactingLogRecordProcessor({ onEmit() {}, forceFlush: async () => {}, shutdown: async () => {} });",
   "@redact-secret/adapter-ai-context": `await m.createAiContextBoundary({
     wholeInputLimits: { maxInputBytes: 65536, maxFindings: 256 },
     incrementalLimits: { maxInputCodeUnits: 1048576, maxBufferedCodeUnits: 65536, maxTokenCodeUnits: 8192, maxMultilineCodeUnits: 32768 },

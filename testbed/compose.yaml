@@ -1,0 +1,115 @@
+# Adapter consumer testbed (#192). Do not run this file by hand: `npm run testbed`
+# stages the artifacts and sets the variables below. Auto-discovered fragments
+# (services/*/compose.yaml, paths relative to this directory) add services.
+#
+# Isolation:
+#   - 'internal' has no route out: scenario execution needs no external service.
+#   - Only 'ui' joins 'edge' and publishes one port, on loopback only.
+#   - The consumers' control API (:8081) is reachable only on 'internal'.
+#   - No Docker socket, no privileged mode, no added capabilities, read-only roots.
+name: ${TESTBED_PROJECT:-redact-testbed}
+
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 256
+  tmpfs: ["/tmp:size=64m,mode=1777"]
+  restart: "no"
+  logging:
+    driver: json-file
+    options: { max-size: "1m", max-file: "2" }
+
+services:
+  node-consumer:
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: services/node-consumer/Dockerfile
+      additional_contexts:
+        artifacts: ${TESTBED_ARTIFACTS_DIR:?set by npm run testbed}
+      args:
+        TESTBED_FAULT: ${TESTBED_FAULT:-}
+    environment:
+      TESTBED_FAULT: ${TESTBED_FAULT:-}
+    mem_limit: 512m
+    cpus: 1.0
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+
+  python-consumer:
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: services/python-consumer/Dockerfile
+      additional_contexts:
+        artifacts: ${TESTBED_ARTIFACTS_DIR:?set by npm run testbed}
+      args:
+        TESTBED_FAULT: ${TESTBED_FAULT:-}
+    environment:
+      TESTBED_FAULT: ${TESTBED_FAULT:-}
+    mem_limit: 512m
+    cpus: 1.0
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2).status==200 else 1)"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+
+  ui:
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: services/ui/Dockerfile
+    environment:
+      CONSUMERS: node=http://node-consumer:8080,python=http://python-consumer:8080
+      TESTBED_FAULT: ${TESTBED_FAULT:-}
+    ports:
+      - "127.0.0.1:${TESTBED_UI_PORT:-18080}:8080"
+    mem_limit: 128m
+    cpus: 0.5
+    networks: [internal, edge]
+    depends_on:
+      node-consumer: { condition: service_healthy }
+      python-consumer: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 2s
+
+  runner:
+    <<: *hardened
+    profiles: [runner]
+    build:
+      context: .
+      dockerfile: services/runner/Dockerfile
+    user: "${TESTBED_UID:-1000}:${TESTBED_GID:-1000}"
+    environment:
+      TESTBED_UI_URL: http://ui:8080
+      TESTBED_CONTROL_URLS: http://node-consumer:8081,http://python-consumer:8081
+      # The consumers' own scenario API, read by the journeys to confirm what the UI shows (#196).
+      TESTBED_CONSUMER_URLS: node=http://node-consumer:8080,python=http://python-consumer:8080
+      HOME: /tmp
+    volumes:
+      - ${TESTBED_OUT_DIR:?set by npm run testbed}:/out
+    shm_size: 1gb
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 1024
+    networks: [internal]
+    depends_on:
+      ui: { condition: service_healthy }
+
+networks:
+  internal:
+    internal: true
+  edge: {}
