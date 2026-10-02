@@ -13,8 +13,8 @@ import pino from "pino";
 // Synthetic, revoked-shaped values only (see contract/sentinels.d/*.json).
 export const TOKEN = "ghp_SYNTHETICREVOKED00000000000000000000";
 export const EMAIL = "jane.doe@acme-corp.io";
-export const PASSWORD = "hunter2hunter2";
-export const SAMPLE = `token ${TOKEN}; customer email: ${EMAIL}; password=${PASSWORD}`;
+export const WARN_VALUE = "hunter2hunter2";
+export const SAMPLE = `token ${TOKEN}; customer email: ${EMAIL}; password=${WARN_VALUE}`;
 const PEM_BODY = "MIIBOgIBAAJBAKSYNTHETICREVOKEDNOTAREALKEY".padEnd(76, "A");
 export const PEM = [
   "-----BEGIN RSA PRIVATE KEY-----",
@@ -23,7 +23,7 @@ export const PEM = [
   PEM_BODY,
   "-----END RSA PRIVATE KEY-----",
 ].join("\n");
-const SECRETS = [TOKEN, EMAIL, PASSWORD, "SYNTHETICREVOKEDNOTAREALKEY"];
+const SECRETS = [TOKEN, EMAIL, WARN_VALUE, "SYNTHETICREVOKEDNOTAREALKEY"];
 
 export const BLOCK_MARKER = "[REDACTED:BLOCKED]";
 export const ERROR_MARKER = "[REDACTED:ERROR]";
@@ -105,8 +105,8 @@ export async function features() {
   try {
     const sink = new Sink();
     const log = logger(sink, await adapterPino.createRedactingHooks());
-    log.info({ api_key: `${PASSWORD}xx` }, "k");
-    keyAware = !sink.text.includes(PASSWORD);
+    log.info({ api_key: `${WARN_VALUE}xx` }, "k");
+    keyAware = !sink.text.includes(WARN_VALUE);
   } catch {
     keyAware = false;
   }

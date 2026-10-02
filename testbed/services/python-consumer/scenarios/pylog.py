@@ -20,7 +20,7 @@ from _pylog_lib import (  # noqa: E402
     EMAIL,
     ERROR_MARKER,
     LIMIT_MARKER,
-    PASSWORD,
+    WARN_VALUE,
     PEM,
     TOKEN,
     JsonFormatter,
@@ -148,11 +148,11 @@ def negative_controls(ctx, rec):
 def policy_warn(ctx, rec):
     outcomes = []
     handler, out = make_handler(filter_cls()(on_outcome=outcomes.append))
-    make_logger(handler).info("password=%s", PASSWORD)
+    make_logger(handler).info("password=%s", WARN_VALUE)
     keep(ctx, "pylog.policy-warn", out.getvalue())
-    rec.check("the warn value is in the handler text (expected, documented)", PASSWORD in out.getvalue())
-    rec.compare("warn value left unchanged in the handler output", True, PASSWORD in out.getvalue(), "warn")
-    rec.check("verifier reports it as LEAKED, expected for a warn", verdict(out.getvalue(), [PASSWORD]) == "LEAKED")
+    rec.check("the warn value is in the handler text (expected, documented)", WARN_VALUE in out.getvalue())
+    rec.compare("warn value left unchanged in the handler output", True, WARN_VALUE in out.getvalue(), "warn")
+    rec.check("verifier reports it as LEAKED, expected for a warn", verdict(out.getvalue(), [WARN_VALUE]) == "LEAKED")
     v = outcomes[0].values
     rec.check("the finding was reported, nothing redacted", v.findings > 0 and v.redacted == 0)
     rec.check("nothing blocked or failed", v.blocked == 0 and v.failed == 0)
@@ -179,11 +179,11 @@ def policy_explicit(ctx, rec):
 
     handler, out = make_handler(filter_cls()(policy=policy))
     logger = make_logger(handler)
-    logger.info("password=%s", PASSWORD)
+    logger.info("password=%s", WARN_VALUE)
     logger.info("key %s", PEM)
     keep(ctx, "pylog.policy-explicit", out.getvalue())
-    rec.check("the former warn value is masked", PASSWORD not in out.getvalue())
-    rec.compare("former warn value masked under an explicit policy", True, PASSWORD not in out.getvalue(), "policy")
+    rec.check("the former warn value is masked", WARN_VALUE not in out.getvalue())
+    rec.compare("former warn value masked under an explicit policy", True, WARN_VALUE not in out.getvalue(), "policy")
     rec.check("verdict is PROTECTED", verdict(out.getvalue()) == "PROTECTED")
     rec.check("block is still honoured under the explicit policy", BLOCK_MARKER in out.getvalue())
 
@@ -271,7 +271,7 @@ def pii_default(ctx, rec):
     keep(ctx, "pylog.pii-default", r["line"])
     rec.check("credential masked", TOKEN not in r["line"])
     rec.check("PII stays (PII not activated)", EMAIL in r["line"])
-    rec.check("warn value stays", PASSWORD in r["line"])
+    rec.check("warn value stays", WARN_VALUE in r["line"])
     rec.check("nothing blocked or failed", r["counts"]["blocked"] == 0 and r["counts"]["failed"] == 0)
     rec.evidence["findings"] = r["counts"]["findings"]
 
@@ -284,7 +284,7 @@ def pii_global(ctx, rec):
     keep(ctx, "pylog.pii-global", r["line"])
     rec.check("credential masked", TOKEN not in r["line"])
     rec.check("high-confidence PII masked", EMAIL not in r["line"])
-    rec.check("warn value still plaintext under the default policy", PASSWORD in r["line"])
+    rec.check("warn value still plaintext under the default policy", WARN_VALUE in r["line"])
     rec.check("one more finding than with PII off", r["counts"]["findings"] > base["counts"]["findings"])
 
 
@@ -295,7 +295,7 @@ def pii_explicit_policy(ctx, rec):
         return
     keep(ctx, "pylog.pii-explicit-policy", r["line"])
     rec.check("verdict is PROTECTED", verdict(r["line"]) == "PROTECTED")
-    rec.check("credential, email and warn value all masked", all(s not in r["line"] for s in (TOKEN, EMAIL, PASSWORD)))
+    rec.check("credential, email and warn value all masked", all(s not in r["line"] for s in (TOKEN, EMAIL, WARN_VALUE)))
     rec.check("nothing blocked or failed", r["counts"]["blocked"] == 0 and r["counts"]["failed"] == 0)
 
 
@@ -315,7 +315,7 @@ def pii_adapter_first(ctx, rec):
     keep(ctx, "pylog.pii-adapter-first", r["line"])
     rec.check("credential masked", TOKEN not in r["line"])
     rec.check("PII masked from the first record (no silent window)", EMAIL not in r["line"])
-    rec.check("warn value still plaintext under the default policy", PASSWORD in r["line"])
+    rec.check("warn value still plaintext under the default policy", WARN_VALUE in r["line"])
 
 
 def pii_conflict(ctx, rec):

@@ -10,8 +10,8 @@ import pino from "pino";
 
 const TOKEN = "ghp_SYNTHETICREVOKED00000000000000000000";
 const EMAIL = "jane.doe@acme-corp.io";
-const PASSWORD = "hunter2hunter2";
-const SAMPLE = `token ${TOKEN}; customer email: ${EMAIL}; password=${PASSWORD}`;
+const WARN_VALUE = "hunter2hunter2";
+const SAMPLE = `token ${TOKEN}; customer email: ${EMAIL}; password=${WARN_VALUE}`;
 
 // An explicit core policy replaces the built-in one for EVERY finding (examples/policy-js).
 const explicitPolicy = { evaluate: (finding) => (finding.type === "private_key" ? "block" : "redact") };

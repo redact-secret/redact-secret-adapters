@@ -22,7 +22,7 @@ import {
   logEverywhere,
   logger,
   MIXIN,
-  PASSWORD,
+  WARN_VALUE,
   PEM,
   parseLines,
   requireFeature,
@@ -174,16 +174,16 @@ export const scenarios = [
     classification: "negative-control",
     async run(ctx, rec) {
       const { sink, counts, log } = await paired();
-      log.info(`password=${PASSWORD}`);
+      log.info(`password=${WARN_VALUE}`);
       keep(ctx, "pino.policy-warn", sink.text);
-      rec.check("the warn value is in the bytes (expected, documented)", sink.text.includes(PASSWORD));
+      rec.check("the warn value is in the bytes (expected, documented)", sink.text.includes(WARN_VALUE));
       rec.compare(
         "warn value in the destination",
         "unchanged (warn)",
-        sink.text.includes(PASSWORD) ? "unchanged (warn)" : "changed",
+        sink.text.includes(WARN_VALUE) ? "unchanged (warn)" : "changed",
         "warn",
       );
-      rec.check("verifier reports it as LEAKED, expected for a warn", verdict(sink.text, [PASSWORD]) === "LEAKED");
+      rec.check("verifier reports it as LEAKED, expected for a warn", verdict(sink.text, [WARN_VALUE]) === "LEAKED");
       rec.check(
         "nothing blocked or failed",
         counts.every((o) => o.values.blocked === 0 && o.values.failed === 0),
@@ -227,14 +227,14 @@ export const scenarios = [
       const policy = { evaluate: (f) => (f.type === "private_key" ? "block" : "redact") };
       const sink = new Sink();
       const log = logger(sink, await createRedactingHooks({ policy }));
-      log.info(`password=${PASSWORD}`);
+      log.info(`password=${WARN_VALUE}`);
       log.info("key %s", PEM);
       keep(ctx, "pino.policy-explicit", sink.text);
-      rec.check("the former warn value is masked", !sink.text.includes(PASSWORD));
+      rec.check("the former warn value is masked", !sink.text.includes(WARN_VALUE));
       rec.compare(
         "former warn value under an explicit policy",
         "masked",
-        sink.text.includes(PASSWORD) ? "plaintext" : "masked",
+        sink.text.includes(WARN_VALUE) ? "plaintext" : "masked",
         "policy",
       );
       rec.check("verdict is PROTECTED", verdict(sink.text) === "PROTECTED");
@@ -342,11 +342,11 @@ export const scenarios = [
       )
         return;
       const sink = new Sink();
-      logger(sink, await createRedactingHooks(), { mixin: () => ({ client_secret: `${PASSWORD}mx` }) })
-        .child({ api_key: `${PASSWORD}mx` })
-        .info({ password: `${PASSWORD}xx` }, "keyed");
+      logger(sink, await createRedactingHooks(), { mixin: () => ({ client_secret: `${WARN_VALUE}mx` }) })
+        .child({ api_key: `${WARN_VALUE}mx` })
+        .info({ password: `${WARN_VALUE}xx` }, "keyed");
       keep(ctx, "pino.key-aware", sink.text);
-      rec.check("no keyed value in the bytes", !sink.text.includes(PASSWORD));
+      rec.check("no keyed value in the bytes", !sink.text.includes(WARN_VALUE));
       const [line] = parseLines(sink) ?? [{}];
       rec.check("keys are untouched", "api_key" in line && "client_secret" in line && "password" in line);
     },
@@ -417,7 +417,7 @@ export const scenarios = [
       keep(ctx, "pino.pii-default", r.line);
       rec.check("credential masked", !r.line.includes(TOKEN));
       rec.check("PII stays (PII not activated)", r.line.includes(EMAIL));
-      rec.check("warn value stays", r.line.includes(PASSWORD));
+      rec.check("warn value stays", r.line.includes(WARN_VALUE));
       rec.check("nothing blocked or failed", r.counts.blocked === 0 && r.counts.failed === 0);
       rec.evidence.findings = r.counts.findings;
     },
@@ -434,7 +434,7 @@ export const scenarios = [
       keep(ctx, "pino.pii-global", r.line);
       rec.check("credential masked", !r.line.includes(TOKEN));
       rec.check("high-confidence PII masked", !r.line.includes(EMAIL));
-      rec.check("warn value still plaintext under the default policy", r.line.includes(PASSWORD));
+      rec.check("warn value still plaintext under the default policy", r.line.includes(WARN_VALUE));
       rec.check("one more finding than with PII off", r.counts.findings > base.counts.findings);
     },
   },
@@ -448,7 +448,7 @@ export const scenarios = [
       if (!r) return;
       keep(ctx, "pino.pii-explicit-policy", r.line);
       rec.check("verdict is PROTECTED", verdict(r.line) === "PROTECTED");
-      rec.check("credential, email and warn value all masked", hasNone(r.line, TOKEN, EMAIL, PASSWORD));
+      rec.check("credential, email and warn value all masked", hasNone(r.line, TOKEN, EMAIL, WARN_VALUE));
       rec.check("nothing blocked or failed", r.counts.blocked === 0 && r.counts.failed === 0);
     },
   },
