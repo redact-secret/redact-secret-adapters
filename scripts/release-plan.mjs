@@ -77,6 +77,14 @@ export const PACKAGES = [
     tag: "adapter-otel",
   },
   {
+    id: "adapter_otel_logs",
+    name: "@redact-secret/adapter-otel-logs",
+    registry: "npm",
+    manifest: "packages/adapter-otel-logs/package.json",
+    changelog: "packages/adapter-otel-logs/CHANGELOG.md",
+    tag: "adapter-otel-logs",
+  },
+  {
     id: "adapter_ai_context",
     name: "@redact-secret/adapter-ai-context",
     registry: "npm",

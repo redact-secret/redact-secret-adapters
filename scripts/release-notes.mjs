@@ -33,6 +33,11 @@ const CHANGELOGS = {
     changelog: "packages/adapter-otel/CHANGELOG.md",
     url: "https://www.npmjs.com/package/@redact-secret/adapter-otel/v/",
   },
+  "adapter-otel-logs": {
+    name: "@redact-secret/adapter-otel-logs",
+    changelog: "packages/adapter-otel-logs/CHANGELOG.md",
+    url: "https://www.npmjs.com/package/@redact-secret/adapter-otel-logs/v/",
+  },
   "adapter-ai-context": {
     name: "@redact-secret/adapter-ai-context",
     changelog: "packages/adapter-ai-context/CHANGELOG.md",

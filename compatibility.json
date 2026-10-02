@@ -161,7 +161,7 @@
         }
       ],
       "lifecycle": [
-        "unreleased: marked private and absent from the release plan, so nothing here is installable from npm yet (#178)",
+        "published as 0.1.0-beta.2 under the npm dist-tag beta (#178); requires @redact-secret/adapter ^0.1.7, which publishes in the next train, so it does not install from the registry until then",
         "SimpleLogRecordProcessor and BatchLogRecordProcessor wrapped by the redacting processor, on a real LoggerProvider",
         "body (string, structured, bytes), severity text, event name, and string, array, map and byte attribute values",
         "the OTLP JSON bytes an exporter sends, for the injected processor and the live factory on the real core",

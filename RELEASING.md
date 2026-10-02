@@ -333,20 +333,18 @@ by hand as in steps 1–3 above
 train that would publish `adapter-otel` before `adapter-otel-trace` is
 released. Bump `adapter-otel` (to `0.1.3`, say) in the same train or a later
 one to ship the re-export; its publish job waits for `adapter-otel-trace`'s.
-`@redact-secret/adapter-otel-logs` (#178), the OpenTelemetry Logs adapter, is
-on `develop` the same way: `"private": true` at `0.1.0` and absent from
-`PACKAGES`, so no train plans it and `npm publish` refuses it even by hand.
-Unlike the trace package, **nothing of its release is wired yet**: no publish
-job in `release.yml`, no rehearsal dry run, no tag or report row, no entry in
-`scripts/release-notes.mjs`, and no `PACKAGES` entry. To release it, in one PR
-into `develop`: drop `"private"`, add its `PACKAGES` entry (id
-`adapter_otel_logs`, tag `adapter-otel-logs`) and the same publish job,
-rehearsal, tag, report and release-notes wiring `adapter-otel-trace` has
-(it depends only on `@redact-secret/adapter`, so it publishes after
-`publish-adapter`), move its CHANGELOG `Unreleased` entries under
-`## [0.1.0] - YYYY-MM-DD`, and run `npm run feed:generate`; then bootstrap it
-by hand as in steps 1-3 above. Until then nothing may describe it as
-installable, and `npm run smoke-test:otel-logs` is what checks its tarball.
+`@redact-secret/adapter-otel-logs` (#178), the OpenTelemetry Logs adapter, went
+through the same path and is now wired: its `PACKAGES` entry (after `adapter`,
+which it depends on), publish job (`needs` `publish-adapter`, `--provenance`,
+the plan's dist-tag), rehearsal dry run, tag and report rows and release-notes
+entry are in place. Its first version, `0.1.0-beta.2`, was published by hand
+(access public, dist-tag `beta`), so the plan reads it as already on the
+registry: it skips the publish, `finalize` still tags
+`adapter-otel-logs@0.1.0-beta.2`, and reconcile passes. A prerelease `beta`
+maps to dist-tag `beta` (`distTagFor`). It requires `@redact-secret/adapter`
+`^0.1.7`, which publishes in the next train; until then the package does not
+install from the registry. Its later versions publish from `release.yml` via
+the trusted publisher.
 
 Once the re-export is on npm, mark the old name deprecated on the registry:
 

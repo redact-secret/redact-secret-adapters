@@ -308,8 +308,10 @@ test checks all of this at both ends of the Python SDK's declared range.
 `@redact-secret/adapter-otel-logs` is a **log** integration: a
 `LogRecordProcessor` over `@opentelemetry/sdk-logs`, a separate package with
 its own peer range (`>=0.200.0 <=0.222.0`, an explicit span because the SDK is
-`0.x`) and its own qualification. It is on `develop` unreleased
-(`"private": true`, absent from the release plan). The SDK probe, the chosen
+`0.x`) and its own qualification. It is published as
+`0.1.0-beta.2` under the dist-tag `beta` (first publish by hand, then wired into
+the release plan) and requires `@redact-secret/adapter` `^0.1.7`, which ships
+in the next train. The SDK probe, the chosen
 endpoints and the alternatives are in
 [docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md](docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md).
 
@@ -563,7 +565,7 @@ so that is a test, not an assumption.
 - **LangChain**, and any other framework integration whose host contract has not
   been read and tested here.
 - **OpenTelemetry metrics.** Neither OpenTelemetry package touches them.
-  (Logs are covered by `adapter-otel-logs`, unreleased; `adapter-otel-trace`
+  (Logs are covered by `adapter-otel-logs`, a beta; `adapter-otel-trace`
   is a span processor and never sees a log record.)
 - **A Langfuse package.** Masking-callback hosts need the shared walker and one
   line of user code; a package would add a release surface and change nothing.
@@ -576,7 +578,7 @@ packages/
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
   adapter-otel-trace/   @redact-secret/adapter-otel-trace  L3 + live wrapper, traces only
   adapter-otel/         @redact-secret/adapter-otel     deprecated name: re-exports adapter-otel-trace
-  adapter-otel-logs/    @redact-secret/adapter-otel-logs  LogRecordProcessor + live wrapper, logs only; unreleased (private)
+  adapter-otel-logs/    @redact-secret/adapter-otel-logs  LogRecordProcessor + live wrapper, logs only; 0.1.0-beta.2 (beta)
   adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper
   adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context
 python/
