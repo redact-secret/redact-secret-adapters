@@ -8,6 +8,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { expect, test } from "vitest";
@@ -122,7 +123,7 @@ test("the generated feed is read offline, allowlisted, and tolerant of a missing
 });
 
 test("the real repository feed is usable reference data", () => {
-  const read = referenceFeed(new URL("../../site-feed/v1/adapters.json", import.meta.url).pathname);
+  const read = referenceFeed(fileURLToPath(new URL("../../site-feed/v1/adapters.json", import.meta.url)));
   expect(read.status).toBe("available");
   expect(read.versions["@redact-secret/adapter"]).toMatch(/^\d+\.\d+\.\d+/);
 });

@@ -19,6 +19,8 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-02
+
 ### Added
 
 - **Key-context scan primitive** (redact-secret/redact-secret-adapters#172): `scanLeafInKeyContext`, `keyContextView`, `keyContextPrefix`, `KEY_CONTEXT_SUFFIX` and the `KeyContext*` types, extracted from the AI-context boundary with its behavior and leaf-offset contract unchanged. It scans a leaf alone and, when that redacts or blocks nothing and the leaf sits directly under an object key, once more in its view `{"<key>":"<leaf>"}` (key and leaf verbatim), mapping findings back to leaf offsets. The core alone decides detection and policy; no key name list lives here.

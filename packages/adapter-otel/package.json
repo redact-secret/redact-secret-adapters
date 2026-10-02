@@ -1,6 +1,6 @@
 {
   "name": "@redact-secret/adapter-otel",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Deprecated name for @redact-secret/adapter-otel-trace: a compatibility re-export of the trace-only redacting OpenTelemetry JS SpanProcessor.",
   "license": "MIT",
   "type": "module",
@@ -35,7 +35,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@redact-secret/adapter-otel-trace": "^0.1.0"
+    "@redact-secret/adapter-otel-trace": "^0.1.2"
   },
   "peerDependencies": {
     "@opentelemetry/sdk-trace-base": "^2.0.0",

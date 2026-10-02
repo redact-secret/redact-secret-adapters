@@ -20,6 +20,8 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-02
+
 ### Added
 
 - **Explicit PII activation on the live factories**

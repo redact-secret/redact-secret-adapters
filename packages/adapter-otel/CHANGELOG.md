@@ -20,6 +20,8 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-02
+
 ### Added
 
 - Re-exports `@redact-secret/adapter-otel-trace`'s per-span aggregate budget (`operationLimits`; redact-secret/redact-secret-adapters#173).
