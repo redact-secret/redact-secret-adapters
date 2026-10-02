@@ -70,6 +70,11 @@ CI runs this block verbatim from a clean install outside the repository
 (`npm run smoke-test`), against the real core, and inspects the exporter's
 bytes.
 
+To check that your own provider and exporter are covered, run the
+[placement recipe](https://github.com/redact-secret/redact-secret-adapters/tree/main/examples/placement-js):
+it serializes a span with a synthetic token the way an exporter would and
+includes a processor registered ahead of the redacting one as a negative control.
+
 ## What is covered
 
 | Covered | Not covered |

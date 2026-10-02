@@ -236,7 +236,10 @@ Elements and keys beyond a limit are dropped, not passed through. Details:
 3. **Placement matters.** An adapter protects only what passes through it: a
    Python handler without the filter, a span processor registered ahead of the
    redacting one, or a pino transport that adds its own text are outside it.
-   Each package guide lists what it does not cover.
+   Each package guide lists what it does not cover. To check your own output
+   path with a synthetic credential and a negative control, run a
+   [placement recipe](./examples#run-one):
+   [JavaScript](./examples/placement-js), [Python](./examples/placement-python).
 4. **PII is off by default.** The core detects credentials out of the box.
    Detecting personal data is a separate switch; see below.
 

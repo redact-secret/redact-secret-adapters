@@ -53,7 +53,11 @@ unchanged.
 ### Where to attach it
 
 A `logging.Filter` runs **only where it is attached**. This is the one thing
-to get right: add the filter to **every handler that writes somewhere**.
+to get right: add the filter to **every handler that writes somewhere**. To
+prove it for your own handlers, run the
+[placement recipe](https://github.com/redact-secret/redact-secret-adapters/tree/main/examples/placement-python):
+it logs a synthetic token through real handlers and includes an unfiltered
+handler as a negative control.
 
 ```python
 import logging
