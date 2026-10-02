@@ -35,6 +35,7 @@
     "smoke-test:browser": "node scripts/smoke-test-browser-ai-context.mjs",
     "smoke-test:otel-logs": "node scripts/smoke-test-otel-logs.mjs",
     "published-combination": "node scripts/check-published-combination.mjs",
+    "support-summary": "node scripts/support-summary.mjs",
     "compat:check": "node scripts/check-compatibility-record.mjs",
     "overhead": "node scripts/measure-overhead.mjs",
     "footprint": "node scripts/measure-footprint.mjs",

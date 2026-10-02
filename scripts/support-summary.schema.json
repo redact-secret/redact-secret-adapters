@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/redact-secret/redact-secret-adapters/blob/develop/scripts/support-summary.schema.json",
+  "title": "redact-secret-adapters support summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "runtime", "adapter", "installed", "python", "activation", "outcomes", "reference"],
+  "$defs": {
+    "version": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{1,6}\\.[0-9]{1,6}\\.[0-9]{1,6}(-[0-9A-Za-z.-]{1,40})?(\\+[0-9A-Za-z.-]{1,40})?$"
+    }
+  },
+  "properties": {
+    "schema": { "const": "redact-secret-adapters.support-summary/v1" },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "platform", "arch"],
+      "properties": {
+        "node": { "$ref": "#/$defs/version" },
+        "platform": { "enum": ["darwin", "linux", "win32", "freebsd", "openbsd", "sunos", "aix", "other"] },
+        "arch": { "enum": ["x64", "arm64", "arm", "ia32", "ppc64", "s390x", "riscv64", "other"] }
+      }
+    },
+    "adapter": {
+      "enum": [
+        null,
+        "adapter",
+        "adapter-pino",
+        "adapter-otel-trace",
+        "adapter-otel",
+        "adapter-otel-logs",
+        "adapter-ai-context",
+        "adapter-mcp",
+        "python"
+      ]
+    },
+    "installed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "version", "referenceVersion", "relation"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^(@[a-z-]+/)?[a-z-]+$", "maxLength": 64 },
+          "status": { "enum": ["installed", "not_found"] },
+          "version": { "$ref": "#/$defs/version" },
+          "referenceVersion": { "$ref": "#/$defs/version" },
+          "relation": {
+            "enum": [
+              "no_reference",
+              "not_installed",
+              "version_unreadable",
+              "same_as_reference",
+              "differs_from_reference"
+            ]
+          }
+        }
+      }
+    },
+    "python": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "version", "packages"],
+      "properties": {
+        "status": { "enum": ["not_requested", "collected", "unavailable"] },
+        "version": { "$ref": "#/$defs/version" },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version"],
+            "properties": {
+              "name": { "enum": ["redact-secret-adapters", "redact-secret"] },
+              "version": { "$ref": "#/$defs/version" }
+            }
+          }
+        }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "identity"],
+      "properties": {
+        "status": { "enum": ["not_provided", "user_supplied"] },
+        "identity": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9=;:,._/-]{1,512}$" }
+      }
+    },
+    "outcomes": { "type": "array", "maxItems": 16, "items": { "type": "string", "pattern": "^[A-Za-z_]{2,40}$" } },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "generatedAt", "note"],
+      "properties": {
+        "source": { "enum": ["site-feed/v1/adapters.json", "unavailable"] },
+        "generatedAt": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9:.]{1,16}Z)?$" },
+        "note": { "type": "string", "maxLength": 300 }
+      }
+    }
+  }
+}

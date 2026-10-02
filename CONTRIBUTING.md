@@ -104,7 +104,9 @@ ghp_SYNTHETICREVOKED00000000000000000000
 - Use [GitHub Issues](https://github.com/redact-secret/redact-secret-adapters/issues)
   for reproducible bugs and focused enhancement requests. Include the package
   and version, the host SDK and version, the expected and observed result, and
-  a minimal reproduction using synthetic values. Public support is
+  a minimal reproduction using synthetic values. `npm run support-summary`
+  prints the versions as a reviewed, allowlisted block; see
+  [docs/support.md](./docs/support.md). Public support is
   best-effort; the project makes no response-time or long-term-support
   commitment.
 - A false positive or missed detection is a decision of the core, not of an

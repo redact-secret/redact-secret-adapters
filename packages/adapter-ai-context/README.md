@@ -224,6 +224,66 @@ those masked.
 Full rules:
 [PII guide](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/pii.md).
 
+### Is it ready? An explicit readiness check
+
+`createAiContextBoundary` never rejects for a core load or initialization
+failure, so a resolved promise does not mean the core is usable. Ask directly,
+at startup or before a retry:
+
+```js
+import { checkAiContextReady, createAiContextBoundary } from "@redact-secret/adapter-ai-context";
+
+const pii = ["pii:global"]; // omit to accept the application's own activation
+let readiness = await checkAiContextReady({ pii });
+if (!readiness.ready) {
+  // `readiness.status` is a fixed code, safe to log or expose on a health endpoint.
+  console.error("redaction not ready:", readiness.status);
+}
+// The boundary fails closed regardless; the check only tells you why.
+const boundary = await createAiContextBoundary({ pii });
+
+// Retry path: call it again (for example from your readiness probe's next
+// tick). A failed check holds no state, so there is nothing to reset. A
+// boundary created while the core was unavailable stays failed closed; create
+// a new one once the check reports `ready`.
+readiness = await checkAiContextReady({ pii });
+```
+
+The result is `{ ready, status, core, pii, probe, activation? }`:
+
+| `status` | Meaning |
+| --- | --- |
+| `ready` | core loaded and initialized, the explicit `pii` selection (if any) is active, and a fixed synthetic probe was redacted |
+| `invalid_options` | `pii` was not an array of strings |
+| `core_unavailable` | `@redact-secret/core` could not be loaded |
+| `initialization_failed` | the core's `initialize()` failed |
+| `pii_activation_unsupported` | `pii` was given and this core cannot report an activation |
+| `pii_activation_not_active` | `pii` was given and the active selection does not reflect it |
+| `malformed_response` | the core, or its probe result, was not shaped as documented |
+| `probe_failed` | the core threw while scanning the probe |
+| `probe_not_redacted` | the probe was scanned but not redacted |
+
+`core`, `pii` and `probe` are each `ok`, `failed` or `skipped`. `activation` is
+the core's own public PII activation identity when it reports one.
+
+What the check guarantees: it takes no input beyond `pii`, so there is no way to
+supply a probe, limit, `policy`, `placeholderFormatter` or `onFinding`, and it
+calls none of them. It never rejects and never returns an exception, message,
+path or scanned value. It does no network, file, environment or log work and
+changes no policy. It runs the same `initialize()` step the factory does, so it
+is as safe to repeat as a second factory call. A failed check cannot make any
+operation pass plaintext; boundaries are separate objects and still fail closed.
+
+What `ready` is not: readiness at that moment. It is not proof of detection
+completeness, that a boundary sits on every path to a model, that anything is
+delivered, or that a later request will succeed.
+
+It is implemented against the released core's `initialize()`, `piiActivation()`
+and `scanAndRedact()`. The other live factories (`pino`, `otel-trace`,
+`otel-logs`, the Python package) have no equivalent yet; logging and tracing
+factories deliberately keep their own non-breaking shapes, so this is not a
+shared interface.
+
 ### Findings and telemetry
 
 `onFinding(finding, { boundary })` is called once per finding, in scan order,
