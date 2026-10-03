@@ -15,6 +15,11 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-03
+### Changed
+
+- Verified against `@redact-secret/core` 0.1.0-beta.13, whose `IncrementalLimits` type now names the input and buffer ceilings as either the byte or the deprecated code-unit field; the test fake reads both. No API or range change.
+
 ## [0.1.3] - 2026-10-02
 
 ### Added
