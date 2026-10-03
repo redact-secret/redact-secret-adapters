@@ -20,6 +20,11 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-03
+### Changed
+
+- Verified against `redact-secret` 0.1.0b13. No API or range change.
+
 ## [0.1.4] - 2026-10-02
 
 ### Added
