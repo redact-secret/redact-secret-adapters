@@ -18,6 +18,11 @@ publishes in that train. See
 
 ## [Unreleased]
 
+## [0.1.0-beta.3] - 2026-10-03
+### Changed
+
+- Verified against `@redact-secret/core` 0.1.0-beta.13. No API or range change.
+
 ## [0.1.0-beta.2] - 2026-10-02
 
 ### Added

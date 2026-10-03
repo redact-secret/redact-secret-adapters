@@ -194,8 +194,18 @@ describe("the real core accepts the preset", () => {
 
     // An incremental session, past its total.
     const stream = boundary.openStream();
-    const chunk = "b".repeat(AI_CONTEXT_DEFAULT_LIMITS.incrementalLimits.maxBufferedCodeUnits);
-    const chunks = Math.ceil(AI_CONTEXT_DEFAULT_LIMITS.incrementalLimits.maxInputCodeUnits / chunk.length) + 1;
+    // Core beta.13 types the incremental ceilings as the byte field or the deprecated code-unit
+    // field, while beta.6 has only the latter; read both through one loose view.
+    const incremental = AI_CONTEXT_DEFAULT_LIMITS.incrementalLimits as {
+      maxInputBytes?: number;
+      maxInputCodeUnits?: number;
+      maxBufferedBytes?: number;
+      maxBufferedCodeUnits?: number;
+    };
+    const total = incremental.maxInputCodeUnits ?? incremental.maxInputBytes ?? 0;
+    expect(total).toBe(1_048_576);
+    const chunk = "b".repeat(incremental.maxBufferedCodeUnits ?? incremental.maxBufferedBytes ?? 0);
+    const chunks = Math.ceil(total / chunk.length) + 1;
     for (let index = 0; index < chunks && stream.accepting; index++) stream.append(chunk);
     const staged = stream.finalize();
     expect(staged.outcome).toBe("blocked");

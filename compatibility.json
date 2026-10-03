@@ -13,7 +13,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.12" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
         }
       ],
       "qualifiedBy": [
@@ -39,7 +39,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.12" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
         },
         {
           "name": "pino",
@@ -85,7 +85,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.12" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
         }
       ],
       "lifecycle": [
@@ -125,7 +125,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.12" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
         }
       ],
       "lifecycle": [
@@ -157,7 +157,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.12" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
         }
       ],
       "lifecycle": [
@@ -191,7 +191,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.12" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
         }
       ],
       "lifecycle": [
@@ -245,7 +245,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.12" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
         }
       ],
       "lifecycle": [
@@ -283,7 +283,7 @@
           "name": "redact-secret",
           "range": ">=0.1.0b6,<0.2",
           "kind": "dependency",
-          "endpoints": { "lowest": "0.1.0b6", "highest": "0.1.0b12" }
+          "endpoints": { "lowest": "0.1.0b6", "highest": "0.1.0b13" }
         },
         {
           "name": "opentelemetry-sdk",

@@ -25,6 +25,11 @@ version numbers start again here, at `0.1.0`, and do not follow the old name's.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-03
+### Changed
+
+- Verified against `@redact-secret/core` 0.1.0-beta.13. No API or range change.
+
 ## [0.1.2] - 2026-10-02
 
 ### Added
