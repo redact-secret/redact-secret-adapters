@@ -120,6 +120,9 @@ export function createFakeCore(options: FakeCoreOptions = {}): { core: AiContext
   const createIncrementalSanitizer = (sessionOptions: IncrementalSanitizerOptions) => {
     if (options.openFailure !== undefined) throw options.openFailure;
     const limits: IncrementalLimits = sessionOptions.limits;
+    // Core beta.13 names the ceiling by bytes or by the deprecated code-unit field; beta.6 has only the latter.
+    const loose = limits as { maxInputBytes?: number; maxInputCodeUnits?: number };
+    const inputCeiling = loose.maxInputBytes ?? loose.maxInputCodeUnits ?? Number.POSITIVE_INFINITY;
     const session: FakeSession = { appended: [], aborted: false, finalized: false };
     calls.sessions.push(session);
     let staged = "";
@@ -141,8 +144,7 @@ export function createFakeCore(options: FakeCoreOptions = {}): { core: AiContext
           if (chunk.includes(marker)) throw new FakeScanError(code, chunk);
         }
         staged += chunk;
-        if (staged.length > (limits.maxInputBytes ?? limits.maxInputCodeUnits ?? Number.POSITIVE_INFINITY))
-          throw new FakeScanError("INPUT_LIMIT_EXCEEDED", staged);
+        if (staged.length > inputCeiling) throw new FakeScanError("INPUT_LIMIT_EXCEEDED", staged);
         if (options.emitOnAppend) {
           const result = applyPolicy(fakeScanAndRedact(staged), staged, sessionOptions as Callbacks);
           if (result.findings.some((f) => f.action === "block")) return result;
