@@ -120,7 +120,7 @@ describe("the plan", () => {
     expect(shim.peerDependencies).toEqual(trace.peerDependencies);
   });
 
-  test("adapter-otel-logs 0.1.0-beta.2 is planned after adapter, under dist-tag beta, and no longer private", async () => {
+  test("adapter-otel-logs is planned after adapter, under dist-tag beta, and no longer private", async () => {
     const { readFileSync } = await import("node:fs");
     const manifest = JSON.parse(
       readFileSync(new URL("../../packages/adapter-otel-logs/package.json", import.meta.url), "utf-8"),
@@ -128,18 +128,19 @@ describe("the plan", () => {
     const pkg = PACKAGES.find((p) => p.id === "adapter_otel_logs");
     expect(pkg).toMatchObject({ name: manifest.name, tag: "adapter-otel-logs", registry: "npm" });
     expect(manifest.private).toBeUndefined();
-    expect(manifest.version).toBe("0.1.0-beta.2");
+    expect(manifest.version).toMatch(/^0\.1\.0-beta\.\d+$/);
+    const { version } = manifest;
     expect(PACKAGES.findIndex((p) => p.id === "adapter_otel_logs")).toBeGreaterThan(
       PACKAGES.findIndex((p) => p.id === "adapter"),
     );
     // Hand-published bootstrap: already on the registry, so the plan skips the publish but still tags it.
-    const entry = planEntry(pkg, "0.1.0-beta.2", true);
-    expect(entry).toMatchObject({ publish: false, distTag: "beta", gitTag: "adapter-otel-logs@0.1.0-beta.2" });
-    expect(planEntry(pkg, "0.1.0-beta.2", false).publish).toBe(true);
+    const entry = planEntry(pkg, version, true);
+    expect(entry).toMatchObject({ publish: false, distTag: "beta", gitTag: `adapter-otel-logs@${version}` });
+    expect(planEntry(pkg, version, false).publish).toBe(true);
     expect(outputLines([entry])).toEqual(
       expect.arrayContaining([
         "publish_adapter_otel_logs=false",
-        "adapter_otel_logs_version=0.1.0-beta.2",
+        `adapter_otel_logs_version=${version}`,
         "adapter_otel_logs_dist_tag=beta",
       ]),
     );

@@ -14,6 +14,11 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-03
+### Changed
+
+- Verified against `@redact-secret/core` 0.1.0-beta.13. No API or range change.
+
 ## [0.1.4] - 2026-10-02
 
 ### Added

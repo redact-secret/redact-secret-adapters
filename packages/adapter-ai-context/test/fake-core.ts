@@ -141,7 +141,8 @@ export function createFakeCore(options: FakeCoreOptions = {}): { core: AiContext
           if (chunk.includes(marker)) throw new FakeScanError(code, chunk);
         }
         staged += chunk;
-        if (staged.length > limits.maxInputCodeUnits) throw new FakeScanError("INPUT_LIMIT_EXCEEDED", staged);
+        if (staged.length > (limits.maxInputBytes ?? limits.maxInputCodeUnits ?? Number.POSITIVE_INFINITY))
+          throw new FakeScanError("INPUT_LIMIT_EXCEEDED", staged);
         if (options.emitOnAppend) {
           const result = applyPolicy(fakeScanAndRedact(staged), staged, sessionOptions as Callbacks);
           if (result.findings.some((f) => f.action === "block")) return result;
