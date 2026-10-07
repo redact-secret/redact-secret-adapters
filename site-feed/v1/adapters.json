@@ -27,9 +27,8 @@
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter",
       "runtime": {
         "name": "node",
-        "range": "20.x || 22.x || 24.x",
+        "range": "22.x || 24.x",
         "tested": [
-          "20",
           "22",
           "24"
         ]
@@ -59,9 +58,8 @@
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-pino",
       "runtime": {
         "name": "node",
-        "range": "20.x || 22.x || 24.x",
+        "range": "22.x || 24.x",
         "tested": [
-          "20",
           "22",
           "24"
         ]
@@ -107,9 +105,8 @@
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-otel-trace",
       "runtime": {
         "name": "node",
-        "range": "20.x || 22.x || 24.x",
+        "range": "22.x || 24.x",
         "tested": [
-          "20",
           "22",
           "24"
         ]
@@ -155,9 +152,8 @@
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-otel",
       "runtime": {
         "name": "node",
-        "range": "20.x || 22.x || 24.x",
+        "range": "22.x || 24.x",
         "tested": [
-          "20",
           "22",
           "24"
         ]
@@ -203,9 +199,8 @@
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-otel-logs",
       "runtime": {
         "name": "node",
-        "range": "20.x || 22.x || 24.x",
+        "range": "22.x || 24.x",
         "tested": [
-          "20",
           "22",
           "24"
         ]
@@ -251,9 +246,8 @@
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-ai-context",
       "runtime": {
         "name": "node",
-        "range": "20.x || 22.x || 24.x",
+        "range": "22.x || 24.x",
         "tested": [
-          "20",
           "22",
           "24"
         ]
@@ -288,9 +282,8 @@
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-mcp",
       "runtime": {
         "name": "node",
-        "range": "20.x || 22.x || 24.x",
+        "range": "22.x || 24.x",
         "tested": [
-          "20",
           "22",
           "24"
         ]

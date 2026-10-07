@@ -33,7 +33,7 @@ and carry its answer back out.
 | [MCP](#mcp) tool results and resource reads | `npm i @redact-secret/core @redact-secret/adapter-mcp` | [adapter-mcp](./packages/adapter-mcp#readme) |
 | [A `mask` callback](#masking-callbacks-langfuse-and-similar) (Langfuse and similar) | `npm i @redact-secret/core @redact-secret/adapter`, or the Python package above | [adapter](./packages/adapter#readme) |
 
-Requirements: Node.js 20, 22 or 24 for the npm packages, Python 3.10 or later
+Requirements: Node.js 22 or 24 for the npm packages, Python 3.10 or later
 for the PyPI package. The npm packages are ESM only.
 
 Current versions:

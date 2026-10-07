@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Local placement-verification recipes: send a synthetic credential through a real pino logger and a real OpenTelemetry tracer into captured output, with negative controls.",
   "engines": {
-    "node": "20.x || 22.x || 24.x"
+    "node": "22.x || 24.x"
   },
   "scripts": {
     "start": "node index.mjs"
