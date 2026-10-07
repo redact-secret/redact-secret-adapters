@@ -4,7 +4,7 @@ Keep secrets out of OpenTelemetry **logs**. Wrap the log record processor you
 already have, and each log record's body, severity text, event name and
 attribute values are redacted before they reach your exporter.
 
-> **Status: beta.** `0.1.0-beta.4` is on npm under the dist-tag `beta`
+> **Status: beta.** `0.1.0-beta.5` is on npm under the dist-tag `beta`
 > (`npm install @redact-secret/adapter-otel-logs@beta`). It depends on
 > `@redact-secret/adapter` `^0.1.9`, which is on npm, so it installs. A beta
 > carries no stability promise. Nothing in this README is a promise about a release date.

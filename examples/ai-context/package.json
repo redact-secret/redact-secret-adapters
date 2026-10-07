@@ -10,7 +10,7 @@
     "start": "node check.mjs"
   },
   "dependencies": {
-    "@redact-secret/adapter-ai-context": "0.1.5",
+    "@redact-secret/adapter-ai-context": "0.1.6",
     "@redact-secret/core": "0.1.0-beta.14"
   }
 }

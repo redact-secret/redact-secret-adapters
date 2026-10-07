@@ -4,7 +4,7 @@ Builds a model context from a user message and a tool result without letting a
 synthetic token through. No model is called, so no key or account is involved.
 
 - Runtime: Node.js 22 or 24 (ESM).
-- Installs: `@redact-secret/adapter-ai-context` 0.1.5, `@redact-secret/core` 0.1.0-beta.14.
+- Installs: `@redact-secret/adapter-ai-context` 0.1.6, `@redact-secret/core` 0.1.0-beta.14.
 - Files: `app.mjs` is the whole quickstart. `check.mjs` runs it and checks what it printed.
 
 ## Run it

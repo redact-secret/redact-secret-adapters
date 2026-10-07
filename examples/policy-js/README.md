@@ -5,7 +5,7 @@ input under three configurations and shows what each one does, using `adapter-ai
 (which exposes findings and their actions) and `adapter-pino` (which exposes counters).
 
 - Runtime: Node.js 22 or 24 (ESM).
-- Installs: `@redact-secret/adapter-ai-context` 0.1.5, `@redact-secret/adapter-pino` 0.1.6, `@redact-secret/core` 0.1.0-beta.14, `pino` 10.3.1.
+- Installs: `@redact-secret/adapter-ai-context` 0.1.6, `@redact-secret/adapter-pino` 0.1.7, `@redact-secret/core` 0.1.0-beta.14, `pino` 10.3.1.
 - Needs no network service and no credentials.
 
 ## Run it
