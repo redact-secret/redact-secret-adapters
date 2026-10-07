@@ -358,8 +358,8 @@ const response = toReadResourceResponse(outcome); // { result } | { error } | nu
 
 | Surface | Supported, and tested at both endpoints in CI |
 | --- | --- |
-| TypeScript SDK, 1.x | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.30.1` (optional peer) |
-| TypeScript SDK, 2.x | `@modelcontextprotocol/client` and `@modelcontextprotocol/server` `>=2.0.0 <=2.1.0` (optional peers) |
+| TypeScript SDK, 1.x | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.32.1` (optional peer) |
+| TypeScript SDK, 2.x | `@modelcontextprotocol/client` and `@modelcontextprotocol/server` `>=2.0.0 <=2.3.1` (optional peers) |
 | Protocol revisions | `2025-11-25` (negotiated by 1.26.0, 1.30.1, 2.0.0, 2.1.0) |
 | Transports | stdio and Streamable HTTP |
 | MCP messages | `tools/call` and `resources/read`, over every line, protocol, and transport above |

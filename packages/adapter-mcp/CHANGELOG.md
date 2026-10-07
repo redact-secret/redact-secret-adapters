@@ -16,6 +16,7 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ### Changed
 
+- Ranges widened, each backed by `test/e2e.test.ts`, `test/transport.test.ts` and `test/resources-transport.test.ts` run at the new ceilings (the full suite, typecheck and build pass with `npm run range-endpoint -- highest`): optional peers `@modelcontextprotocol/sdk` `>=1.26.0 <=1.30.1` to `>=1.26.0 <=1.32.1` and `@modelcontextprotocol/client` / `server` `>=2.0.0 <=2.1.0` to `>=2.0.0 <=2.3.1`. The lower bounds are unchanged.
 - A whole-input `scanConfig` is named and rejected (`scanConfig is not supported by the AI-context boundary`) like `ruleset` and `scanLimits`, instead of being ignored (redact-secret-adapters#213); the boundary resolves its own configuration from `policy` / `actionPolicy`.
 
 ### Added
