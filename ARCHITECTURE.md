@@ -300,7 +300,7 @@ existing imports keep working. Logs have their own package,
 unreleased (`"private": true`, absent from the release plan), so nothing
 installable protects Logs yet. The choice and its
 release consequences are recorded in
-[docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md](docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md).
+[docs/decisions/name-the-otel-trace-adapter-for-what-it-covers.md](docs/decisions/name-the-otel-trace-adapter-for-what-it-covers.md).
 
 The processor wraps any object shaped like a `SpanProcessor` and, in `onEnd`
 before delegating, redacts every free-text field an exporter sends: the span
@@ -341,7 +341,7 @@ its own peer range (`>=0.200.0 <=0.222.0`, an explicit span because the SDK is
 the release plan) and requires `@redact-secret/adapter` `^0.1.7`, which ships
 in the next train. The SDK probe, the chosen
 endpoints and the alternatives are in
-[docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md](docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md).
+[docs/decisions/otel-logs-adapter-design-and-sdk-probe.md](docs/decisions/otel-logs-adapter-design-and-sdk-probe.md).
 
 The SDK documents that a processor "may freely modify logRecord for the
 duration of the OnEmit call", and makes the record read-only once `emit`

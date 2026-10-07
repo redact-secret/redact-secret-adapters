@@ -10,7 +10,7 @@ issue: redact-secret/redact-secret-adapters#49
 
 This repository had no decision records before this one. It follows the
 convention of the core repository's `docs/decisions/`: one file per decision,
-named `YYYY-MM-DD-<slug>.md`, with the front matter above.
+named `<slug>.md` (the date lives in `decided_at` in the front matter, not in the file name), with the front matter above.
 
 ## Decision
 
