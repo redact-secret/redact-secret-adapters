@@ -9,7 +9,7 @@ core owns detection; benchmarks owns accuracy and performance verdicts).
 ## Run it
 
 Prerequisites: Docker with the Linux engine and Compose v2 (`docker info`,
-`docker compose version`), Node 20/22/24 and git on the host, `npm ci` done at
+`docker compose version`), Node 22/24 and git on the host, `npm ci` done at
 the repository root, and registry access for the build (npm and PyPI; scenario
 execution itself needs no network, the consumer network has no route out).
 

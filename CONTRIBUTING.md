@@ -9,7 +9,7 @@ sections are all you need for a first change.
 
 ## 1. Set up (about two minutes)
 
-You need [Node.js](https://nodejs.org/) 20, 22 or 24 and git. Python 3.10 or
+You need [Node.js](https://nodejs.org/) 22 or 24 and git. Python 3.10 or
 later is needed only if you touch the Python package.
 
 ```sh

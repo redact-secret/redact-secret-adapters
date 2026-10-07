@@ -15,6 +15,10 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking for consumers on Node 20: Node 20 is no longer supported.** `engines.node` is now `22.x || 24.x` (was `20.x || 22.x || 24.x`) and CI no longer runs Node 20. The code is unchanged, but a Node 20 install now warns (an error under `engine-strict`) and is not tested; stay on the previous release if you must run Node 20.
+
 ## [0.1.5] - 2026-10-07
 
 ### Changed

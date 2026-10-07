@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Runs one synthetic input under three configurations, each in its own process: credentials only, PII activated, and PII activated with an explicit policy.",
   "engines": {
-    "node": "20.x || 22.x || 24.x"
+    "node": "22.x || 24.x"
   },
   "scripts": {
     "start": "node index.mjs"

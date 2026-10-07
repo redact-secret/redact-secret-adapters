@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Fail-closed outcomes of the AI-context boundary and pino markers, reproduced and corrected, plus fixed application-facing and user-facing messages.",
   "engines": {
-    "node": "20.x || 22.x || 24.x"
+    "node": "22.x || 24.x"
   },
   "scripts": {
     "start": "node index.mjs"

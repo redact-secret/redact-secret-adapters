@@ -24,7 +24,7 @@ and exercises, at both ends of the declared range.
 | `adapter-ai-context` | `@redact-secret/core ^0.1.0-beta.6` (no host) | the core's AI-context conformance fixture replayed on the real core before and after `initialize()`, and an end-to-end agent turn with every limit |
 | `adapter-mcp` | `@modelcontextprotocol/sdk >=1.26.0 <=1.32.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.3.1` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
 
-Runtimes: Node.js 20.x, 22.x and 24.x; CPython 3.10 through 3.14.
+Runtimes: Node.js 22.x and 24.x; CPython 3.10 through 3.14.
 
 ## Platforms and artifacts: tested, versus core-only
 
@@ -35,7 +35,7 @@ here means an adapter ran there, not only that the core did.
 
 | Combination | Status | Evidence |
 | --- | --- | --- |
-| Node 20, 22, 24 on Linux x64 (glibc), native addon | Tested | The whole suite and both range endpoints, every push (`ci.yml`: `node`, `range-endpoints`) |
+| Node 22, 24 on Linux x64 (glibc), native addon | Tested | The whole suite and both range endpoints, every push (`ci.yml`: `node`, `range-endpoints`) |
 | Node 22 on Linux x64, **WebAssembly fallback** | Tested | `npm run smoke-test:platform -- parity`: a clean install of the packed packages with `omit=optional`, so no platform addon is installed and `initialize()` falls back. The probe asserts `core.artifact() === "wasm"` (and `"addon"` in the addon lane), then compares the sanitized outputs of both lanes document for document, PII off and on |
 | macOS (arm64 runner) and Windows (x64 runner), Node 24, native addon | Tested | `platform-smoke` in `ci.yml`: the packed packages installed outside the workspace, every public factory run against its real host (pino, `sdk-trace-base`, `sdk-logs`, the MCP boundary), `artifact() === "addon"` asserted |
 | `adapter-ai-context` bundled for a browser | Tested, narrowly | `npm run smoke-test:browser`: a clean install bundled with esbuild (`platform: "browser"`), run on Node's WebAssembly engine with the core's `.wasm` served as an application would serve it; `artifact() === "wasm"` asserted; Unicode, key-aware values, every stream split, limits, block, PII off and on |
@@ -51,11 +51,11 @@ the one boundary the core refuses, with `UNPAIRED_SURROGATE`, in both lanes).
 **Not qualified** (the adapters may work; nothing here shows it, and no claim
 is made):
 
-- the WebAssembly fallback on macOS or Windows, on Node 20 or 22 for the
+- the WebAssembly fallback on macOS or Windows, on Node 22 for the
   platform legs, or via a cause other than the missing addon package (an
   unloadable addon, an unsupported platform such as an old glibc or musl);
 - Linux arm64, musl, and Windows arm64 for any adapter, and macOS x64;
-- Node 20 and 22 on macOS and Windows, which the core supports;
+- Node 22 on macOS and Windows, which the core supports;
 - a real browser (Chrome, Firefox, Safari), any bundler other than esbuild
   (Vite, webpack, Rollup), Cloudflare Workers, Deno, Bun, and a framework's SSR
   build, for `adapter-ai-context` and for every other package;
@@ -135,7 +135,7 @@ unqualified:
   override it with `--legacy-peer-deps` or `--force`. pip refuses an
   `opentelemetry-sdk` or `redact-secret` outside the declared range, and any
   CPython older than 3.10.
-- **Documented, not refused.** Node.js outside 20.x, 22.x and 24.x (`engines`
+- **Documented, not refused.** Node.js outside 22.x and 24.x (`engines`
   only warns) and CPython 3.15 or later install but are not tested.
 
 ## The vault

@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Standalone quickstart: build a model context without a synthetic token. No model is called.",
   "engines": {
-    "node": "20.x || 22.x || 24.x"
+    "node": "22.x || 24.x"
   },
   "scripts": {
     "start": "node check.mjs"
