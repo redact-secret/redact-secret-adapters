@@ -46,7 +46,7 @@ Current versions:
 
 Not covered: OpenTelemetry metrics and model output. A Logs adapter,
 [`adapter-otel-logs`](./packages/adapter-otel-logs#readme), is published as
-`0.1.0-beta.4` under the npm dist-tag `beta` (`npm i @redact-secret/adapter-otel-logs@beta`).
+`0.1.0-beta.5` under the npm dist-tag `beta` (`npm i @redact-secret/adapter-otel-logs@beta`).
 `adapter-otel-trace` never covers logs. `@redact-secret/adapter-otel` is the deprecated old name of
 `adapter-otel-trace`; existing imports keep working.
 
