@@ -19,7 +19,7 @@
  * - `streamWrite`: the host's hook runs first on pino's JSON line and the
  *   redacting hook masks what it returns, so fields the host's hook adds are
  *   scanned too. pino requires a `streamWrite` hook to return valid JSON;
- *   a line this hook cannot lex fails closed to `{"msg":"[REDACTED:ERROR]"}`.
+ *   a line this hook cannot lex, or that is not valid JSON, fails closed to `{"msg":"[REDACTED:ERROR]"}`.
  *
  * What is still outside the boundary: a `destination`/transport that adds
  * text of its own after `streamWrite`, and a host hook wrapped *around* the
@@ -85,7 +85,7 @@ export interface PinoLogOutcome {
   readonly stages: readonly PinoRedactionStage[];
   readonly values: ValueCounts;
   /**
-   * `true` when the `streamWrite` hook could not lex the line and wrote the
+   * `true` when the `streamWrite` hook could not lex the line, or it was not valid JSON, and wrote the
    * fixed `[REDACTED:ERROR]` line instead of it, or refused it because the
    * record's budget was already spent and wrote the fixed
    * `[REDACTED:LIMIT_EXCEEDED]` line (`PINO_LIMIT_LINE`). It says nothing about
