@@ -25,7 +25,7 @@ from .mask_leaf import (
 from .mask_log_value import mask_log_value_with
 from .mask_secrets import mask_secrets_with
 from .outcome import LogRecordOutcome, OutcomeCounter, SpanOutcome, ValueCounts
-from .scan_options import CoreOptionsError, ScanConfig, resolve_scan_config, verify_scan_options
+from .scan_options import CoreOptionsError, ScanConfig, resolve_scan_config, scan_config_of, verify_scan_options
 
 # pyproject.toml is the single source of the version.
 try:
@@ -56,6 +56,7 @@ __all__ = [
     "mask_log_value_with",
     "mask_secrets_with",
     "resolve_scan_config",
+    "scan_config_of",
     "scan_leaf_in_key_context",
     "verify_scan_options",
 ]

@@ -27,7 +27,7 @@
  */
 
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
-import { activateCore, type CoreActivation } from "@redact-secret/adapter";
+import { activateCore, type CoreActivation, scanConfigOf, verifyScanOptions } from "@redact-secret/adapter";
 
 import { type RedactingLogRecordProcessorOptions, RedactingLogRecordProcessorWith } from "./log-record-processor.js";
 
@@ -58,7 +58,12 @@ export async function createRedactingLogRecordProcessor(
   // `options` is forwarded as the same object so every other inherited key
   // does too. `pii` rides along unread, as any unknown key would.
   const activation: CoreActivation = options.pii === undefined ? {} : { pii: options.pii };
+  // Validated before the core is touched; then the installed core must honor
+  // any requested scan option (`actionPolicy` included) or this rejects with a
+  // fixed, input-free `CoreOptionsError` rather than ignore it.
+  const config = scanConfigOf(options);
   const loaded = await import("@redact-secret/core");
   await activateCore(loaded, activation);
+  verifyScanOptions(loaded, config);
   return new RedactingLogRecordProcessorWith(next, loaded.scanAndRedact, options);
 }

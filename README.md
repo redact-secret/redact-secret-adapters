@@ -300,7 +300,7 @@ has an options table.
 | --- | --- |
 | `adapter-pino` | pino `^10.0.0` |
 | `adapter-otel-trace` | `@opentelemetry/sdk-trace-base` `^2.0.0` |
-| `adapter-mcp` | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.30.1`, or `@modelcontextprotocol/client` / `server` `>=2.0.0 <=2.1.0` |
+| `adapter-mcp` | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.32.1`, or `@modelcontextprotocol/client` / `server` `>=2.0.0 <=2.3.1` |
 | `redact-secret-adapters` | CPython `>=3.10`; `opentelemetry-sdk>=1.16.0,<2` for the `[otel]` extra |
 | all of them | `@redact-secret/core` `^0.1.0-beta.6` / `redact-secret>=0.1.0b6,<0.2` |
 
@@ -337,6 +337,8 @@ pull request needs.
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | How the adapters are layered, the security boundary, what is deliberately excluded, and how they compose with [`@redact-secret/vault`](./ARCHITECTURE.md#the-vault-boundary) |
 | [docs/compatibility.md](./docs/compatibility.md) | Tested host and core versions, and combinations that are not claimed |
 | [docs/troubleshooting.md](./docs/troubleshooting.md) | What each marker and outcome means, and the smallest safe fix |
+| [docs/action-semantics.md](./docs/action-semantics.md) | What `allow`, `warn`, `redact` and `block` do at each boundary, including errors and limits; `allow` and `warn` leave the value in the output |
+| [docs/policy-overlays.md](./docs/policy-overlays.md) | Default policy, a one-rule override that keeps the default for the rest, and a full callback replacement, with the exact output of each host; what is tested and what (per-handle isolation) is not supported |
 | [examples/](./examples) | Runnable quickstarts, placement checks and a credential-versus-PII comparison |
 | [docs/pii.md](./docs/pii.md) | Turning on PII detection, and what it does not do |
 | [docs/performance.md](./docs/performance.md) | Measuring overhead and package footprint |

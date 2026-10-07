@@ -15,6 +15,18 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-07
+
+### Changed
+
+- Requires `@redact-secret/adapter` `^0.1.9` (was `^0.1.7`) for `actionPolicy` and the scan-config conflict contract. Backed by `test/action-policy-live.test.ts` and CI's `published-combination` job.
+- Verified against `@redact-secret/core` 0.1.0-beta.14. The declared core range is unchanged.
+- A whole-input `scanConfig` is named and rejected (`scanConfig is not supported by the AI-context boundary`) like `ruleset` and `scanLimits`, instead of being ignored (redact-secret-adapters#213); the boundary resolves its own configuration from `policy` / `actionPolicy`.
+
+### Added
+
+- `actionPolicy` option: the core's declarative action policy (object, UTF-8 JSON text or bytes), validated and snapshotted once when the boundary is created and passed to the core intact on every whole-input scan **and** every incremental session (redact-secret-adapters#217). Mutually exclusive with `policy` (a `TypeError` at construction). `ruleset` and `scanLimits` are still rejected by name. The live factory rejects a core older than 0.1.0-beta.14 (`CoreOptionsError`, `CORE_OPTION_UNSUPPORTED`) or a refused document (`coreCode: "INVALID_ACTION_POLICY"`) instead of running on the default policy; `createAiContextBoundaryWith` takes the core as given and cannot check its version. `block` stays `blocked` / `policy`, `warn` and `allow` keep the text. The package range is unchanged. Tests: `test/action-policy.test.ts`, `test/action-policy-live.test.ts`.
+
 ## [0.1.4] - 2026-10-03
 ### Changed
 

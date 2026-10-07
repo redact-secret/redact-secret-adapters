@@ -89,6 +89,7 @@ const LIMIT_KEYS = ["wholeInputLimits", "incrementalLimits", "traversalLimits"] 
 const OPTION_KEYS = [
   ...LIMIT_KEYS,
   "policy",
+  "actionPolicy",
   "placeholderFormatter",
   "onFinding",
   "operationLimits",
@@ -96,6 +97,7 @@ const OPTION_KEYS = [
   // can reject them by name (#175) even when they arrive through a prototype.
   "ruleset",
   "scanLimits",
+  "scanConfig",
 ] as const;
 
 /**

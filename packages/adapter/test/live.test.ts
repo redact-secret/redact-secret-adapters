@@ -38,3 +38,12 @@ test("the real core masks a synthetic token anywhere in the tree", async () => {
     error: { config: { headers: { Authorization: "Bearer <SECRET_1>" } } },
   });
 });
+
+test("createMaskSecrets rejects a loose scan option beside an injected scanConfig, before the core is loaded", async () => {
+  const { createMaskSecrets, resolveScanConfig } = await import("../src/index.js");
+  const scanConfig = resolveScanConfig({});
+  await expect(createMaskSecrets({ scanConfig, ruleset: "r" })).rejects.toThrow("scanConfig already fixes");
+  await expect(
+    createMaskSecrets({ scanConfig, pii: ["pii:global"], policy: { evaluate: () => "warn" } }),
+  ).rejects.toThrow("scanConfig already fixes");
+});

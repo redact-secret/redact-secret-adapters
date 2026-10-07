@@ -10,7 +10,31 @@
  * scan, so the adapter's own limits (traversal, aggregate budget, line
  * ceilings) stay separate from what the core is asked to enforce.
  *
+ * ## Declarative `actionPolicy`
+ *
+ * `actionPolicy` (redact-secret-adapters#217) is the core's declarative action
+ * policy: first matching rule decides, an unmatched finding keeps the default
+ * action. It is accepted as a plain object, as UTF-8 JSON text, or as its
+ * UTF-8 bytes, and handed to the core **intact**. This module neither parses
+ * nor evaluates the document: the Rust core is the only authority on its
+ * syntax and meaning, and a document it rejects raises its own
+ * `INVALID_ACTION_POLICY` (surfaced as `CORE_OPTION_REJECTED` with that
+ * `coreCode` by {@link verifyScanOptions}, never with the core's message).
+ * The one thing done here is the **snapshot**: an object is serialized once
+ * with `JSON.stringify`, exactly as the core does for a call, and a byte
+ * buffer is copied, so what every scan sends is fixed at construction.
+ *
+ * `actionPolicy` and a callback `policy` are mutually exclusive; giving both is
+ * a `TypeError` before any core is loaded or any text scanned. It needs a core
+ * that has it (`SCAN_OPTION_CORE_FLOORS.actionPolicy`): an older core would
+ * ignore the key and run its default policy, so {@link verifyScanOptions}
+ * refuses it by name instead. PII stays opt-in and host enforcement is
+ * unchanged: `block`, `warn` and `allow` mean at an adapter what they always
+ * did.
+ *
  * ## Names
+ *
+ * `actionPolicy` and `policy` are the core's names.
  *
  * `limits` is already the adapter's *walk* limits (`DEFAULT_LIMITS`), so the
  * core's whole-input limits are `scanLimits`. `ruleset` and
@@ -26,6 +50,25 @@
  * whatever action the policy returned, and never change it. A ruleset adds
  * detections, never an action of its own.
  *
+ * ## Injected configuration (redact-secret-adapters#213)
+ *
+ * A host that builds its configuration once passes the `scanConfig`
+ * `resolveScanConfig` returned instead of loose options. That configuration is
+ * already bound to its `policy`, `actionPolicy`, `scanLimits`, `ruleset` and
+ * `placeholderFormatter`, so any of them given beside it is a conflict:
+ * {@link scanConfigOf} rejects it with a fixed, input-free `TypeError`, before
+ * the core is loaded or any text scanned. There is no precedence rule and no
+ * ignored field. A `scanConfig` that `resolveScanConfig` did not build is
+ * rejected too, since only it validates and snapshots. The live factories
+ * verify the injected configuration (floors and the construction check), not
+ * the loose options beside it. `pii` is not part of a `scanConfig`: it is the
+ * process-wide activation of the core, passed to a live factory on its own.
+ * The incremental sessions of the AI-context boundary do not take a whole-input
+ * `scanConfig` and reject it by name. This is the existing injection seam, not
+ * a core scanner handle: the published core has no configuration-bound or
+ * instance-isolated scanner (core #1222 deferred it), so every configuration
+ * still reaches the one process-wide core.
+ *
  * ## Snapshot
  *
  * `scanLimits` is copied (only `maxInputBytes` and `maxFindings` are read) and
@@ -37,24 +80,44 @@
  *
  * ## Availability
  *
- * Whole-input scans only. The incremental sessions of the AI-context boundary
- * take `placeholderFormatter` and their own `incrementalLimits`, and the core
- * has no ruleset for an incremental session, so the AI-context boundary
- * rejects `ruleset` and `scanLimits` by name rather than ignore them. Every
- * option here is available from the declared core floor
+ * `scanLimits` and `ruleset` are whole-input only. The incremental sessions of
+ * the AI-context boundary take `placeholderFormatter`, `actionPolicy` and their
+ * own `incrementalLimits`, and the core has no ruleset for an incremental
+ * session, so the AI-context boundary rejects `ruleset` and `scanLimits` by
+ * name rather than ignore them. `actionPolicy` is available on both. Each
+ * option has the oldest core it was verified against
  * (`SCAN_OPTION_CORE_FLOORS`); the live factories check it, then probe the
- * options with one scan of the empty text, so an unsupported core or a ruleset that does
- * not parse is a fixed, input-free `CoreOptionsError` at construction, never a
- * silently ignored option.
+ * options with one scan of the empty text, so an unsupported core or a ruleset
+ * or action policy that does not parse is a fixed, input-free
+ * `CoreOptionsError` at construction, never a silently ignored option. The
+ * probe shows the options are accepted, not that a policy decides as intended:
+ * the empty text has no finding.
  */
 
 import type { PlaceholderFormatter, ScanAndRedactOptions, WholeInputLimits } from "@redact-secret/core";
 
 import type { Policy, ScanAndRedact } from "./types.js";
 
+/**
+ * A declarative action policy as a caller may pass it: a plain object, or the
+ * document as UTF-8 JSON text or bytes. Deliberately loose: the core owns the
+ * document's syntax and a rejected one throws `INVALID_ACTION_POLICY` there,
+ * so this type does not restate the schema (and does not require a core that
+ * types it).
+ */
+export type ActionPolicyInput = object | string | Uint8Array;
+
 /** The options this module adds, by the names a caller passes them under. */
 export interface ScanOptionsInput {
+  /** A callback policy. Mutually exclusive with `actionPolicy`. */
   readonly policy?: Policy;
+  /**
+   * The core's declarative action policy (object, UTF-8 JSON text or bytes),
+   * snapshotted once at construction and passed to the core intact. Mutually
+   * exclusive with `policy`; needs a core that has it, else construction
+   * rejects with `CoreOptionsError`.
+   */
+  readonly actionPolicy?: ActionPolicyInput | undefined;
   /** The core's whole-input limits for every scan: `{ maxInputBytes, maxFindings }`. Not the adapter's walk `limits`. */
   readonly scanLimits?: WholeInputLimits | undefined;
   /** A declarative ruleset (text, or its UTF-8 bytes). Whole-input scans only. */
@@ -64,26 +127,47 @@ export interface ScanOptionsInput {
 }
 
 /** The names of the options {@link ScanOptionsInput} adds to `policy`. */
-export type ScanOptionName = "scanLimits" | "ruleset" | "placeholderFormatter";
+export type ScanOptionName = "scanLimits" | "ruleset" | "placeholderFormatter" | "actionPolicy";
+
+/**
+ * What is passed to the core: its `scanAndRedact` options, with `actionPolicy`
+ * as the snapshot (text or copied bytes). Declared here, not read off the
+ * core's types, so it type-checks against every core in the declared range.
+ */
+export type ResolvedScanOptions = ScanAndRedactOptions & { readonly actionPolicy?: string | Uint8Array };
 
 /**
  * A validated snapshot of a caller's scan options: exactly what is passed to
  * `scanAndRedact` as its options argument, built once.
  */
 export interface ScanConfig {
-  readonly options: ScanAndRedactOptions;
-  /** Which of the three added options were requested, in a fixed order. Never their values. */
+  readonly options: ResolvedScanOptions;
+  /** Which of the added options were requested, in a fixed order. Never their values. */
   readonly requested: readonly ScanOptionName[];
 }
 
-const NO_OPTIONS: ScanAndRedactOptions = Object.freeze({ policy: undefined });
+const NO_OPTIONS: ResolvedScanOptions = Object.freeze({ policy: undefined });
 const EMPTY: ScanConfig = Object.freeze({ options: NO_OPTIONS, requested: Object.freeze([]) });
+
+/** Every {@link ScanConfig} `resolveScanConfig` built: the only ones a caller may inject. */
+const RESOLVED = new WeakSet<object>([EMPTY]);
+/**
+ * Marks options this module bound to a `scanConfig` itself, holding that
+ * config. It is an own symbol property, so a layered or spread copy keeps it
+ * and is not re-checked as caller input, while a caller cannot forge it.
+ */
+const BOUND_KEY: unique symbol = Symbol("redact-secret.boundScanConfig");
 
 /** The oldest core each option has been verified against, which is the declared `@redact-secret/core` floor. */
 export const SCAN_OPTION_CORE_FLOORS: Readonly<Record<ScanOptionName, string>> = Object.freeze({
   scanLimits: "0.1.0-beta.6",
   ruleset: "0.1.0-beta.6",
   placeholderFormatter: "0.1.0-beta.6",
+  // Published `@redact-secret/core` 0.1.0-beta.14 is the first release whose
+  // `scanAndRedact` and `createIncrementalSanitizer` take `actionPolicy`
+  // (beta.13 and older ignore the key). Source presence in the core
+  // repository is not what this records.
+  actionPolicy: "0.1.0-beta.14",
 });
 
 function isNonNegativeNumber(value: unknown): value is number {
@@ -91,20 +175,59 @@ function isNonNegativeNumber(value: unknown): value is number {
 }
 
 /**
+ * The snapshot of an `actionPolicy`: text is immutable and kept, bytes are
+ * copied, an object is serialized once as the core would. Only the *form* is
+ * checked; whether it is a valid document is the core's decision.
+ */
+function snapshotActionPolicy(actionPolicy: unknown): string | Uint8Array {
+  if (typeof actionPolicy === "string") return actionPolicy;
+  if (actionPolicy instanceof Uint8Array) return new Uint8Array(actionPolicy);
+  if (actionPolicy === null || typeof actionPolicy !== "object") {
+    throw new TypeError("actionPolicy must be an object, a JSON string or a Uint8Array");
+  }
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(actionPolicy);
+  } catch {
+    serialized = undefined;
+  }
+  if (typeof serialized !== "string") throw new TypeError("actionPolicy must be serializable as JSON");
+  return serialized;
+}
+
+/**
  * Validates and snapshots `input`. Throws a `TypeError` with a fixed message
  * for a malformed option: that is a programming error, not an input. With none
- * of the three options given it returns options holding only `policy`, as the
+ * of the four options given it returns options holding only `policy`, as the
  * adapters have always passed.
  */
 export function resolveScanConfig(input: ScanOptionsInput = {}): ScanConfig {
-  const { policy, scanLimits, ruleset, placeholderFormatter } = input;
-  if (scanLimits === undefined && ruleset === undefined && placeholderFormatter === undefined) {
+  const config = buildScanConfig(input);
+  RESOLVED.add(config);
+  return config;
+}
+
+function buildScanConfig(input: ScanOptionsInput): ScanConfig {
+  const { policy, actionPolicy, scanLimits, ruleset, placeholderFormatter } = input;
+  if (policy !== undefined && actionPolicy !== undefined) {
+    throw new TypeError("policy and actionPolicy are mutually exclusive: pass one");
+  }
+  if (
+    actionPolicy === undefined &&
+    scanLimits === undefined &&
+    ruleset === undefined &&
+    placeholderFormatter === undefined
+  ) {
     return policy === undefined
       ? EMPTY
       : Object.freeze({ options: Object.freeze({ policy }), requested: EMPTY.requested });
   }
-  const options: { -readonly [K in keyof ScanAndRedactOptions]: ScanAndRedactOptions[K] } = { policy };
+  const options: { -readonly [K in keyof ResolvedScanOptions]: ResolvedScanOptions[K] } = { policy };
   const requested: ScanOptionName[] = [];
+  if (actionPolicy !== undefined) {
+    options.actionPolicy = snapshotActionPolicy(actionPolicy);
+    requested.push("actionPolicy");
+  }
   if (scanLimits !== undefined) {
     if (
       scanLimits === null ||
@@ -131,9 +254,50 @@ export function resolveScanConfig(input: ScanOptionsInput = {}): ScanConfig {
   return Object.freeze({ options: Object.freeze(options), requested: Object.freeze(requested) });
 }
 
+/** The loose scan options a caller must not pass beside an injected `scanConfig`. */
+const CONFLICTING_OPTIONS = ["policy", "actionPolicy", "scanLimits", "ruleset", "placeholderFormatter"] as const;
+
+/**
+ * The one scan configuration `options` asks for. Without a `scanConfig` that is
+ * {@link resolveScanConfig}`(options)`. With one, the injected configuration is
+ * already bound to its policy, action policy, limits, ruleset and formatter,
+ * so any of those given beside it is a conflict, rejected here with a fixed,
+ * input-free `TypeError` (never a precedence rule, never an ignored field),
+ * and a `scanConfig` that `resolveScanConfig` did not build is rejected too,
+ * since only that function validates and snapshots. `pii` is not part of a
+ * `scanConfig`: it is the process-wide activation, checked separately.
+ */
+export function scanConfigOf(options: ScanOptionsInput & { readonly scanConfig?: ScanConfig | undefined }): ScanConfig {
+  const injected = options.scanConfig;
+  if (injected === undefined) return resolveScanConfig(options);
+  if ((options as { [BOUND_KEY]?: unknown })[BOUND_KEY] === injected) return injected;
+  if (injected === null || typeof injected !== "object" || !RESOLVED.has(injected)) {
+    throw new TypeError("scanConfig must be a value returned by resolveScanConfig");
+  }
+  if (CONFLICTING_OPTIONS.some((name) => options[name] !== undefined)) {
+    throw new TypeError(
+      "scanConfig already fixes the scan options: do not pass policy, actionPolicy, scanLimits, ruleset or placeholderFormatter with it",
+    );
+  }
+  return injected;
+}
+
+/**
+ * `options` as a copy carrying its checked {@link scanConfigOf} configuration,
+ * for a host that spreads its options before masking: the copy is not
+ * re-checked as caller input further down.
+ */
+export function bindScanConfig<T extends ScanOptionsInput & { readonly scanConfig?: ScanConfig | undefined }>(
+  options: T,
+): T & { readonly scanConfig: ScanConfig } {
+  const scanConfig = scanConfigOf(options);
+  return { ...options, scanConfig, [BOUND_KEY]: scanConfig };
+}
+
 /**
  * `options` with its scan configuration validated and snapshotted once: the
- * same object when it already carries a `scanConfig`, else a layer over it
+ * same object when it already carries a `scanConfig` (checked by
+ * {@link scanConfigOf}), else a layer over it
  * (`Object.create`, so every inherited key, `counter` and `operation` getters
  * included, is still read through) with the resolved `scanConfig` added. A
  * host that builds a masker once calls this at construction, so a malformed
@@ -142,8 +306,12 @@ export function resolveScanConfig(input: ScanOptionsInput = {}): ScanConfig {
 export function withResolvedScanConfig<T extends ScanOptionsInput & { readonly scanConfig?: ScanConfig | undefined }>(
   options: T,
 ): T & { readonly scanConfig: ScanConfig } {
+  const scanConfig = scanConfigOf(options);
   if (options.scanConfig !== undefined) return options as T & { readonly scanConfig: ScanConfig };
-  return Object.create(options, { scanConfig: { value: resolveScanConfig(options), enumerable: true } });
+  return Object.create(options, {
+    scanConfig: { value: scanConfig, enumerable: true },
+    [BOUND_KEY]: { value: scanConfig, enumerable: true },
+  });
 }
 
 /** The fixed codes {@link CoreOptionsError} carries. Input-free by construction. */
@@ -153,7 +321,7 @@ const MESSAGES: Readonly<Record<CoreOptionsErrorCode, string>> = Object.freeze({
   CORE_OPTION_UNSUPPORTED:
     "verifyScanOptions: the installed @redact-secret/core is older than the version a requested scan option was verified against, or does not report its version; upgrade the core or omit the option",
   CORE_OPTION_REJECTED:
-    "verifyScanOptions: the core rejected a requested scan option (a ruleset that does not parse, invalid limits, a failing callback); see coreCode",
+    "verifyScanOptions: the core rejected a requested scan option (a ruleset or action policy that does not parse, invalid limits, a failing callback); see coreCode",
 });
 
 /** The core codes forwarded as `coreCode`: the ones a scan option can raise. Nothing else is read from the error. */
@@ -165,6 +333,7 @@ const FORWARDED_CORE_CODES: ReadonlySet<string> = new Set([
   "PLACEHOLDER_FAILURE",
   "POLICY_FAILURE",
   "INVALID_POLICY_ACTION",
+  "INVALID_ACTION_POLICY",
   "NOT_INITIALIZED",
 ]);
 

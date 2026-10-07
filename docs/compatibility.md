@@ -22,7 +22,7 @@ and exercises, at both ends of the declared range.
 | `redact-secret-adapters` (`logging`) | CPython `>=3.10` stdlib | a real `logging.Logger`: filter before formatter, `QueueHandler`/`QueueListener`, threads sharing one handler, a failing handler |
 | `redact-secret-adapters[otel]` | `opentelemetry-sdk>=1.16.0,<2` | real spans through simple and batch processors, spans from threads, a failing exporter, flush and shutdown |
 | `adapter-ai-context` | `@redact-secret/core ^0.1.0-beta.6` (no host) | the core's AI-context conformance fixture replayed on the real core before and after `initialize()`, and an end-to-end agent turn with every limit |
-| `adapter-mcp` | `@modelcontextprotocol/sdk >=1.26.0 <=1.30.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.1.0` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
+| `adapter-mcp` | `@modelcontextprotocol/sdk >=1.26.0 <=1.32.1`, `@modelcontextprotocol/client`/`server >=2.0.0 <=2.3.1` | the core's MCP fixture and runner replayed through the public API and over real SDK clients and servers (stdio and Streamable HTTP, protocol 2025-11-25); a host that logs, stores and builds context only from the boundary's output |
 
 Runtimes: Node.js 20.x, 22.x and 24.x; CPython 3.10 through 3.14.
 
@@ -97,8 +97,8 @@ packages are not part of that lockstep: a new pino release moves
 The range says what installs. `endpoints` in `compatibility.json` names the
 two versions CI actually installs and runs the real-host tests against, and
 the semver expression between them is **not** evidence that every version
-inside it was tested. As of 2026-09-29 the core endpoints are `0.1.0-beta.6`
-and `0.1.0-beta.12` (`0.1.0b6` and `0.1.0b12` on PyPI).
+inside it was tested. As of 2026-10-07 the core endpoints are `0.1.0-beta.6`
+and `0.1.0-beta.14` (`0.1.0b6` and `0.1.0b14` on PyPI).
 
 A newer core does not narrow the floor: a range is raised only when a package
 needs an API a lower core lacks, which the `published-combination` job
@@ -158,10 +158,12 @@ The logging and tracing packages depend on a deliberately small part of the
 core: `initialize()`, `scanAndRedact()` and its result shape, and whether a
 finding's action is `block` or `warn`. They also pass through, only when the
 caller asks, the core's own `scanAndRedact` options `limits` (as `scanLimits`),
-`ruleset` and `placeholderFormatter`, and in that case read the core's
-`VERSION` once to check it against the version each option was verified against
-(`0.1.0-beta.6` for all three, the declared floor), so an older core rejects
-the option instead of ignoring it; with none of them asked, nothing extra is read
+`ruleset`, `placeholderFormatter` and the declarative `actionPolicy`, and in that
+case read the core's `VERSION` once to check it against the version each option
+was verified against (`0.1.0-beta.6` for the first three, the declared floor;
+`0.1.0-beta.14` for `actionPolicy`, the first published core that accepts it),
+so an older core rejects the option instead of ignoring it, and every other
+option keeps working there; with none of them asked, nothing extra is read
 or passed. The AI-context package also uses the
 whole-input `policy`/`limits` options, the incremental session,
 `SecretScanError.code`, and the safe finding fields

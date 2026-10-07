@@ -158,13 +158,31 @@ Two things to know:
   key and its JSON punctuation. With the default 64 KiB that is noise; with a
   small override it is what binds first.
 
+### `actionPolicy`
+
+The core's declarative action policy (an object, UTF-8 JSON text or bytes; see
+[Declarative `actionPolicy`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#declarative-actionpolicy)),
+instead of a callback `policy`. It is validated and snapshotted once when the
+boundary is created and passed to the core intact on **every whole-input scan
+and every incremental session**: `sanitizeText`, `sanitizeValue`,
+`sanitizeToolResult`, `buildContext` (key-context views included) and
+`openStream`. Giving it with a `policy` is a `TypeError` at construction. The
+live factory (and `createMcpBoundary`) rejects a core older than `0.1.0-beta.14`,
+or a document the core refuses, with a fixed `CoreOptionsError` instead of
+running on the default policy. The injected `createAiContextBoundaryWith` takes
+the core you give it and cannot check its version.
+
+It changes what the core decides, never what the boundary does with it: `block`
+is `blocked` / `policy` with no value, `warn` and `allow` keep the text, and
+redaction is the core's. See [Action semantics](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/action-semantics.md).
+
 ### Options it does not take
 
 `ruleset` and `scanLimits` are rejected by name (a `TypeError`), never ignored. The
 core has no ruleset for an incremental session, so one boundary cannot offer it on
 `sanitizeText` and not on `openStream`; and the boundary's whole-input limits are
-`wholeInputLimits`, beside `incrementalLimits`. `placeholderFormatter` and `policy`
-reach both the whole-input and the incremental path. The logging and tracing
+`wholeInputLimits`, beside `incrementalLimits`. `placeholderFormatter`, `policy` and
+`actionPolicy` reach both the whole-input and the incremental path. The logging and tracing
 adapters take `ruleset`, `scanLimits` and `placeholderFormatter` on whole-input scans
 ([Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options)).
 

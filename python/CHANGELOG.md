@@ -20,6 +20,17 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-07
+
+### Changed
+
+- Verified against `redact-secret` 0.1.0b14, the first published core that accepts `action_policy`. The declared `redact-secret` range is unchanged; `action_policy` itself is refused by name on an older core.
+- **Behavior change:** `scan_config` beside `policy`, `action_policy`, `scan_limits`, `ruleset` or `placeholder_formatter` (`mask_leaf_with`, `mask_leaf_outcome_with`, `RedactingSpanProcessorWith`) is a fixed, input-free `TypeError`, not a silent precedence; a `scan_config` not built by `resolve_scan_config` is rejected (redact-secret-adapters#213). New `scan_config_of`. The live factories take the loose options only. Test: `python/tests/test_scan_options.py`.
+
+### Added
+
+- `action_policy` on `resolve_scan_config`, `mask_secrets_with`, `mask_log_value_with`, `mask_leaf_with`, `mask_leaf_outcome_with`, `redact_attributes_with`, `RedactSecretFilter`, `RedactingSpanProcessorWith` and `create_redacting_span_processor`: the core's declarative action policy (a `dict`, or its JSON as `str`, `bytes` or `bytearray`), passed to `scan_and_redact(action_policy=...)` intact on every whole-input scan (redact-secret-adapters#217). Snapshotted once (a `dict` is serialized once, a `bytearray` copied); mutually exclusive with `policy` (a `TypeError` before the core is called); the adapter neither parses nor evaluates it. `SCAN_OPTION_CORE_FLOORS["action_policy"]` is `0.1.0-beta.14` (`redact-secret` 0.1.0b14, the first PyPI release with the binding); `verify_scan_options` rejects an older core by name (`CORE_OPTION_UNSUPPORTED`) and a refused document as `CORE_OPTION_REJECTED` with `core_code="INVALID_ACTION_POLICY"`. Every other option keeps working on the declared floor; the `redact-secret>=0.1.0b6` range is unchanged. Test: `tests/test_action_policy.py`.
+
 ## [0.1.5] - 2026-10-03
 ### Changed
 

@@ -38,8 +38,8 @@ import {
   activateCore,
   type CoreActivation,
   type MaskOptions,
-  resolveScanConfig,
   type ScanAndRedact,
+  scanConfigOf,
   verifyScanOptions,
 } from "@redact-secret/adapter";
 
@@ -90,12 +90,12 @@ function activationOf(options: CoreActivation): CoreActivation {
 
 async function initializedScanner(
   activation: CoreActivation,
-  scanOptions: Parameters<typeof resolveScanConfig>[0],
+  scanOptions: Parameters<typeof scanConfigOf>[0],
 ): Promise<ScanAndRedact> {
   // Validated before the core is touched; then the installed core must honor
   // any requested scan option (`scanLimits`, `ruleset`, `placeholderFormatter`)
   // or this rejects with a fixed, input-free `CoreOptionsError`.
-  const config = resolveScanConfig(scanOptions);
+  const config = scanConfigOf(scanOptions);
   const loaded = await import("@redact-secret/core");
   await activateCore(loaded, activation);
   verifyScanOptions(loaded, config);

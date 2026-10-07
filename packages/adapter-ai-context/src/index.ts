@@ -35,9 +35,9 @@
  * activation is not the same as masking every PII value.
  */
 
-import { activateCore, type CoreActivation } from "@redact-secret/adapter";
+import { activateCore, type CoreActivation, type ScanOptionsCore, verifyScanOptions } from "@redact-secret/adapter";
 
-import { createAiContextBoundaryWith } from "./boundary.js";
+import { createAiContextBoundaryWith, resolveActionPolicyConfig } from "./boundary.js";
 import { type AiContextBoundaryOptionsWithDefaults, withDefaultLimits } from "./defaults.js";
 import type { AiContextBoundary, AiContextCore } from "./types.js";
 
@@ -120,15 +120,24 @@ export async function createAiContextBoundary(
   // Before the core is touched: malformed options are a programming error,
   // not something to load a native addon for.
   const resolved = withDefaultLimits(options);
+  // Likewise validated and snapshotted before the core is touched: a callback
+  // `policy` beside an `actionPolicy`, or a value that cannot be a document,
+  // is a programming error here, and the one snapshot is both verified against
+  // the core and handed to the boundary.
+  const scanConfig = resolveActionPolicyConfig(resolved);
+  const snapshot = scanConfig.options.actionPolicy;
+  const checked = snapshot === undefined ? resolved : { ...resolved, actionPolicy: snapshot };
   // Read by property, not by rest-destructuring, so an activation reaching
   // `options` through a prototype survives — the same rule `withDefaultLimits`
   // follows for `policy`, `placeholderFormatter` and `onFinding`.
   const activation: CoreActivation = options.pii === undefined ? {} : { pii: options.pii };
   let core: AiContextCore;
+  let loadedCore: ScanOptionsCore | undefined;
   try {
     const loaded = await import("@redact-secret/core");
     await activateCore(loaded, activation);
     core = loaded;
+    loadedCore = loaded;
   } catch (error) {
     // The core's own error is thrown again, unread, by every operation, so
     // it is mapped by the one failure path every other core error takes.
@@ -137,5 +146,10 @@ export async function createAiContextBoundary(
     };
     core = { scanAndRedact: fails, createIncrementalSanitizer: fails };
   }
-  return createAiContextBoundaryWith(core, resolved);
+  // Outside the fail-closed path above: a core that cannot honor a requested
+  // `actionPolicy` (too old to know it, or refusing the document) is a
+  // configuration error, rejected with a fixed, input-free `CoreOptionsError`
+  // rather than run on the default policy. A no-op when none was requested.
+  if (loadedCore !== undefined) verifyScanOptions(loadedCore, scanConfig);
+  return createAiContextBoundaryWith(core, checked);
 }
