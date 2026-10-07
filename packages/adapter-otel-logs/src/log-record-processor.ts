@@ -40,6 +40,7 @@ import {
   LIMIT_MARKER,
   maskLeafOutcomeWith,
   notify,
+  resolveScanConfig,
   toValueCounts,
 } from "@redact-secret/adapter";
 
@@ -156,7 +157,7 @@ class RecordMasker {
     if (this.#leaves <= 0) return this.#marker(LIMIT_MARKER);
     this.#leaves -= 1;
     const leaf = maskLeafOutcomeWith(this.scanAndRedact, text, {
-      policy: this.options.policy,
+      scanConfig: this.options.scanConfig,
       maxStringLength: this.limits.maxStringLength,
     });
     countLeaf(this.counter, leaf);
@@ -374,7 +375,9 @@ export class RedactingLogRecordProcessorWith implements LogRecordProcessor {
     }
     this.#next = next;
     this.#scanAndRedact = scanAndRedact;
-    this.#maskOptions = maskOptions;
+    // Validated and snapshotted once, here: every scan of every record uses
+    // this one `scanConfig` (policy, actionPolicy, limits, ruleset, formatter).
+    this.#maskOptions = { ...maskOptions, scanConfig: maskOptions.scanConfig ?? resolveScanConfig(maskOptions) };
     // The top-level `maxStringLength` is the shared adapter option and wins over `limits.maxStringLength`.
     this.#limits = resolveLimits(
       maskOptions.maxStringLength === undefined ? limits : { ...limits, maxStringLength: maskOptions.maxStringLength },

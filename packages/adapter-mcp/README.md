@@ -149,7 +149,7 @@ class, `mcpAuditRecord(outcome, stage)`, and the constants `MCP_BLOCKED_TEXT`,
 
 ```js
 await createMcpBoundary({
-  binaryContent, onAudit, onFinding, pii, policy, placeholderFormatter,
+  binaryContent, onAudit, onFinding, pii, policy, actionPolicy, placeholderFormatter,
   wholeInputLimits, incrementalLimits, traversalLimits,
 });
 ```

@@ -151,11 +151,12 @@ stream there reads two of three chunks, sees `accepting` turn `false`, and gets
 | Every AI-context operation is `blocked` / `core_error` + `INITIALIZATION_FAILED` or `NOT_INITIALIZED` | The boundary resolved, but the core could not load or initialize. It fails closed on each call instead of throwing at startup | Fix the core install (`@redact-secret/core`, a supported Node and platform), then call the factory again |
 | A logging or tracing factory rejects at construction with `PII_ACTIVATION_NOT_ACTIVE` or `PII_ACTIVATION_UNSUPPORTED` | The `pii` selection you asked for is not the one active, or the installed core is too old to report an activation. Needs core `0.1.0-beta.10` or later | Activate the same selection first, or upgrade the core. See [PII](./pii.md#the-rules) |
 | `PII_ACTIVATION_CONFLICT` (`PiiActivationConflictError` in Python) | A different selection was already activated. The first one wins, process-wide | Use one selection per process. See [PII](./pii.md#the-rules) |
-| `CoreOptionsError` with `CORE_OPTION_UNSUPPORTED` or `CORE_OPTION_REJECTED` | **Next release.** The core does not support a scan option, or refused a `ruleset` or limits you passed. The option names are given, never a value | Upgrade the core, or fix the option. A ruleset's text never appears in the error |
+| `CoreOptionsError` with `CORE_OPTION_UNSUPPORTED` or `CORE_OPTION_REJECTED` | **Next release.** The core does not support a scan option (`actionPolicy` needs core `0.1.0-beta.14` or later), or refused a `ruleset`, limits or `actionPolicy` you passed (`coreCode` `INVALID_RULESET`, `INVALID_LIMITS`, `INVALID_ACTION_POLICY`). The option names are given, never a value | Upgrade the core, or fix the option. A ruleset's or policy document's text never appears in the error |
+| `TypeError`: `policy and actionPolicy are mutually exclusive` | A callback `policy` and a declarative `actionPolicy` were both given. One policy decides | Pass one. The check runs before the core is loaded or any text is scanned |
 | Python records are fine but PII is never redacted | PII was activated after a handler already emitted. There is no error and no counter that tells it apart from "nothing found" | Call `redact_secret.initialize(pii=[...])` before attaching handlers. See [PII](./pii.md#python) |
 | Python `CoreActivationError` with `PII_ACTIVATION_NOT_ACTIVE`, `PII_ACTIVATION_UNAVAILABLE` or `PII_ACTIVATION_UNSUPPORTED` | **Next release** of `redact-secret-adapters`: a factory given `pii=` could not show that it took effect | Same as the JavaScript rows |
 
-No error carries a selector, an input, a ruleset or the core's own message.
+No error carries a selector, an input, a ruleset, a policy document or the core's own message.
 
 ## Messages you can show
 

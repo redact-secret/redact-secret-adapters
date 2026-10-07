@@ -122,6 +122,7 @@ def redact_attributes_with(
     scan_limits: Optional[Any] = None,
     ruleset: Optional[Any] = None,
     placeholder_formatter: Optional[Callable[..., Any]] = None,
+    action_policy: Optional[Any] = None,
 ) -> None:
     """Mutates `attributes` in place. A no-op for `None`.
 
@@ -133,7 +134,7 @@ def redact_attributes_with(
     bypasses that guard instead of tripping it."""
     max_string_length = (limits or {}).get("max_string_length")
     budget = OperationBudget(operation_limits)
-    config = resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter)
+    config = resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter, action_policy)
     _redact_bag(
         attributes,
         lambda value, key=None: _mask_attribute_value(
@@ -198,6 +199,7 @@ class RedactingSpanProcessorWith:
         scan_limits: Optional[Any] = None,
         ruleset: Optional[Any] = None,
         placeholder_formatter: Optional[Callable[..., Any]] = None,
+        action_policy: Optional[Any] = None,
         scan_config: Optional[ScanConfig] = None,
         on_outcome: Optional[Callable[[SpanOutcome], None]] = None,
     ) -> None:
@@ -216,7 +218,7 @@ class RedactingSpanProcessorWith:
         self._config = (
             scan_config
             if scan_config is not None
-            else resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter)
+            else resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter, action_policy)
         )
         self._limits = limits
         # The aggregate budget of one span (see ``budget.py``), shared by its
@@ -379,6 +381,7 @@ def create_redacting_span_processor(
     scan_limits: Optional[Any] = None,
     ruleset: Optional[Any] = None,
     placeholder_formatter: Optional[Callable[..., Any]] = None,
+    action_policy: Optional[Any] = None,
     on_outcome: Optional[Callable[[SpanOutcome], None]] = None,
     pii: Optional[Sequence[str]] = None,
 ) -> RedactingSpanProcessorWith:
@@ -411,7 +414,7 @@ def create_redacting_span_processor(
     # installed core must honor every requested option or this raises a fixed
     # ``CoreOptionsError`` (see ``scan_options.py``).
     config = resolve_scan_config(
-        policy, scan_limits, ruleset, placeholder_formatter, limits_type=redact_secret.WholeInputLimits
+        policy, scan_limits, ruleset, placeholder_formatter, action_policy, limits_type=redact_secret.WholeInputLimits
     )
     verify_scan_options(redact_secret, config)
     return RedactingSpanProcessorWith(

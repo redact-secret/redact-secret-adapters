@@ -27,6 +27,7 @@ def mask_secrets_with(
     scan_limits: Optional[Any] = None,
     ruleset: Optional[Any] = None,
     placeholder_formatter: Optional[Callable[..., Any]] = None,
+    action_policy: Optional[Any] = None,
 ) -> Any:
     """Recursively masks every string inside a dict/list/tuple tree (the
     same walk as ``mask_log_value_with``, exceptions included; see
@@ -44,7 +45,7 @@ def mask_secrets_with(
         policy=policy,
         limits=limits,
         operation_limits=operation_limits,
-        scan_config=resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter),
+        scan_config=resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter, action_policy),
     )
 
 

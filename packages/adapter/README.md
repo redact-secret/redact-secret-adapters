@@ -154,7 +154,7 @@ leaf; the `scanned` counter still counts leaves. The primitive is exported as
 
 Consumers should not need a hand-written `scanAndRedact` wrapper to use behavior the core
 supports. Besides `policy`, every logging and tracing entry point (and
-`maskSecretsWith`, `maskLogValueWith`, `createMaskSecrets`) passes three more
+`maskSecretsWith`, `maskLogValueWith`, `createMaskSecrets`) passes four more
 core options through, unchanged, on every scan:
 
 | Option | Core option | What it is |
@@ -162,6 +162,7 @@ core options through, unchanged, on every scan:
 | `scanLimits` | `limits` | The core's whole-input limits, `{ maxInputBytes, maxFindings }`: the UTF-8 bytes of one scanned text and the findings of one scan. Named `scanLimits` because `limits` is this package's *walk* limits |
 | `ruleset` | `ruleset` | A declarative detector ruleset, as text or UTF-8 bytes ([core guide](https://github.com/redact-secret/redact-secret/blob/main/docs/guides/rulesets.md)). Its detectors add detections; they never outrank a built-in's |
 | `placeholderFormatter` | `placeholderFormatter` | The core's placeholder formatter, `(finding, { placeholderIndex }) => string` |
+| `actionPolicy` | `actionPolicy` | The core's declarative action policy, as an object, UTF-8 JSON text or UTF-8 bytes. Needs core `0.1.0-beta.14` or later. See [Declarative `actionPolicy`](#declarative-actionpolicy) |
 
 ```js
 const maskSecrets = await createMaskSecrets({
@@ -198,20 +199,75 @@ its key-context view, so under a byte ceiling its usable size is `maxInputBytes`
 minus the key and a few bytes of punctuation.
 
 **Unsupported cores are rejected, not ignored.** The live factories check the
-installed core's `VERSION` against `SCAN_OPTION_CORE_FLOORS` (every option is
-available from the declared floor, `0.1.0-beta.6`) and probe the options with one
+installed core's `VERSION` against `SCAN_OPTION_CORE_FLOORS` (`0.1.0-beta.6` for
+`scanLimits`, `ruleset` and `placeholderFormatter`, the declared floor;
+`0.1.0-beta.14` for `actionPolicy`) and probe the options with one
 scan of the empty text, so an older core, or a ruleset or limits the core refuses,
 is a `CoreOptionsError` at construction with a fixed message, a fixed `code`
 (`CORE_OPTION_UNSUPPORTED` or `CORE_OPTION_REJECTED`), the option *names*, and, for
 a rejection, one of the core's own codes (`INVALID_RULESET`, `INVALID_LIMITS`, ...) as
-`coreCode`. It never carries an option value, a ruleset or the core's message. A
-core that omits every new option is untouched, so the floor keeps working.
+`coreCode`. It never carries an option value, a ruleset, a policy document or the
+core's message. A core that omits every new option is untouched, so the floor keeps working.
 
-**Operation modes.** All of this is whole-input. The AI-context boundary's
-incremental sessions take `placeholderFormatter` and their own
+**Operation modes.** All of this is whole-input except `actionPolicy` and
+`placeholderFormatter`. The AI-context boundary's incremental sessions take those
+two and their own
 `incrementalLimits`, the core has no ruleset for an incremental session, and that
 boundary therefore rejects `ruleset` and `scanLimits` by name rather than ignore
 them (its whole-input limits are `wholeInputLimits`).
+
+### Declarative `actionPolicy`
+
+`actionPolicy` is the core's data-driven way to change what a few rules do and keep
+the default for everything else: the first rule that matches a finalized finding
+decides its action, a rule may say `"default"`, and a finding no rule matches keeps
+the default action. The core parses, validates and evaluates it. This package
+neither reads nor re-implements it, and adds no detector.
+
+```js
+const maskSecrets = await createMaskSecrets({
+  actionPolicy: {
+    actionPolicyRevision: 1,
+    base: "default",
+    rules: [{ id: "warn-jwt", match: { type: ["jwt"] }, action: "warn" }],
+  },
+});
+```
+
+- **Forms.** A plain object, the document as UTF-8 JSON text, or as UTF-8 bytes
+  (`Uint8Array`). Anything else is a `TypeError` with a fixed message.
+- **One policy.** `actionPolicy` and a callback `policy` are mutually exclusive.
+  Both is a `TypeError` before the core is loaded or any text is scanned. Your
+  callback `policy` behaves exactly as before.
+- **Snapshot.** Taken once when the masker, hook, processor or boundary is built:
+  an object is serialized once (`JSON.stringify`, as the core does for a call) and
+  bytes are copied, so changing your object or buffer afterwards changes nothing.
+  The same snapshot goes to every scan: every leaf, every key-context view, every
+  pass of every hook, and, for the AI-context boundary, every session.
+- **Where.** `createMaskSecrets`, `createRedactingHooks` / `LogMethod` /
+  `StreamWrite` (pino), `createRedactingSpanProcessor` (trace),
+  `createRedactingLogRecordProcessor` (logs), and `createAiContextBoundary` /
+  `createMcpBoundary`, on whole-input scans. The AI-context and MCP boundaries
+  also give it to every incremental session (`openStream`). `ruleset` and
+  `scanLimits` stay whole-input only, and the sessions keep their own
+  `incrementalLimits`.
+- **Host enforcement is unchanged.** The policy only decides the action. At a
+  logging or tracing adapter `block` replaces the whole value, `warn` and `allow`
+  keep the text, and `redact` and the placeholder are the core's; at the AI-context
+  and MCP boundaries `block` is the documented `blocked` / `policy` outcome. See
+  [Action semantics](https://github.com/redact-secret/redact-secret-adapters/blob/main/docs/action-semantics.md).
+  PII stays opt-in: an `actionPolicy` activates nothing.
+- **Verified core floor: `0.1.0-beta.14`.** That is the first *published*
+  `@redact-secret/core` whose `scanAndRedact` and `createIncrementalSanitizer`
+  accept it (`redact-secret` `0.1.0b14` on PyPI); an older core would ignore the
+  key and run its default policy, so the live factories reject it by name with
+  `CoreOptionsError` (`CORE_OPTION_UNSUPPORTED`, `options: ["actionPolicy"]`)
+  instead. Every other option, and the callback `policy`, still work on the
+  declared `^0.1.0-beta.6` floor. A document the core refuses is
+  `CORE_OPTION_REJECTED` with `coreCode: "INVALID_ACTION_POLICY"`, never the
+  document or the core's message. The check is one scan of the empty text: it
+  proves the option is accepted, not that a rule decides as you intend. Test your
+  policy against your own synthetic inputs.
 
 ## Aggregate operation budget
 

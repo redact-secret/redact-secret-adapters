@@ -63,6 +63,7 @@ def mask_leaf_with(
     scan_limits: Optional[Any] = None,
     ruleset: Optional[Any] = None,
     placeholder_formatter: Optional[Callable[..., Any]] = None,
+    action_policy: Optional[Any] = None,
     scan_config: Optional[ScanConfig] = None,
 ) -> str:
     """Masks one leaf string.
@@ -88,6 +89,7 @@ def mask_leaf_with(
         scan_limits=scan_limits,
         ruleset=ruleset,
         placeholder_formatter=placeholder_formatter,
+        action_policy=action_policy,
         scan_config=scan_config,
     )
     return leaf.text
@@ -119,6 +121,7 @@ def mask_leaf_outcome_with(
     scan_limits: Optional[Any] = None,
     ruleset: Optional[Any] = None,
     placeholder_formatter: Optional[Callable[..., Any]] = None,
+    action_policy: Optional[Any] = None,
     scan_config: Optional[ScanConfig] = None,
 ) -> MaskedLeaf:
     """:func:`mask_leaf_with`, plus what happened, for a host adapter that
@@ -154,7 +157,7 @@ def mask_leaf_outcome_with(
     config = (
         scan_config
         if scan_config is not None
-        else resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter)
+        else resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter, action_policy)
     )
     limit = resolve_limit(max_string_length, DEFAULT_LIMITS["max_string_length"])
     if len(text) > limit:

@@ -89,6 +89,7 @@ const LIMIT_KEYS = ["wholeInputLimits", "incrementalLimits", "traversalLimits"] 
 const OPTION_KEYS = [
   ...LIMIT_KEYS,
   "policy",
+  "actionPolicy",
   "placeholderFormatter",
   "onFinding",
   "operationLimits",

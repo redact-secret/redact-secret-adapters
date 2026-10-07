@@ -49,9 +49,11 @@ export {
   type ValueCounts,
 } from "./outcome.js";
 export {
+  type ActionPolicyInput,
   CoreOptionsError,
   type CoreOptionsErrorCode,
   coreVersionAtLeast,
+  type ResolvedScanOptions,
   resolveScanConfig,
   SCAN_OPTION_CORE_FLOORS,
   type ScanConfig,

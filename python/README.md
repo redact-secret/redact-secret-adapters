@@ -377,7 +377,7 @@ an attribute name.
 ## Core scan options
 
 `RedactSecretFilter`, `RedactingSpanProcessorWith`, `create_redacting_span_processor`,
-`redact_attributes_with`, `mask_secrets_with` and `mask_log_value_with` pass three
+`redact_attributes_with`, `mask_secrets_with` and `mask_log_value_with` pass four
 more core options through, unchanged, on every scan, beside `policy`:
 
 | Option | Core argument | What it is |
@@ -385,6 +385,7 @@ more core options through, unchanged, on every scan, beside `policy`:
 | `scan_limits` | `limits` | The core's whole-input limits: a mapping with `max_input_bytes` and `max_findings` (or an object with those attributes). Named `scan_limits` because `limits` is this package's *walk* limits |
 | `ruleset` | `ruleset` | A declarative detector ruleset as `str`, `bytes` or `bytearray` |
 | `placeholder_formatter` | `formatter` | The core's placeholder formatter, `(finding, context) -> str` |
+| `action_policy` | `action_policy` | The core's declarative action policy: a `dict`, or its JSON document as `str`, `bytes` or `bytearray`. Needs `redact-secret` 0.1.0b14 or later |
 
 **Policy precedence.** There is one policy and the adapter never combines two:
 your `policy` replaces the core's built-in policy for every finding, including those
@@ -406,10 +407,40 @@ core. A leaf the core refuses is `[REDACTED:ERROR]`, never the input or the
 exception's message. A keyed leaf is also scanned in its key-context view, so under
 a byte ceiling its usable size is `max_input_bytes` minus the key and punctuation.
 
+**Declarative `action_policy`.** The core's data-driven policy: the first rule that
+matches a finalized finding decides its action (a rule may say `"default"`), and a
+finding no rule matches keeps the default action. The core parses and evaluates it;
+this package does neither and adds no detector. `policy` and `action_policy` are
+mutually exclusive (a `TypeError` before the core is called). It is snapshotted once
+when the filter or processor is built: a `dict` is serialized once with the
+standard compact JSON encoder and a `bytearray` is copied, so mutating yours
+afterwards changes nothing. It reaches every whole-input scan of every leaf and
+key-context view; the Python package opens no incremental session. `block`, `warn`
+and `allow` mean at the filter and the processor what they mean for any policy, and
+PII stays opt-in.
+
+```python
+RedactSecretFilter(
+    action_policy={
+        "actionPolicyRevision": 1,
+        "base": "default",
+        "rules": [{"id": "warn-jwt", "match": {"type": ["jwt"]}, "action": "warn"}],
+    }
+)
+```
+
+The verified core floor is `redact-secret` **0.1.0b14** (`0.1.0-beta.14`), the first
+published release whose `scan_and_redact` takes `action_policy`; an older core
+raises `CoreOptionsError` (`CORE_OPTION_UNSUPPORTED`, `options=("action_policy",)`),
+and every other option keeps working on the declared `>=0.1.0b6` floor. A document
+the core refuses is `CORE_OPTION_REJECTED` with `core_code="INVALID_ACTION_POLICY"`,
+never the document or the core's message. The check is one scan of the empty text,
+so it proves the option is accepted, not that a rule decides as you intend.
+
 An installed core that cannot honor a requested option is rejected, not ignored:
 the live constructors check `redact_secret.VERSION` against
-`SCAN_OPTION_CORE_FLOORS` (every option is available from the declared floor,
-`0.1.0-beta.6`) and probe with one scan of the empty text, so an older core or a
+`SCAN_OPTION_CORE_FLOORS` (`0.1.0-beta.6`, the declared floor, for `scan_limits`,
+`ruleset` and `placeholder_formatter`; `0.1.0-beta.14` for `action_policy`) and probe with one scan of the empty text, so an older core or a
 ruleset or limits it refuses raises `CoreOptionsError` with a fixed message and
 `code` (`CORE_OPTION_UNSUPPORTED` / `CORE_OPTION_REJECTED`), the option names,
 and the core's own `core_code` (`INVALID_RULESET`, ...), never a value or the core's

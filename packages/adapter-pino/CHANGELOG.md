@@ -19,6 +19,10 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Added
+
+- `actionPolicy` on `createRedactingHooks`, `createRedactingLogMethod` and `createRedactingStreamWrite`, applied to every scan of both hooks, with the shared snapshot, callback-conflict and capability checks of `@redact-secret/adapter` (redact-secret-adapters#217). Needs `@redact-secret/core` 0.1.0-beta.14 or later (the first published release that accepts it); an older core is rejected by name with `CoreOptionsError` (`CORE_OPTION_UNSUPPORTED`) and every other option keeps working on the declared floor. The package range is unchanged; the new tests in `compatibility.json` run at both endpoints (the option applies at the upper one, is rejected at the lower one). Test: `test/action-policy-live.test.ts` (the final JSON line for each action).
+
 ## [0.1.5] - 2026-10-03
 ### Changed
 

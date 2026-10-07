@@ -67,7 +67,7 @@ def test_every_requested_option_reaches_every_scan_including_key_context_views()
 def test_names_and_a_fixed_requested_order() -> None:
     config = resolve_scan_config(None, LIMITS, "r", _formatter)
     assert config.requested == ("scan_limits", "ruleset", "placeholder_formatter")
-    assert sorted(SCAN_OPTION_CORE_FLOORS) == ["placeholder_formatter", "ruleset", "scan_limits"]
+    assert sorted(SCAN_OPTION_CORE_FLOORS) == ["action_policy", "placeholder_formatter", "ruleset", "scan_limits"]
 
 
 def test_the_snapshot_is_taken_at_resolution() -> None:

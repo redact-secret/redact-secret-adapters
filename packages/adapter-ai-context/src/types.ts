@@ -6,7 +6,7 @@
  * compile here instead of silently widening what crosses the boundary.
  */
 
-import type { OperationLimits, StrictWalkLimits } from "@redact-secret/adapter";
+import type { ActionPolicyInput, OperationLimits, StrictWalkLimits } from "@redact-secret/adapter";
 import type {
   IncrementalLimits,
   IncrementalSanitizer,
@@ -185,6 +185,18 @@ export interface AiContextBoundaryOptions {
    * the operation closed as `core_error` / `POLICY_FAILURE`.
    */
   readonly policy?: IncrementalSecretPolicy;
+  /**
+   * The core's declarative action policy (an object, UTF-8 JSON text or its
+   * bytes), for both the whole-input and the incremental path: the first
+   * matching rule decides, an unmatched finding keeps the default action. It
+   * is snapshotted once, when the boundary is created, and passed to the core
+   * intact; the core owns its syntax and meaning, and `block`, `warn` and
+   * `allow` mean here what they mean for any policy. Mutually exclusive with
+   * `policy`: both is a `TypeError` at construction. The live factory rejects a
+   * core without it, or a document the core refuses, with a fixed
+   * `CoreOptionsError`. See `@redact-secret/adapter`'s `ActionPolicyInput`.
+   */
+  readonly actionPolicy?: ActionPolicyInput;
   /** Passed to the core unchanged. A throwing formatter fails closed as `core_error` / `PLACEHOLDER_FAILURE`. */
   readonly placeholderFormatter?: PlaceholderFormatter;
   /**

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "redact-secret-adapters.release-feed/v1",
-  "generatedAt": "2026-09-29T00:00:00Z",
+  "generatedAt": "2026-10-07T00:00:00Z",
   "repository": "https://github.com/redact-secret/redact-secret-adapters",
   "sources": [
     "scripts/release-plan.mjs",
@@ -41,7 +41,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.13"
+          "highest": "0.1.0-beta.14"
         }
       },
       "hosts": [],
@@ -73,7 +73,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.13"
+          "highest": "0.1.0-beta.14"
         }
       },
       "hosts": [
@@ -121,7 +121,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.13"
+          "highest": "0.1.0-beta.14"
         }
       },
       "hosts": [
@@ -169,7 +169,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.13"
+          "highest": "0.1.0-beta.14"
         }
       },
       "hosts": [
@@ -217,7 +217,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.13"
+          "highest": "0.1.0-beta.14"
         }
       },
       "hosts": [
@@ -265,7 +265,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.13"
+          "highest": "0.1.0-beta.14"
         }
       },
       "hosts": [],
@@ -302,7 +302,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0-beta.6",
-          "highest": "0.1.0-beta.13"
+          "highest": "0.1.0-beta.14"
         }
       },
       "hosts": [
@@ -372,7 +372,7 @@
         "optional": false,
         "tested": {
           "lowest": "0.1.0b6",
-          "highest": "0.1.0b13"
+          "highest": "0.1.0b14"
         }
       },
       "hosts": [

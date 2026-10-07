@@ -153,14 +153,16 @@ forwarded. An exception thrown by the wrapped processor is not swallowed.
 ## Options
 
 ```js
-await createRedactingLogRecordProcessor(next, { pii, onOutcome, policy, maxStringLength, limits });
+await createRedactingLogRecordProcessor(next, { pii, onOutcome, policy, actionPolicy, scanLimits, ruleset, placeholderFormatter, maxStringLength, limits });
 ```
 
 | Option | What it does |
 | --- | --- |
 | `pii` | Turn on PII detection, e.g. `["pii:global"]`. See below |
 | `onOutcome` | A callback with counts per log record, for your metrics. See below |
-| `policy` | The core's policy, passed through unchanged |
+| `policy` | The core's policy, passed through unchanged. It replaces the core's built-in policy for every finding |
+| `actionPolicy` | The core's declarative action policy (object, JSON text or bytes), for every string of a record. Mutually exclusive with `policy`; needs core `0.1.0-beta.14` or later, else construction rejects with `CoreOptionsError`. See [Declarative `actionPolicy`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#declarative-actionpolicy) |
+| `scanLimits`, `ruleset`, `placeholderFormatter` | The core's whole-input limits, detector ruleset and placeholder formatter. See [Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options) |
 | `maxStringLength` | Strings longer than this become `[REDACTED:LIMIT_EXCEEDED]` unscanned |
 | `limits` | Per-record walk budgets, a `Partial<Limits>`. An invalid value falls back to the default |
 
