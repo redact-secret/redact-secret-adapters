@@ -14,6 +14,10 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+### Changed
+
+- A whole-input `scanConfig` is named and rejected (`scanConfig is not supported by the AI-context boundary`) like `ruleset` and `scanLimits`, instead of being ignored (redact-secret-adapters#213); the boundary resolves its own configuration from `policy` / `actionPolicy`.
+
 ### Added
 
 - `createMcpBoundary` takes `actionPolicy` through `createAiContextBoundary` (redact-secret-adapters#217): one snapshot, whole-input and streamed tool results, resources and arguments, the same capability check and rejection of an older core. Boundary outcomes are unchanged (`block` is the fixed blocked result). Test: `test/action-policy-live.test.ts`.

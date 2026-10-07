@@ -50,6 +50,25 @@
  * whatever action the policy returned, and never change it. A ruleset adds
  * detections, never an action of its own.
  *
+ * ## Injected configuration (redact-secret-adapters#213)
+ *
+ * A host that builds its configuration once passes the `scanConfig`
+ * `resolveScanConfig` returned instead of loose options. That configuration is
+ * already bound to its `policy`, `actionPolicy`, `scanLimits`, `ruleset` and
+ * `placeholderFormatter`, so any of them given beside it is a conflict:
+ * {@link scanConfigOf} rejects it with a fixed, input-free `TypeError`, before
+ * the core is loaded or any text scanned. There is no precedence rule and no
+ * ignored field. A `scanConfig` that `resolveScanConfig` did not build is
+ * rejected too, since only it validates and snapshots. The live factories
+ * verify the injected configuration (floors and the construction check), not
+ * the loose options beside it. `pii` is not part of a `scanConfig`: it is the
+ * process-wide activation of the core, passed to a live factory on its own.
+ * The incremental sessions of the AI-context boundary do not take a whole-input
+ * `scanConfig` and reject it by name. This is the existing injection seam, not
+ * a core scanner handle: the published core has no configuration-bound or
+ * instance-isolated scanner (core #1222 deferred it), so every configuration
+ * still reaches the one process-wide core.
+ *
  * ## Snapshot
  *
  * `scanLimits` is copied (only `maxInputBytes` and `maxFindings` are read) and
@@ -130,6 +149,15 @@ export interface ScanConfig {
 const NO_OPTIONS: ResolvedScanOptions = Object.freeze({ policy: undefined });
 const EMPTY: ScanConfig = Object.freeze({ options: NO_OPTIONS, requested: Object.freeze([]) });
 
+/** Every {@link ScanConfig} `resolveScanConfig` built: the only ones a caller may inject. */
+const RESOLVED = new WeakSet<object>([EMPTY]);
+/**
+ * Marks options this module bound to a `scanConfig` itself, holding that
+ * config. It is an own symbol property, so a layered or spread copy keeps it
+ * and is not re-checked as caller input, while a caller cannot forge it.
+ */
+const BOUND_KEY: unique symbol = Symbol("redact-secret.boundScanConfig");
+
 /** The oldest core each option has been verified against, which is the declared `@redact-secret/core` floor. */
 export const SCAN_OPTION_CORE_FLOORS: Readonly<Record<ScanOptionName, string>> = Object.freeze({
   scanLimits: "0.1.0-beta.6",
@@ -174,6 +202,12 @@ function snapshotActionPolicy(actionPolicy: unknown): string | Uint8Array {
  * adapters have always passed.
  */
 export function resolveScanConfig(input: ScanOptionsInput = {}): ScanConfig {
+  const config = buildScanConfig(input);
+  RESOLVED.add(config);
+  return config;
+}
+
+function buildScanConfig(input: ScanOptionsInput): ScanConfig {
   const { policy, actionPolicy, scanLimits, ruleset, placeholderFormatter } = input;
   if (policy !== undefined && actionPolicy !== undefined) {
     throw new TypeError("policy and actionPolicy are mutually exclusive: pass one");
@@ -220,9 +254,50 @@ export function resolveScanConfig(input: ScanOptionsInput = {}): ScanConfig {
   return Object.freeze({ options: Object.freeze(options), requested: Object.freeze(requested) });
 }
 
+/** The loose scan options a caller must not pass beside an injected `scanConfig`. */
+const CONFLICTING_OPTIONS = ["policy", "actionPolicy", "scanLimits", "ruleset", "placeholderFormatter"] as const;
+
+/**
+ * The one scan configuration `options` asks for. Without a `scanConfig` that is
+ * {@link resolveScanConfig}`(options)`. With one, the injected configuration is
+ * already bound to its policy, action policy, limits, ruleset and formatter,
+ * so any of those given beside it is a conflict, rejected here with a fixed,
+ * input-free `TypeError` (never a precedence rule, never an ignored field),
+ * and a `scanConfig` that `resolveScanConfig` did not build is rejected too,
+ * since only that function validates and snapshots. `pii` is not part of a
+ * `scanConfig`: it is the process-wide activation, checked separately.
+ */
+export function scanConfigOf(options: ScanOptionsInput & { readonly scanConfig?: ScanConfig | undefined }): ScanConfig {
+  const injected = options.scanConfig;
+  if (injected === undefined) return resolveScanConfig(options);
+  if ((options as { [BOUND_KEY]?: unknown })[BOUND_KEY] === injected) return injected;
+  if (injected === null || typeof injected !== "object" || !RESOLVED.has(injected)) {
+    throw new TypeError("scanConfig must be a value returned by resolveScanConfig");
+  }
+  if (CONFLICTING_OPTIONS.some((name) => options[name] !== undefined)) {
+    throw new TypeError(
+      "scanConfig already fixes the scan options: do not pass policy, actionPolicy, scanLimits, ruleset or placeholderFormatter with it",
+    );
+  }
+  return injected;
+}
+
+/**
+ * `options` as a copy carrying its checked {@link scanConfigOf} configuration,
+ * for a host that spreads its options before masking: the copy is not
+ * re-checked as caller input further down.
+ */
+export function bindScanConfig<T extends ScanOptionsInput & { readonly scanConfig?: ScanConfig | undefined }>(
+  options: T,
+): T & { readonly scanConfig: ScanConfig } {
+  const scanConfig = scanConfigOf(options);
+  return { ...options, scanConfig, [BOUND_KEY]: scanConfig };
+}
+
 /**
  * `options` with its scan configuration validated and snapshotted once: the
- * same object when it already carries a `scanConfig`, else a layer over it
+ * same object when it already carries a `scanConfig` (checked by
+ * {@link scanConfigOf}), else a layer over it
  * (`Object.create`, so every inherited key, `counter` and `operation` getters
  * included, is still read through) with the resolved `scanConfig` added. A
  * host that builds a masker once calls this at construction, so a malformed
@@ -231,8 +306,12 @@ export function resolveScanConfig(input: ScanOptionsInput = {}): ScanConfig {
 export function withResolvedScanConfig<T extends ScanOptionsInput & { readonly scanConfig?: ScanConfig | undefined }>(
   options: T,
 ): T & { readonly scanConfig: ScanConfig } {
+  const scanConfig = scanConfigOf(options);
   if (options.scanConfig !== undefined) return options as T & { readonly scanConfig: ScanConfig };
-  return Object.create(options, { scanConfig: { value: resolveScanConfig(options), enumerable: true } });
+  return Object.create(options, {
+    scanConfig: { value: scanConfig, enumerable: true },
+    [BOUND_KEY]: { value: scanConfig, enumerable: true },
+  });
 }
 
 /** The fixed codes {@link CoreOptionsError} carries. Input-free by construction. */

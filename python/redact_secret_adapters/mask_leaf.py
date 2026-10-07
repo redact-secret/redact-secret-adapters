@@ -16,7 +16,7 @@ from ._limit import resolve_limit
 from .budget import utf8_byte_length
 from .key_context import KeyContextFailure, scan_leaf_in_key_context
 from .outcome import OutcomeCounter
-from .scan_options import ScanConfig, resolve_scan_config
+from .scan_options import ScanConfig, scan_config_of
 
 BLOCK_MARKER = "[REDACTED:BLOCKED]"
 ERROR_MARKER = "[REDACTED:ERROR]"
@@ -136,7 +136,9 @@ def mask_leaf_outcome_with(
     whole-input limits, declarative ruleset and placeholder formatter, passed
     through (see ``scan_options.py``); ``scan_config`` is a configuration
     already validated and snapshotted by ``resolve_scan_config``, for a host
-    that masks many leaves, and wins over ``policy`` and these three.
+    that masks many leaves. It is never combined with ``policy``, ``scan_limits``,
+    ``ruleset``, ``placeholder_formatter`` or ``action_policy``: giving both is a
+    fixed ``TypeError``, not a precedence rule.
 
     ``key`` is the mapping key (or attribute name) the leaf sits directly
     under, when the host supplies one: context for detection only (see
@@ -154,11 +156,7 @@ def mask_leaf_outcome_with(
     # Validated and snapshotted once per call, or once per host when the caller
     # passes the ``scan_config`` it built. A malformed option raises here, as a
     # programming error, before any scan.
-    config = (
-        scan_config
-        if scan_config is not None
-        else resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter, action_policy)
-    )
+    config = scan_config_of(scan_config, policy, scan_limits, ruleset, placeholder_formatter, action_policy)
     limit = resolve_limit(max_string_length, DEFAULT_LIMITS["max_string_length"])
     if len(text) > limit:
         return MaskedLeaf(LIMIT_MARKER, "limited")

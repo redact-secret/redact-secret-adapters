@@ -15,7 +15,7 @@ import {
   resolveLimit,
 } from "./mask-leaf.js";
 import type { OutcomeCounter } from "./outcome.js";
-import { resolveScanConfig, type ScanConfig } from "./scan-options.js";
+import { type ScanConfig, scanConfigOf } from "./scan-options.js";
 import type { Limits, MaskOptions, ScanAndRedact } from "./types.js";
 
 export interface WalkContext {
@@ -48,7 +48,7 @@ export function resolveLimits(overrides: Partial<Limits> | undefined): Limits {
 export function createWalkContext(options: MaskOptions): WalkContext {
   const limits = resolveLimits(options.limits);
   return {
-    scanConfig: options.scanConfig ?? resolveScanConfig(options),
+    scanConfig: scanConfigOf(options),
     limits,
     budget: { leaves: limits.maxTotalLeaves, nodes: limits.maxNodes },
     operation: options.operation ?? createOperationBudget(options.operationLimits),

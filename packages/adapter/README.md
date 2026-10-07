@@ -182,6 +182,26 @@ only *warns*, which leaves the text alone, so supply a `policy` that returns
 the whole leaf; a `warn` leaves the text alone) apply on top of the action the
 policy returned and never change it.
 
+**An injected `scanConfig` replaces loose options; it never merges with them.**
+A host that builds its configuration once can pass the `scanConfig` that
+`resolveScanConfig` returned (to `maskSecretsWith`, `maskLeafWith`, `maskLogValueWith`,
+or the `scanConfig` option of the pino, OpenTelemetry trace and logs factories).
+It is already bound to its `policy`, `actionPolicy`, `scanLimits`, `ruleset` and
+`placeholderFormatter`, so giving any of those beside it is a `TypeError` with a
+fixed message (`scanConfig already fixes the scan options: ...`), raised before
+the core is loaded or any text scanned: no option wins silently and none is
+ignored. A `scanConfig` that `resolveScanConfig` did not build is rejected too.
+The factories verify the injected configuration against the installed core, the
+same way as loose options, and one resolved policy reaches every leaf and
+key-context scan. `pii` is not part of a `scanConfig` (it is the core's process-wide
+activation) and stays a separate option of the live factories. The AI-context and
+MCP boundaries do not take a whole-input `scanConfig` and reject it by name.
+This is the existing injection seam, not a core scanner handle: the published
+core exports no configuration-bound or instance-isolated scanner (core
+redact-secret/redact-secret#1222 deferred one), so two configurations in one
+process still share the core's process-wide state, and there is no per-factory
+scanner object to pass.
+
 **Snapshot and validation.** The options are validated and snapshotted once, when
 the masker, hook or processor is built (`resolveScanConfig`; per call for the
 bare `maskSecretsWith`): `scanLimits` is copied (only the two fields are read) and

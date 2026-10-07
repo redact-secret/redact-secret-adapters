@@ -50,6 +50,7 @@ export {
 } from "./outcome.js";
 export {
   type ActionPolicyInput,
+  bindScanConfig,
   CoreOptionsError,
   type CoreOptionsErrorCode,
   coreVersionAtLeast,
@@ -60,6 +61,7 @@ export {
   type ScanOptionName,
   type ScanOptionsCore,
   type ScanOptionsInput,
+  scanConfigOf,
   verifyScanOptions,
   withResolvedScanConfig,
 } from "./scan-options.js";

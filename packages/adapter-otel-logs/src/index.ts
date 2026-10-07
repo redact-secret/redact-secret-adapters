@@ -27,7 +27,7 @@
  */
 
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
-import { activateCore, type CoreActivation, resolveScanConfig, verifyScanOptions } from "@redact-secret/adapter";
+import { activateCore, type CoreActivation, scanConfigOf, verifyScanOptions } from "@redact-secret/adapter";
 
 import { type RedactingLogRecordProcessorOptions, RedactingLogRecordProcessorWith } from "./log-record-processor.js";
 
@@ -61,7 +61,7 @@ export async function createRedactingLogRecordProcessor(
   // Validated before the core is touched; then the installed core must honor
   // any requested scan option (`actionPolicy` included) or this rejects with a
   // fixed, input-free `CoreOptionsError` rather than ignore it.
-  const config = resolveScanConfig(options);
+  const config = scanConfigOf(options);
   const loaded = await import("@redact-secret/core");
   await activateCore(loaded, activation);
   verifyScanOptions(loaded, config);

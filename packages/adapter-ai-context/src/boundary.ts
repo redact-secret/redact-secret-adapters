@@ -282,8 +282,10 @@ function validateOptions(options: AiContextBoundaryOptions): void {
   // Named, not ignored (redact-secret/redact-secret-adapters#175): the core has
   // no ruleset for an incremental session, so one boundary cannot offer it on
   // `sanitizeText` and not on `openStream`; and its whole-input limits are
-  // `wholeInputLimits` here, beside `incrementalLimits`.
-  for (const name of ["ruleset", "scanLimits"] as const) {
+  // `wholeInputLimits` here, beside `incrementalLimits`. A whole-input
+  // `scanConfig` (resolveScanConfig) is likewise not an incremental-session
+  // configuration: the boundary resolves its own from `policy`/`actionPolicy`.
+  for (const name of ["ruleset", "scanLimits", "scanConfig"] as const) {
     if (name in options) {
       throw new TypeError(`createAiContextBoundary: ${name} is not supported by the AI-context boundary`);
     }

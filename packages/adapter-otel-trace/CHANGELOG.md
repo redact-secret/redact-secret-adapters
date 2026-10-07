@@ -25,6 +25,10 @@ version numbers start again here, at `0.1.0`, and do not follow the old name's.
 
 ## [Unreleased]
 
+### Changed
+
+- `createRedactingSpanProcessor`: an injected `scanConfig` beside any loose scan option (`policy`, `actionPolicy`, `scanLimits`, `ruleset`, `placeholderFormatter`) is rejected with a fixed `TypeError` before the core is loaded, instead of the config silently winning; the injected configuration is the one verified against the core (redact-secret-adapters#213). Needs `@redact-secret/adapter` with `scanConfigOf`. Test: `test/injected-scan-config-live.test.ts`.
+
 ### Added
 
 - `actionPolicy` on `createRedactingSpanProcessor`, applied to every string of a span (name, attributes, events, links), with the shared snapshot, callback-conflict and capability checks of `@redact-secret/adapter` (redact-secret-adapters#217). Needs `@redact-secret/core` 0.1.0-beta.14 or later (the first published release that accepts it); an older core is rejected by name with `CoreOptionsError` (`CORE_OPTION_UNSUPPORTED`) and every other option keeps working on the declared floor. The package range is unchanged; the new tests in `compatibility.json` run at both endpoints (the option applies at the upper one, is rejected at the lower one). Test: `test/action-policy-live.test.ts` (the exported span for each action).

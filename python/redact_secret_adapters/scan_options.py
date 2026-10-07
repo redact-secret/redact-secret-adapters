@@ -101,6 +101,37 @@ class ScanConfig:
 _EMPTY = ScanConfig()
 
 
+def scan_config_of(
+    scan_config: Optional[ScanConfig],
+    policy: Optional[Any] = None,
+    scan_limits: Optional[Any] = None,
+    ruleset: Optional[Any] = None,
+    placeholder_formatter: Optional[Callable[..., Any]] = None,
+    action_policy: Optional[Any] = None,
+    *,
+    limits_type: Optional[Callable[..., Any]] = None,
+) -> ScanConfig:
+    """The one scan configuration a caller asks for. Without ``scan_config`` that
+    is :func:`resolve_scan_config` of the loose options. An injected
+    ``scan_config`` is already bound to its policy, action policy, limits,
+    ruleset and formatter, so any of those given beside it is a conflict,
+    rejected with a fixed, input-free ``TypeError``: never a precedence rule and
+    never an ignored argument. ``pii`` is not part of a ``ScanConfig``; it is the
+    process-wide activation, checked separately."""
+    if scan_config is None:
+        return resolve_scan_config(
+            policy, scan_limits, ruleset, placeholder_formatter, action_policy, limits_type=limits_type
+        )
+    if not isinstance(scan_config, ScanConfig):
+        raise TypeError("scan_config must be a value returned by resolve_scan_config")
+    if any(v is not None for v in (policy, scan_limits, ruleset, placeholder_formatter, action_policy)):
+        raise TypeError(
+            "scan_config already fixes the scan options: do not pass policy, action_policy, "
+            "scan_limits, ruleset or placeholder_formatter with it"
+        )
+    return scan_config
+
+
 def _is_count(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 

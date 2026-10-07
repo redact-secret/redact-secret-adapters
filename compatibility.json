@@ -69,7 +69,8 @@
         "packages/adapter-pino/test/budget.test.ts",
         "packages/adapter-pino/test/line-limits.test.ts",
         "packages/adapter-pino/test/scan-options-live.test.ts",
-        "packages/adapter-pino/test/action-policy-live.test.ts"
+        "packages/adapter-pino/test/action-policy-live.test.ts",
+        "packages/adapter-pino/test/injected-scan-config-live.test.ts"
       ]
     },
     {
@@ -110,7 +111,8 @@
         "packages/adapter-otel-trace/test/key-context-live.test.ts",
         "packages/adapter-otel-trace/test/budget.test.ts",
         "packages/adapter-otel-trace/test/scan-options-live.test.ts",
-        "packages/adapter-otel-trace/test/action-policy-live.test.ts"
+        "packages/adapter-otel-trace/test/action-policy-live.test.ts",
+        "packages/adapter-otel-trace/test/injected-scan-config-live.test.ts"
       ]
     },
     {
@@ -183,7 +185,8 @@
         "packages/adapter-otel-logs/test/log-record-processor.test.ts",
         "packages/adapter-otel-logs/test/pii-live.test.ts",
         "packages/adapter-otel-logs/test/pii-activation.test.ts",
-        "packages/adapter-otel-logs/test/action-policy-live.test.ts"
+        "packages/adapter-otel-logs/test/action-policy-live.test.ts",
+        "packages/adapter-otel-logs/test/injected-scan-config-live.test.ts"
       ]
     },
     {
@@ -278,7 +281,8 @@
         "packages/adapter/test/activation-live.test.ts",
         "packages/adapter-mcp/test/budget.test.ts",
         "packages/adapter-mcp/test/occurrence.test.ts",
-        "packages/adapter-mcp/test/action-policy-live.test.ts"
+        "packages/adapter-mcp/test/action-policy-live.test.ts",
+        "packages/adapter-mcp/test/injected-scan-config.test.ts"
       ]
     },
     {

@@ -56,7 +56,7 @@ from ._activation import resolve_live_scan_and_redact
 from .budget import OperationBudget
 from .mask_leaf import ERROR_MARKER, LIMIT_MARKER, count_leaf, mask_leaf_outcome_with
 from .outcome import OutcomeCounter, SpanOutcome, ValueCounts, notify
-from .scan_options import ScanConfig, resolve_scan_config, verify_scan_options
+from .scan_options import ScanConfig, resolve_scan_config, scan_config_of, verify_scan_options
 
 __all__ = ["RedactingSpanProcessorWith", "create_redacting_span_processor", "redact_attributes_with"]
 
@@ -77,7 +77,6 @@ def _mask_attribute_value(
         leaf = mask_leaf_outcome_with(
             scan_and_redact,
             text,
-            policy=policy,
             max_string_length=max_string_length,
             key=text_key,
             budget=budget,
@@ -214,12 +213,11 @@ class RedactingSpanProcessorWith:
         self._policy = policy
         # The core's whole-input limits, ruleset and placeholder formatter,
         # validated and snapshotted once (see ``scan_options.py``). A
-        # ``scan_config`` built by the live factory wins.
-        self._config = (
-            scan_config
-            if scan_config is not None
-            else resolve_scan_config(policy, scan_limits, ruleset, placeholder_formatter, action_policy)
-        )
+        # ``scan_config`` built by the live factory is used as given and is rejected
+        # beside any loose scan option.
+        self._config = scan_config_of(scan_config, policy, scan_limits, ruleset, placeholder_formatter, action_policy)
+        # The one resolved policy, whichever way it arrived: every pass reads it from here.
+        self._policy = self._config.policy
         self._limits = limits
         # The aggregate budget of one span (see ``budget.py``), shared by its
         # name, every attribute, event and link, and its status. Each span gets
@@ -420,7 +418,6 @@ def create_redacting_span_processor(
     return RedactingSpanProcessorWith(
         next_processor,
         scan_and_redact,
-        policy=policy,
         limits=limits,
         operation_limits=operation_limits,
         scan_config=config,

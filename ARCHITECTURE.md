@@ -91,6 +91,22 @@ version. An empty-text option probe shows the option is accepted, not that a
 policy decides correctly: decisions are asserted per host in the `action-policy`
 tests against the real core.
 
+**Injected configuration (#213).** A host that builds its configuration once
+passes the `scanConfig` (Python: `scan_config`) that `resolveScanConfig` returned.
+It is already bound to its `policy`, `actionPolicy`, `scanLimits`, `ruleset` and
+`placeholderFormatter`, so any of those beside it is a fixed, input-free
+`TypeError` before the core is loaded or anything is scanned: there is no
+precedence rule and no ignored field (`scanConfigOf`; Python `scan_config_of`).
+A `scanConfig` not built by `resolveScanConfig` is rejected, the live factories
+verify the injected configuration rather than the loose options beside it, and
+`adapter-ai-context` and `adapter-mcp` reject a whole-input `scanConfig` by name.
+`pii` is the core's process-wide activation, not part of a `scanConfig`. This is
+the existing L0 seam only: the published core (0.1.0-beta.14) exports no
+configuration-bound or instance-isolated scanner, core #1222 deferred one, and
+the adapters do not wrap the one process-wide core to pretend to. The Python live
+factories (`RedactSecretFilter`, `create_redacting_span_processor`) take the loose
+options only; `scan_config` is accepted by the injected `...With` APIs.
+
 **The one exception: `@redact-secret/adapter-ai-context`.** The core's
 [AI-context boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/ai-context-boundary.md)
 (redact-secret/redact-secret#610) deliberately widens the surface for that
