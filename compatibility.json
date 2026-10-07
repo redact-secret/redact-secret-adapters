@@ -70,6 +70,7 @@
         "packages/adapter-pino/test/line-limits.test.ts",
         "packages/adapter-pino/test/scan-options-live.test.ts",
         "packages/adapter-pino/test/action-policy-live.test.ts",
+        "packages/adapter-pino/test/policy-overlays-live.test.ts",
         "packages/adapter-pino/test/injected-scan-config-live.test.ts"
       ]
     },
@@ -224,7 +225,9 @@
         "packages/adapter-ai-context/test/occurrence.test.ts",
         "packages/adapter-ai-context/test/occurrence-live.test.ts",
         "packages/adapter-ai-context/test/action-policy.test.ts",
-        "packages/adapter-ai-context/test/action-policy-live.test.ts"
+        "packages/adapter-ai-context/test/action-policy-live.test.ts",
+        "packages/adapter-ai-context/test/policy-overlays-live.test.ts",
+        "packages/adapter-ai-context/test/policy-overlays-pii-live.test.ts"
       ]
     },
     {
@@ -282,6 +285,7 @@
         "packages/adapter-mcp/test/budget.test.ts",
         "packages/adapter-mcp/test/occurrence.test.ts",
         "packages/adapter-mcp/test/action-policy-live.test.ts",
+        "packages/adapter-mcp/test/policy-overlays-live.test.ts",
         "packages/adapter-mcp/test/injected-scan-config.test.ts"
       ]
     },

@@ -243,3 +243,5 @@ serialization of it or of the wire result contains the credential.
   does with an action.
 - **A destination or transport that adds text after the adapter,** and any
   placement outside the boundary. See each package guide.
+
+For how a one-rule override, a full callback replacement and PII on or off combine, with exact host output, see [policy-overlays.md](./policy-overlays.md).
