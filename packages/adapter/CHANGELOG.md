@@ -19,6 +19,10 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+### Changed
+
+- **Behavior change:** an injected `scanConfig` beside `policy`, `actionPolicy`, `scanLimits`, `ruleset` or `placeholderFormatter` is now a fixed, input-free `TypeError` before the core is loaded or any scan (redact-secret-adapters#213). Before, the config silently won and the loose options were ignored. A `scanConfig` that `resolveScanConfig` did not build is rejected too. New `scanConfigOf` and `bindScanConfig`. The live factories now verify the injected configuration against the installed core (before, only the loose options beside it were checked, so an injected `ruleset` or `actionPolicy` on an older core was not refused). No core scanner handle is used or required: the published core has none (core #1222). Tests: `test/scan-options.test.ts`, `test/live.test.ts`.
+
 ### Added
 
 - `actionPolicy` in `ScanOptionsInput` / `resolveScanConfig`, so `createMaskSecrets`, `maskSecretsWith`, `maskLogValueWith` and `maskLeafWith` pass the core's declarative action policy (object, UTF-8 JSON text or bytes) through intact on every scan (redact-secret-adapters#217). Snapshotted once (an object is serialized once, bytes are copied); mutually exclusive with a callback `policy` (a `TypeError` before the core is loaded); the adapter neither parses nor evaluates it. `SCAN_OPTION_CORE_FLOORS.actionPolicy` is `0.1.0-beta.14`; `verifyScanOptions` rejects an older core by name and reports a refused document as `CORE_OPTION_REJECTED` with `coreCode: "INVALID_ACTION_POLICY"`, never the document or the core's message. Needs `@redact-secret/core` 0.1.0-beta.14 or later (the first published release that accepts it); an older core is rejected by name with `CoreOptionsError` (`CORE_OPTION_UNSUPPORTED`) and every other option keeps working on the declared floor. The package range is unchanged; the new tests in `compatibility.json` run at both endpoints (the option applies at the upper one, is rejected at the lower one). Tests: `test/action-policy.test.ts`, `test/action-policy-live.test.ts`.

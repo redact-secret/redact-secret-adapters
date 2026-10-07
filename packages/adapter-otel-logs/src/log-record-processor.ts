@@ -32,6 +32,7 @@
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 import type { Limits, MaskLeafOptions, OutcomeCounter, ScanAndRedact, ValueCounts } from "@redact-secret/adapter";
 import {
+  bindScanConfig,
   CYCLE_MARKER,
   countLeaf,
   createOutcomeCounter,
@@ -40,7 +41,6 @@ import {
   LIMIT_MARKER,
   maskLeafOutcomeWith,
   notify,
-  resolveScanConfig,
   toValueCounts,
 } from "@redact-secret/adapter";
 
@@ -377,7 +377,7 @@ export class RedactingLogRecordProcessorWith implements LogRecordProcessor {
     this.#scanAndRedact = scanAndRedact;
     // Validated and snapshotted once, here: every scan of every record uses
     // this one `scanConfig` (policy, actionPolicy, limits, ruleset, formatter).
-    this.#maskOptions = { ...maskOptions, scanConfig: maskOptions.scanConfig ?? resolveScanConfig(maskOptions) };
+    this.#maskOptions = bindScanConfig(maskOptions);
     // The top-level `maxStringLength` is the shared adapter option and wins over `limits.maxStringLength`.
     this.#limits = resolveLimits(
       maskOptions.maxStringLength === undefined ? limits : { ...limits, maxStringLength: maskOptions.maxStringLength },

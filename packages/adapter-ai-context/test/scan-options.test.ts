@@ -32,3 +32,17 @@ test("the options it does take are unchanged: wholeInputLimits, incrementalLimit
   const { core } = createFakeCore();
   expect(() => createAiContextBoundaryWith(core, { ...LIMITS, placeholderFormatter: () => "[x]" })).not.toThrow();
 });
+
+test("an injected scanConfig is an unsupported surface: rejected by name, fixed message, on every entry point", async () => {
+  const { resolveScanConfig } = await import("@redact-secret/adapter");
+  const scanConfig = resolveScanConfig({ actionPolicy: '{"version":1,"rules":[]}' });
+  const { core } = createFakeCore();
+  expect(() => createAiContextBoundaryWith(core, { ...LIMITS, scanConfig } as never)).toThrow(
+    "createAiContextBoundary: scanConfig is not supported by the AI-context boundary",
+  );
+  await expect(createAiContextBoundary({ scanConfig } as never)).rejects.toThrow(
+    "scanConfig is not supported by the AI-context boundary",
+  );
+  const layered = Object.create({ scanConfig }) as object;
+  expect(() => createAiContextBoundaryWith(core, withDefaultLimits(layered as never))).toThrow(TypeError);
+});

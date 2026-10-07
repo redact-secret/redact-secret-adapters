@@ -11,6 +11,7 @@ import { expect, test } from "vitest";
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
 import { keyAwareScanner } from "../../../fixtures/key-aware-scanner.js";
 import {
+  bindScanConfig,
   CoreOptionsError,
   coreVersionAtLeast,
   maskLeafOutcomeWith,
@@ -18,6 +19,7 @@ import {
   resolveScanConfig,
   SCAN_OPTION_CORE_FLOORS,
   type ScanAndRedact,
+  scanConfigOf,
   verifyScanOptions,
   withResolvedScanConfig,
 } from "../src/index.js";
@@ -115,12 +117,11 @@ test("a malformed option throws at construction of the masker, before any scan",
   expect(calls).toEqual([]);
 });
 
-test("policy precedence: the caller's policy is passed unchanged and replaces the core's; scanConfig wins over loose options", () => {
+test("policy precedence: the caller's policy is passed unchanged and replaces the core's", () => {
   const { scan, calls } = recording();
   const policy = { evaluate: () => "block" as const };
-  const other = { evaluate: () => "warn" as const };
   const config = resolveScanConfig({ policy, ruleset: "r" });
-  maskLeafOutcomeWith(scan, "x", { policy: other, ruleset: "ignored", scanConfig: config });
+  maskLeafOutcomeWith(scan, "x", { scanConfig: config });
   expect(calls[0]?.options?.policy).toBe(policy);
   expect(calls[0]?.options?.ruleset).toBe("r");
 });
@@ -218,4 +219,88 @@ test("verifyScanOptions probes with the empty text and the snapshot it will scan
   expect(calls).toHaveLength(1);
   expect(calls[0]?.options).toBe(config.options);
   expect(calls[0]?.text).toBe("");
+});
+
+const CONFLICTS: Readonly<Record<string, object>> = {
+  policy: { policy: { evaluate: () => "warn" as const } },
+  actionPolicy: { actionPolicy: '{"version":1,"rules":[]}' },
+  scanLimits: { scanLimits: LIMITS },
+  ruleset: { ruleset: "r" },
+  placeholderFormatter: { placeholderFormatter: () => "[x]" },
+};
+
+test("an injected scanConfig beside any loose scan option is rejected, never merged or ignored", () => {
+  const config = resolveScanConfig({ ruleset: "injected" });
+  for (const [name, option] of Object.entries(CONFLICTS)) {
+    const { scan, calls } = recording();
+    const options = { scanConfig: config, ...option };
+    for (const run of [
+      () => maskLeafOutcomeWith(scan, "x", options),
+      () => maskSecretsWith(scan, { a: "x" }, options),
+      () => withResolvedScanConfig(options),
+      () => scanConfigOf(options),
+      () => bindScanConfig(options),
+    ]) {
+      expect(run, name).toThrow(TypeError);
+      expect(run, name).toThrow("scanConfig already fixes the scan options");
+    }
+    expect(calls, name).toEqual([]);
+  }
+});
+
+test("a conflict inherited through a prototype is rejected as well", () => {
+  const config = resolveScanConfig({});
+  const layered = Object.create({ ruleset: "r" }, { scanConfig: { value: config, enumerable: true } });
+  expect(() => scanConfigOf(layered)).toThrow("scanConfig already fixes");
+});
+
+test("a scanConfig that resolveScanConfig did not build is rejected", () => {
+  const forged = { options: { policy: undefined, ruleset: "forged" }, requested: [] };
+  expect(() => scanConfigOf({ scanConfig: forged as never })).toThrow("returned by resolveScanConfig");
+  expect(() => scanConfigOf({ scanConfig: null as never })).toThrow(TypeError);
+});
+
+test("options bound by the adapter carry their config through spreads and layers without a false conflict", () => {
+  const { scan, calls } = recording();
+  const policy = { evaluate: () => "block" as const };
+  const bound = bindScanConfig({ policy, ruleset: "r" });
+  expect(scanConfigOf({ ...bound })).toBe(bound.scanConfig);
+  expect(scanConfigOf(Object.create(bound))).toBe(bound.scanConfig);
+  maskSecretsWith(scan, { a: "x" }, bound);
+  expect(calls[0]?.options?.policy).toBe(policy);
+  // A spread that replaces the config is checked again.
+  expect(() => scanConfigOf({ ...bound, scanConfig: resolveScanConfig({}) })).toThrow("scanConfig already fixes");
+});
+
+test("the one resolved config reaches every pass: leaf and key-context views", () => {
+  const { scan, calls } = recording();
+  const policy = { evaluate: () => "warn" as const };
+  const config = resolveScanConfig({ policy, ruleset: "r" });
+  maskSecretsWith(scan, { password: "synthetic-example-value-0001", note: "x" }, { scanConfig: config });
+  expect(calls.length).toBeGreaterThan(1);
+  for (const call of calls) {
+    expect(call.options?.policy).toBe(policy);
+    expect(call.options?.ruleset).toBe("r");
+  }
+});
+
+test("a scanConfig's binary ruleset and limits stay snapshotted; callbacks are held by reference", () => {
+  const bytes = new TextEncoder().encode("ruleset");
+  const limits = { maxInputBytes: 10, maxFindings: 2 };
+  const policy = { evaluate: () => "warn" as const };
+  const config = resolveScanConfig({ ruleset: bytes, scanLimits: limits, policy });
+  bytes[0] = 0;
+  limits.maxInputBytes = 99;
+  expect(new TextDecoder().decode(config.options.ruleset as Uint8Array)).toBe("ruleset");
+  expect(config.options.limits).toEqual({ maxInputBytes: 10, maxFindings: 2 });
+  expect(config.options.policy).toBe(policy);
+});
+
+test("an injected scanConfig's options are verified on an older core, by name, before any use", () => {
+  const { scan } = recording();
+  const config = resolveScanConfig({ actionPolicy: '{"version":1,"rules":[]}' });
+  expect(() => verifyScanOptions({ scanAndRedact: scan, VERSION: "0.1.0-beta.13" }, config)).toThrow(CoreOptionsError);
+  expect(() =>
+    verifyScanOptions({ scanAndRedact: scan, VERSION: "0.1.0-beta.6" }, resolveScanConfig({})),
+  ).not.toThrow();
 });

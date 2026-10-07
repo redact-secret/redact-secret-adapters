@@ -113,12 +113,40 @@ def test_a_malformed_option_raises_at_construction_before_any_scan() -> None:
     assert scan.calls == []
 
 
-def test_scan_config_wins_over_loose_options_and_the_policy_is_passed_unchanged() -> None:
+def test_scan_config_is_passed_unchanged() -> None:
     scan = Recording()
-    policy, other = object(), object()
+    policy = object()
     config = resolve_scan_config(policy, None, "r")
-    mask_leaf_outcome_with(scan, "x", policy=other, ruleset="ignored", scan_config=config)
+    mask_leaf_outcome_with(scan, "x", scan_config=config)
     assert scan.calls[0] == ("x", (policy,), {"ruleset": "r"})
+
+
+_CONFLICTS = {
+    "policy": object(),
+    "action_policy": '{"version":1,"rules":[]}',
+    "scan_limits": LIMITS,
+    "ruleset": "r",
+    "placeholder_formatter": _formatter,
+}
+
+
+@pytest.mark.parametrize("name", sorted(_CONFLICTS))
+def test_scan_config_beside_a_loose_option_is_rejected_before_any_scan(name: str) -> None:
+    scan = Recording()
+    config = resolve_scan_config(None, None, "r")
+    with pytest.raises(TypeError, match="scan_config already fixes the scan options"):
+        mask_leaf_outcome_with(scan, "x", scan_config=config, **{name: _CONFLICTS[name]})
+    assert scan.calls == []
+    with pytest.raises(TypeError, match="scan_config already fixes the scan options"):
+        RedactingSpanProcessorWith(_Next(), scan, scan_config=config, **{name: _CONFLICTS[name]})
+    assert scan.calls == []
+
+
+def test_a_scan_config_that_resolve_scan_config_did_not_build_is_rejected() -> None:
+    scan = Recording()
+    with pytest.raises(TypeError, match="returned by resolve_scan_config"):
+        mask_leaf_outcome_with(scan, "x", scan_config={"policy": None})  # type: ignore[arg-type]
+    assert scan.calls == []
 
 
 def test_every_adapter_entry_point_passes_the_options() -> None:

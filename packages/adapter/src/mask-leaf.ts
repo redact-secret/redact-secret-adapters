@@ -10,7 +10,7 @@ import { utf8ByteLength } from "./budget.js";
 import { type KeyContextScanned, scanLeafInKeyContext } from "./key-context.js";
 import { resolveLimit } from "./limit.js";
 import type { LeafOutcome, OutcomeCounter } from "./outcome.js";
-import { resolveScanConfig } from "./scan-options.js";
+import { scanConfigOf } from "./scan-options.js";
 import type { Limits, MaskLeafOptions, ScanAndRedact } from "./types.js";
 
 export const BLOCK_MARKER = "[REDACTED:BLOCKED]";
@@ -89,7 +89,7 @@ export function maskLeafOutcomeWith(
   // Validated and snapshotted once per call, or once per host when the caller
   // passes the `scanConfig` it built (see `./scan-options.ts`). A malformed
   // option throws here, as a programming error, before any scan.
-  const scanOptions = (options.scanConfig ?? resolveScanConfig(options)).options;
+  const scanOptions = scanConfigOf(options).options;
   if (text.length > resolveLimit(maxStringLength, DEFAULT_LIMITS.maxStringLength)) {
     return { text: LIMIT_MARKER, outcome: "limited", findings: 0 };
   }

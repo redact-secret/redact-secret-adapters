@@ -36,10 +36,10 @@
 import type { MaskOptions, OperationBudget, OutcomeCounter, ScanAndRedact, ValueCounts } from "@redact-secret/adapter";
 import {
   addCounts,
+  bindScanConfig,
   createOperationBudget,
   createOutcomeCounter,
   notify,
-  resolveScanConfig,
   toValueCounts,
 } from "@redact-secret/adapter";
 import type { LogFn, Logger } from "pino";
@@ -371,7 +371,7 @@ export function createRedactingHooksWith(
   // Validated and snapshotted once, here, and shared by both hooks: a malformed
   // scan option is a programming error at construction, and every leaf of
   // every record is scanned with the one snapshot.
-  const maskOptions = { ...rawOptions, scanConfig: rawOptions.scanConfig ?? resolveScanConfig(rawOptions) };
+  const maskOptions = bindScanConfig(rawOptions);
   const forwarded: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(hooks ?? {})) {
     if (!(COMPOSED_KEYS as readonly string[]).includes(key)) forwarded[key] = value;
