@@ -9,7 +9,7 @@ sections are all you need for a first change.
 
 ## 1. Set up (about two minutes)
 
-You need [Node.js](https://nodejs.org/) 20, 22 or 24 and git. Python 3.10 or
+You need [Node.js](https://nodejs.org/) 22 or 24 and git. Python 3.10 or
 later is needed only if you touch the Python package.
 
 ```sh
@@ -38,7 +38,7 @@ packages/
   adapter-pino/         pino hooks
   adapter-otel-trace/   OpenTelemetry JS span processor
   adapter-otel/         deprecated name, re-exports adapter-otel-trace
-  adapter-otel-logs/    OpenTelemetry JS log record processor (0.1.0-beta.2)
+  adapter-otel-logs/    OpenTelemetry JS log record processor (0.1.0-beta.5)
   adapter-ai-context/   AI-context boundary
   adapter-mcp/          MCP boundary, built on adapter-ai-context
 python/                 the PyPI package: logging filter, OpenTelemetry, walker
@@ -253,7 +253,7 @@ npx stryker run --mutate 'packages/adapter/src/walk.ts' --concurrency 2
   does not provide, so mutants that would not type-check still run (Vitest
   strips types) instead of being skipped.
 - `@stryker-mutator/core` 10.0.0 pins `typed-rest-client`, which pins a `qs`
-  version with two moderate advisories. They appear in `npm audit` but not in
+  version with moderate advisories. They appear in `npm audit` but not in
   `npm audit --omit=dev`: the dependency is dev-only and never ships.
 
 ## Static analysis and dependencies

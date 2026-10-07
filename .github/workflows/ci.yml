@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ["20", "22", "24"]
+        node: ["22", "24"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -139,10 +139,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run smoke-test
-      # adapter-otel-logs (#178) depends on an `adapter` (^0.1.7) the registry
-      # does not have until the next train, so its tarball and README example
-      # are checked from a clean install at both ends of the
-      # sdk-logs range here, outside the checkout.
+      # adapter-otel-logs (#178): its tarball and README example are checked
+      # from a clean install at both ends of the sdk-logs range here, outside
+      # the checkout.
       - run: npm run smoke-test:otel-logs -- highest
       - run: npm run smoke-test:otel-logs -- lowest
       # #179: the Node WASM fallback, proven by core.artifact() in a clean
@@ -292,7 +291,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ["20", "22", "24"]
+        node: ["22", "24"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

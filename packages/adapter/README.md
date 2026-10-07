@@ -28,7 +28,7 @@ It contains no detection. The core does that.
 npm install @redact-secret/core @redact-secret/adapter
 ```
 
-Needs Node.js 20, 22 or 24. ESM only. `@redact-secret/core` is a required peer:
+Needs Node.js 22 or 24. ESM only. `@redact-secret/core` is a required peer:
 the one copy your application installs.
 
 ## Quick start

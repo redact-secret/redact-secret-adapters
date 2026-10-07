@@ -92,3 +92,12 @@ Wiring it in later follows `RELEASING.md § A brand-new npm package`: drop
 `"private"`, add the `PACKAGES` entry, the publish job, rehearsal dry run, tag
 and report rows and release notes, and publish `0.1.0` by hand once. None of
 that is done by this change.
+
+## Status update (2026-10-07)
+
+The decision stands. "Lands on `develop` unreleased" and the plan to publish
+`0.1.0` by hand are superseded: the package is wired into the release plan and
+is on npm under the dist-tag `beta`. Its first version was `0.1.0-beta.2`
+(published by hand); the current one is `0.1.0-beta.4`, which requires
+`@redact-secret/adapter` `^0.1.9`, not the `^0.1.7` named above. See
+[RELEASING.md](../../RELEASING.md#a-brand-new-npm-package).

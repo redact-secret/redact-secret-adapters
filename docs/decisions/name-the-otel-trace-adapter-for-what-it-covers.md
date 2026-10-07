@@ -10,7 +10,7 @@ issue: redact-secret/redact-secret-adapters#49
 
 This repository had no decision records before this one. It follows the
 convention of the core repository's `docs/decisions/`: one file per decision,
-named `YYYY-MM-DD-<slug>.md`, with the front matter above.
+named `<slug>.md` (the date lives in `decided_at` in the front matter, not in the file name), with the front matter above.
 
 ## Decision
 
@@ -135,3 +135,12 @@ re-export of byte-identical behavior.
 - Removing `@redact-secret/adapter-otel` altogether is not part of this
   decision. It stays published and resolvable; retiring it would be a separate
   decision with its own notice period.
+
+## Status update (2026-10-07)
+
+The decision stands. The statements above about "lands unreleased", the shim
+"staying at `0.1.2`" and the site feed listing no sibling are as of 2026-09-30
+and are superseded: `adapter-otel-trace` is on npm (`0.1.4`), `adapter-otel`
+re-exports it (`0.1.7`) with the registry deprecation in place, and
+`@redact-secret/adapter-otel-logs` is no longer only a reserved design topic;
+see [the OpenTelemetry Logs decision](./otel-logs-adapter-design-and-sdk-probe.md).

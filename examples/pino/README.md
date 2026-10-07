@@ -3,8 +3,8 @@
 Keeps a synthetic token out of a [pino](https://github.com/pinojs/pino) log line.
 No model, exporter, account or key is involved.
 
-- Runtime: Node.js 20, 22 or 24 (ESM).
-- Installs: `@redact-secret/adapter-pino` 0.1.3, `@redact-secret/core` 0.1.0-beta.12, `pino` 10.3.1.
+- Runtime: Node.js 22 or 24 (ESM).
+- Installs: `@redact-secret/adapter-pino` 0.1.6, `@redact-secret/core` 0.1.0-beta.14, `pino` 10.3.1.
 - Files: `app.mjs` is the whole quickstart. `check.mjs` runs it and checks the bytes it wrote.
 
 ## Run it

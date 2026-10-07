@@ -18,9 +18,12 @@ these checks pin what each adapter does with the core's answer.
 | `callback-token-only` | `policy` that only handles `github_token` and returns `allow` otherwise | none: it allows what the default would block |
 
 Declarative `actionPolicy` needs core `0.1.0-beta.14` or later and an adapter
-build that has it (this repository's `develop` at the commit recorded below; it
-is **not** in the released adapters yet, so it is revision-bound evidence, not a
-published-version claim). A callback `policy` works on every supported core.
+release that has it: `@redact-secret/adapter` 0.1.9, `adapter-pino` 0.1.6,
+`adapter-otel-trace` 0.1.4, `adapter-otel-logs` 0.1.0-beta.4,
+`adapter-ai-context` 0.1.5, `adapter-mcp` 0.1.6 and `redact-secret-adapters`
+0.1.6 (PyPI). The evidence record below is revision-bound: it was run on a
+workspace build before those releases, not on the published tarballs. A callback
+`policy` works on every supported core.
 `actionPolicy` and `policy` together are rejected before anything is scanned
 (`policy and actionPolicy are mutually exclusive`).
 
@@ -103,12 +106,13 @@ a fixed `blocked` outcome, never a partial release.
 
 ## What is not covered
 
-- The released adapter packages do not support `actionPolicy`; no published-adapter
-  evidence exists for the overlays that use it. A callback `policy` overlay is
-  expected to behave the same on released adapters, but that was not run here.
+- The released adapter packages support `actionPolicy`, but the overlay tests
+  here ran on a workspace build, not on the published tarballs, so no
+  published-adapter evidence exists for these overlays; CI does run the new files
+  at the declared core endpoints (see `qualifiedBy` in `compatibility.json`).
 - Python: this change adds no Python recipe test; Python `action_policy` has its own
   tests from #217.
-- Docker testbed (`npm run testbed`): **not extended and not run** for this change. The overlay evidence is vitest against the real core in this checkout, not a clean-install consumer run, so it is revision-bound candidate evidence only. A clean-install overlay scenario (and a published-adapter one once `actionPolicy` ships) is deferred; until then nothing here claims clean-install, Docker or browser coverage of the overlays.
+- Docker testbed (`npm run testbed`): **not extended and not run** for this change. The overlay evidence is vitest against the real core in this checkout, not a clean-install consumer run, so it is revision-bound candidate evidence only. A clean-install overlay scenario (and a published-adapter one) is deferred; until then nothing here claims clean-install, Docker or browser coverage of the overlays.
 - Detection quality (what is a secret or PII, at which confidence) is the core's.
   An empty-input construction probe is **not** evidence that a callback or action
   works; none of the checks above relies on one.

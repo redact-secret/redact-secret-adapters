@@ -62,3 +62,12 @@ output changes.
 - `packages/*/test/action-semantics-live.test.ts` and
   `fixtures/action-semantics.ts`, run on `@redact-secret/core`
   `0.1.0-beta.13`.
+
+## Status update (2026-10-07)
+
+The decision stands. "The declarative overlay is **planned**" is superseded:
+core `0.1.0-beta.14` accepts a declarative `actionPolicy`, and the adapters pass
+it through unchanged in their 2026-10-07 releases (redact-secret-adapters#217).
+It changes which action a finding gets, not what a boundary does with it, so the
+tables in [action-semantics.md](../action-semantics.md) apply to it as written.
+See [policy-overlays.md](../policy-overlays.md).

@@ -7,7 +7,7 @@ are deliberately unprotected, which the verifier must flag. If it ever reports a
 protected, the verifier is broken.
 
 - Runtime: Python 3.10 or later.
-- Installs: `redact-secret-adapters[otel]` 0.1.3, `redact-secret` 0.1.0b12 (a beta, pinned exactly), `opentelemetry-sdk` 1.45.0.
+- Installs: `redact-secret-adapters[otel]` 0.1.6, `redact-secret` 0.1.0b14 (a beta, pinned exactly), `opentelemetry-sdk` 1.45.0.
 - Everything stays in memory. Nothing contacts a collector, a log service or a production endpoint.
 
 ## Run it

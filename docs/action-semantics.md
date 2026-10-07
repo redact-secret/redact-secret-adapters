@@ -42,7 +42,7 @@ the real published core, with the exact host output spelled out
 | Why | A log line with one masked field is still useful and safe to write | A model context that is partly masked is not safe to use |
 
 Neither family is a unified result type, on purpose
-([decision](./decisions/2026-10-06-document-action-semantics-instead-of-a-unified-result.md)).
+([decision](./decisions/document-action-semantics-instead-of-a-unified-result.md)).
 
 ## Truth table: logging and tracing
 
@@ -194,23 +194,12 @@ option and report through `onOutcome`.
 
 ## The declarative overlay
 
-> **Planned. Not available, and not claimed here.**
-
-A declarative overlay over the core's action policy and a way to compare two
-action policies are being designed in the core repository
-([redact-secret/redact-secret#1216](https://github.com/redact-secret/redact-secret/issues/1216)).
-Neither is in a released core, so nothing in this repository reads, passes or
-depends on them, and the callback `policy` above remains the only policy surface
-these packages support.
-
-When a core release ships it, the adapters can pass the new option through to the
-core unchanged, as they pass `policy` today. It would not change what a boundary
-does with an action: the table on this page would stay the table, and each cell
-would be driven by the overlay's action instead of the callback's. Support would
-be a separate change that names the core release it needs and extends this
-page's tests to run against it, as
-[ARCHITECTURE.md § Versioning](../ARCHITECTURE.md#versioning) requires of any
-range.
+The core's declarative `actionPolicy` (core `0.1.0-beta.14` or later) is released
+in the adapters, and the callback `policy` above is the other policy surface. An
+`actionPolicy` changes which action the core returns for a finding, never what a
+boundary does with an action, so the table on this page applies to it unchanged.
+See [policy-overlays.md](./policy-overlays.md) and
+[what this page does not cover](#what-this-page-does-not-cover).
 
 ## How this is qualified
 

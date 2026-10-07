@@ -3,7 +3,7 @@
 Keeps a synthetic token out of a Python `logging` handler. No account or key is involved.
 
 - Runtime: Python 3.10 or later.
-- Installs: `redact-secret-adapters` 0.1.3 and `redact-secret` 0.1.0b12 (a beta, pinned exactly).
+- Installs: `redact-secret-adapters` 0.1.6 and `redact-secret` 0.1.0b14 (a beta, pinned exactly).
 - Files: `app.py` is the whole quickstart. `check.py` runs it and checks the text it wrote.
 
 ## Run it
