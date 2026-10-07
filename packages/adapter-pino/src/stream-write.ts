@@ -172,6 +172,13 @@ function redactLine(scanAndRedact: ScanAndRedact, line: string, options: StreamW
   // costs nothing but this comparison.
   if (line.length > limits.maxLineLength) throw new LineLimitExceeded(false);
   const spans = valueStringSpans(line, limits);
+  // The lexer reads string literals only; text between them is never looked
+  // at. A line that is not one valid JSON value (an unterminated object, text
+  // outside any string, trailing garbage) would otherwise be forwarded with
+  // its non-string text unmasked and unflagged (redact-secret-adapters#198).
+  // Parsing it whole, after the ceilings above, is bounded by maxLineLength;
+  // the result is discarded, never used, and a failure is a refusal.
+  JSON.parse(line);
   const values = spans.map(({ start, end }) => JSON.parse(line.slice(start, end)) as string);
   const keys = spans.map(({ keySpan }) =>
     keySpan === undefined ? undefined : (JSON.parse(line.slice(keySpan[0], keySpan[1])) as string),
@@ -202,7 +209,7 @@ function redactLine(scanAndRedact: ScanAndRedact, line: string, options: StreamW
 
 /**
  * Builds a pino `hooks.streamWrite` function. Never throws. A line it cannot
- * lex is replaced by `{"msg":"[REDACTED:ERROR]"}`, and a line a ceiling or a
+ * lex, or that is not one valid JSON value, is replaced by `{"msg":"[REDACTED:ERROR]"}`, and a line a ceiling or a
  * budget refuses by `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}`; each keeps the
  * original's trailing newline, is valid JSON, and is never the original line.
  * Neither a failed parse nor a limit forwards the line unmasked.

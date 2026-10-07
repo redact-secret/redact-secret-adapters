@@ -1,9 +1,15 @@
 import type { ScanAndRedact } from "@redact-secret/adapter";
 import { createOutcomeCounter, ERROR_MARKER, LIMIT_MARKER } from "@redact-secret/adapter";
+import pino from "pino";
 import { expect, test } from "vitest";
 
 import { fakeScanAndRedact } from "../../../fixtures/fake-scanner.js";
-import { createRedactingStreamWriteWith, PINO_ERROR_LINE } from "../src/index.js";
+import {
+  createRedactingHooksWith,
+  createRedactingStreamWriteWith,
+  PINO_ERROR_LINE,
+  type PinoLogOutcome,
+} from "../src/index.js";
 
 const streamWrite = createRedactingStreamWriteWith(fakeScanAndRedact);
 
@@ -76,4 +82,58 @@ test("values past maxArrayLength become the limit marker and are counted as limi
 test("an unchanged value keeps its original escapes byte for byte", () => {
   const line = '{"url":"a\\/b","e":"caf\\u00e9"}';
   expect(streamWrite(line)).toBe(line);
+});
+
+// redact-secret-adapters#198: text outside any string literal was never read,
+// so a line that is not valid JSON was forwarded with it unmasked and
+// unflagged. Every token is synthetic; no assertion prints one.
+const NON_JSON_LINES: Record<string, string> = {
+  "an unterminated object followed by a token": '{"level":30,"msg":"ok", SECRET_TOKEN_1 \n',
+  "a token outside any string": '{"level":30,"msg":"ok" SECRET_TOKEN_1}\n',
+  "trailing garbage after a complete object": '{"level":30,"msg":"ok"} SECRET_TOKEN_1\n',
+  "a plain-text line": "plain SECRET_TOKEN_1\n",
+  "an unterminated object whose strings are fine": '{"level":30,"msg":"SECRET_TOKEN_1"\n',
+};
+
+test.each(Object.entries(NON_JSON_LINES))("%s is replaced by the fixed error line, never forwarded", (_name, input) => {
+  const counter = createOutcomeCounter();
+  const out = createRedactingStreamWriteWith(fakeScanAndRedact, { counter })(input);
+  expect(out).toBe(`${PINO_ERROR_LINE}\n`);
+  expect(JSON.parse(out)).toEqual({ msg: ERROR_MARKER });
+  expect(out).not.toContain("SECRET_TOKEN");
+  expect(counter.failed).toBe(1);
+  expect(counter.limited).toBe(0);
+});
+
+test("a non-JSON line without a trailing newline gets the fixed line without one", () => {
+  expect(streamWrite('{"msg":"ok" SECRET_TOKEN_1')).toBe(PINO_ERROR_LINE);
+});
+
+test("through real pino, a host hook that emits non-JSON is refused and reported as a replaced line", () => {
+  const chunks: string[] = [];
+  const outcomes: PinoLogOutcome[] = [];
+  const hooks = createRedactingHooksWith(fakeScanAndRedact, {
+    hooks: { streamWrite: () => '{"level":30,"msg":"ok", SECRET_TOKEN_1 \n' },
+    onOutcome: (o) => outcomes.push(o),
+  });
+  const logger = pino(
+    { base: null, timestamp: false, hooks },
+    {
+      write(chunk: string) {
+        chunks.push(chunk);
+        return true;
+      },
+    },
+  );
+  logger.info("hello");
+  expect(chunks).toEqual([`${PINO_ERROR_LINE}\n`]);
+  expect(outcomes).toHaveLength(1);
+  expect(outcomes[0]).toMatchObject({ lineReplaced: true });
+  expect(outcomes[0]?.values.failed).toBeGreaterThanOrEqual(1);
+  expect(JSON.stringify(outcomes)).not.toContain("SECRET_TOKEN");
+});
+
+test("valid JSON that is not an object, and whitespace around a valid line, is still handled", () => {
+  expect(streamWrite('  {"msg":"SECRET_TOKEN_1"}  \n')).toBe('  {"msg":"<SECRET_1>"}  \n');
+  expect(streamWrite('"SECRET_TOKEN_1"\n')).toBe('"<SECRET_1>"\n');
 });
