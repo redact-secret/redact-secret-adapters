@@ -7,7 +7,7 @@ controls**: paths that are deliberately unprotected, which the verifier must fla
 If it ever reports a control as protected, the verifier is broken.
 
 - Runtime: Node.js 22 or 24 (ESM).
-- Installs: `@redact-secret/adapter-pino` 0.1.6, `@redact-secret/adapter-otel-trace` 0.1.4, `@redact-secret/core` 0.1.0-beta.14, `pino` 10.3.1, `@opentelemetry/sdk-trace-base` 2.11.0, `@opentelemetry/otlp-transformer` 0.222.0.
+- Installs: `@redact-secret/adapter-pino` 0.1.7, `@redact-secret/adapter-otel-trace` 0.1.5, `@redact-secret/core` 0.1.0-beta.14, `pino` 10.3.1, `@opentelemetry/sdk-trace-base` 2.11.0, `@opentelemetry/otlp-transformer` 0.222.0.
 - Everything stays in memory. Nothing contacts a collector, a log service or a production endpoint.
 
 ## Run it

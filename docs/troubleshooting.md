@@ -20,8 +20,8 @@ Find your symptom:
 ## What is released
 
 Every behavior in this guide is in the versions on the registry on 2026-10-07
-(`adapter` 0.1.9, `adapter-pino` 0.1.6, `adapter-otel-trace` 0.1.4,
-`adapter-ai-context` 0.1.5, `adapter-mcp` 0.1.6, `redact-secret-adapters` 0.1.6).
+(`adapter` 0.1.10, `adapter-pino` 0.1.7, `adapter-otel-trace` 0.1.5,
+`adapter-ai-context` 0.1.6, `adapter-mcp` 0.1.7, `redact-secret-adapters` 0.1.6).
 A newer limit or provenance feature may be missing from an older version, so check
 the `CHANGELOG.md` of the package you run before relying on one.
 
