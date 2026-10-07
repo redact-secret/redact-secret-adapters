@@ -10,16 +10,20 @@ A change to the range this package declares against
 entry, naming the test that backs the new range, never folded into a generic
 "bump dependency" line.
 
-`0.1.0-beta.2` was published to npm by hand (dist-tag `beta`) and the package
-is in the release plan (`scripts/release-plan.mjs`), so the next train tags it
-without republishing it. It depends on `@redact-secret/adapter` `^0.1.7`, which
-publishes in that train. See
+`0.1.0-beta.2` was published to npm by hand (dist-tag `beta`); later versions
+publish from the release workflow through the trusted publisher. It depends on
+`@redact-secret/adapter`, whose floor moves with each release that needs a newer
+shared scan-options contract. See
 [RELEASING.md](../../RELEASING.md#a-brand-new-npm-package).
 
 ## [Unreleased]
 
+## [0.1.0-beta.4] - 2026-10-07
+
 ### Changed
 
+- Requires `@redact-secret/adapter` `^0.1.9` (was `^0.1.7`) for `actionPolicy`, `scanConfigOf` and the scan-config conflict contract. Backed by `test/injected-scan-config-live.test.ts` and CI's `published-combination` job.
+- Verified against `@redact-secret/core` 0.1.0-beta.14. The declared core range is unchanged.
 - `createRedactingLogRecordProcessor`: an injected `scanConfig` beside any loose scan option (`policy`, `actionPolicy`, `scanLimits`, `ruleset`, `placeholderFormatter`) is rejected with a fixed `TypeError` before the core is loaded, instead of the config silently winning; the injected configuration is the one verified against the core (redact-secret-adapters#213). Needs `@redact-secret/adapter` with `scanConfigOf`. Test: `test/injected-scan-config-live.test.ts`.
 
 ### Added

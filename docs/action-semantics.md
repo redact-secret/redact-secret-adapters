@@ -19,8 +19,10 @@ the real published core, with the exact host output spelled out
   the caller's responsibility: read the finding (`ok.findings`, the outcome
   counters, `onFinding`) and decide. Do not use `warn` or `allow` to "see what
   would happen" on a path whose output you still ship.
-- **`policy` replaces the core's built-in policy.** It is the only policy
-  surface in the published core (`@redact-secret/core` `0.1.0-beta.13`). It is a
+- **`policy` replaces the core's built-in policy.** It is the callback
+  policy surface of the published core (`@redact-secret/core` `0.1.0-beta.14`;
+  the declarative `actionPolicy` is the other, see
+  [policy-overlays.md](./policy-overlays.md)). It is a
   callback that sees safe finding metadata and returns an action for every
   finding, so a `policy` that returns `redact` for everything also redacts what
   the built-in policy would block. The default (no `policy`) is the core's
