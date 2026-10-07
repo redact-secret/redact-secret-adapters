@@ -42,7 +42,7 @@ the real published core, with the exact host output spelled out
 | Why | A log line with one masked field is still useful and safe to write | A model context that is partly masked is not safe to use |
 
 Neither family is a unified result type, on purpose
-([decision](./decisions/2026-10-06-document-action-semantics-instead-of-a-unified-result.md)).
+([decision](./decisions/document-action-semantics-instead-of-a-unified-result.md)).
 
 ## Truth table: logging and tracing
 
