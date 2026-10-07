@@ -19,12 +19,16 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-07
+
 ### Fixed
 
 - `streamWrite` (and the `streamWrite` of `createRedactingHooks`): a line that is not one valid JSON value, such as one a host `streamWrite` hook rewrote into an unterminated object followed by a token, text outside any string literal, trailing text or plain text, was forwarded with that text unmasked and reported as clean, because only string literals were lexed. It is now replaced by the fixed `{"msg":"[REDACTED:ERROR]"}` line with the original's newline, `lineReplaced: true` and `failed` counted, consistent with the fail-closed rule of #174 (redact-secret-adapters#198). Valid lines are unaffected. Test: `test/stream-write.test.ts`.
 
 ### Changed
 
+- Requires `@redact-secret/adapter` `^0.1.9` (was `^0.1.7`) for `actionPolicy`, `scanConfigOf` and the scan-config conflict contract. Backed by `test/action-policy-live.test.ts`, `test/injected-scan-config-live.test.ts` and CI's `published-combination` job.
+- Verified against `@redact-secret/core` 0.1.0-beta.14. The declared core range is unchanged.
 - `createRedactingHooks`, `createRedactingLogMethod` and `createRedactingStreamWrite`: an injected `scanConfig` beside any loose scan option (`policy`, `actionPolicy`, `scanLimits`, `ruleset`, `placeholderFormatter`) is rejected with a fixed `TypeError` before the core is loaded, instead of the config silently winning; the injected configuration is the one verified against the core (redact-secret-adapters#213). Needs `@redact-secret/adapter` with `scanConfigOf`. Test: `test/injected-scan-config-live.test.ts`.
 
 ### Added

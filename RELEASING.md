@@ -341,9 +341,8 @@ entry are in place. Its first version, `0.1.0-beta.2`, was published by hand
 (access public, dist-tag `beta`), so the plan reads it as already on the
 registry: it skips the publish, `finalize` still tags
 `adapter-otel-logs@0.1.0-beta.2`, and reconcile passes. A prerelease `beta`
-maps to dist-tag `beta` (`distTagFor`). It requires `@redact-secret/adapter`
-`^0.1.7`, which publishes in the next train; until then the package does not
-install from the registry. Its later versions publish from `release.yml` via
+maps to dist-tag `beta` (`distTagFor`). It requires `@redact-secret/adapter`, whose floor is raised in the PR that
+bumps this package whenever it needs a newer adapter. Its later versions publish from `release.yml` via
 the trusted publisher.
 
 Once the re-export is on npm, mark the old name deprecated on the registry:

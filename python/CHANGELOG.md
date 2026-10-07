@@ -20,8 +20,11 @@ can read it without leaving their environment.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-07
+
 ### Changed
 
+- Verified against `redact-secret` 0.1.0b14, the first published core that accepts `action_policy`. The declared `redact-secret` range is unchanged; `action_policy` itself is refused by name on an older core.
 - **Behavior change:** `scan_config` beside `policy`, `action_policy`, `scan_limits`, `ruleset` or `placeholder_formatter` (`mask_leaf_with`, `mask_leaf_outcome_with`, `RedactingSpanProcessorWith`) is a fixed, input-free `TypeError`, not a silent precedence; a `scan_config` not built by `resolve_scan_config` is rejected (redact-secret-adapters#213). New `scan_config_of`. The live factories take the loose options only. Test: `python/tests/test_scan_options.py`.
 
 ### Added

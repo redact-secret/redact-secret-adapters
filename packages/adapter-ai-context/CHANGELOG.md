@@ -15,8 +15,12 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-07
+
 ### Changed
 
+- Requires `@redact-secret/adapter` `^0.1.9` (was `^0.1.7`) for `actionPolicy` and the scan-config conflict contract. Backed by `test/action-policy-live.test.ts` and CI's `published-combination` job.
+- Verified against `@redact-secret/core` 0.1.0-beta.14. The declared core range is unchanged.
 - A whole-input `scanConfig` is named and rejected (`scanConfig is not supported by the AI-context boundary`) like `ruleset` and `scanLimits`, instead of being ignored (redact-secret-adapters#213); the boundary resolves its own configuration from `policy` / `actionPolicy`.
 
 ### Added

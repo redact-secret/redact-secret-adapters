@@ -20,6 +20,13 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-07
+
+### Changed
+
+- Re-exports `@redact-secret/adapter-otel-trace` `^0.1.4` (was `^0.1.2`), which carries `actionPolicy` and the scan-config conflict contract (see that package's changelog). No code change in this package.
+- Verified against `@redact-secret/core` 0.1.0-beta.14. The declared core range is unchanged.
+
 ## [0.1.6] - 2026-10-03
 ### Changed
 

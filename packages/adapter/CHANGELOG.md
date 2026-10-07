@@ -19,8 +19,11 @@ tarball (`files` in `package.json`), so a consumer can read it from
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-10-07
+
 ### Changed
 
+- Verified against `@redact-secret/core` 0.1.0-beta.14, the first published core that accepts `actionPolicy`. The declared core range is unchanged; `actionPolicy` itself is refused by name on an older core.
 - **Behavior change:** an injected `scanConfig` beside `policy`, `actionPolicy`, `scanLimits`, `ruleset` or `placeholderFormatter` is now a fixed, input-free `TypeError` before the core is loaded or any scan (redact-secret-adapters#213). Before, the config silently won and the loose options were ignored. A `scanConfig` that `resolveScanConfig` did not build is rejected too. New `scanConfigOf` and `bindScanConfig`. The live factories now verify the injected configuration against the installed core (before, only the loose options beside it were checked, so an injected `ruleset` or `actionPolicy` on an older core was not refused). No core scanner handle is used or required: the published core has none (core #1222). Tests: `test/scan-options.test.ts`, `test/live.test.ts`.
 
 ### Added
