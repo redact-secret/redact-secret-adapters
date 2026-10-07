@@ -1,7 +1,7 @@
 {
   "schema": "redact-secret-adapters/compatibility-v1",
   "description": "What each package here is qualified against, and how an unqualified host is refused or disclosed (#11). A range is qualified only because CI installs both of its endpoints from the registry on every push and pull request (range-endpoints, python-range-endpoints) and runs the real-host tests listed under qualifiedBy against them. `npm run compat:check` fails when this record, the package manifests, and CI disagree. Endpoints are the versions the range resolved to on endpointsResolvedAt; `npm run compat:check -- --resolve` re-resolves them.",
-  "endpointsResolvedAt": "2026-09-29",
+  "endpointsResolvedAt": "2026-10-07",
   "packages": [
     {
       "name": "@redact-secret/adapter",
@@ -13,7 +13,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "qualifiedBy": [
@@ -26,7 +26,9 @@
         "packages/adapter/test/key-context-live.test.ts",
         "packages/adapter/test/budget.test.ts",
         "packages/adapter/test/scan-options-live.test.ts",
-        "packages/adapter/test/scan-options.test.ts"
+        "packages/adapter/test/scan-options.test.ts",
+        "packages/adapter/test/action-policy.test.ts",
+        "packages/adapter/test/action-policy-live.test.ts"
       ]
     },
     {
@@ -39,7 +41,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         },
         {
           "name": "pino",
@@ -66,7 +68,10 @@
         "packages/adapter-pino/test/key-context-live.test.ts",
         "packages/adapter-pino/test/budget.test.ts",
         "packages/adapter-pino/test/line-limits.test.ts",
-        "packages/adapter-pino/test/scan-options-live.test.ts"
+        "packages/adapter-pino/test/scan-options-live.test.ts",
+        "packages/adapter-pino/test/action-policy-live.test.ts",
+        "packages/adapter-pino/test/policy-overlays-live.test.ts",
+        "packages/adapter-pino/test/injected-scan-config-live.test.ts"
       ]
     },
     {
@@ -85,7 +90,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
@@ -106,7 +111,9 @@
         "packages/adapter/test/activation-live.test.ts",
         "packages/adapter-otel-trace/test/key-context-live.test.ts",
         "packages/adapter-otel-trace/test/budget.test.ts",
-        "packages/adapter-otel-trace/test/scan-options-live.test.ts"
+        "packages/adapter-otel-trace/test/scan-options-live.test.ts",
+        "packages/adapter-otel-trace/test/action-policy-live.test.ts",
+        "packages/adapter-otel-trace/test/injected-scan-config-live.test.ts"
       ]
     },
     {
@@ -125,7 +132,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
@@ -157,7 +164,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
@@ -178,7 +185,9 @@
         "packages/adapter-otel-logs/test/exporter-bytes.test.ts",
         "packages/adapter-otel-logs/test/log-record-processor.test.ts",
         "packages/adapter-otel-logs/test/pii-live.test.ts",
-        "packages/adapter-otel-logs/test/pii-activation.test.ts"
+        "packages/adapter-otel-logs/test/pii-activation.test.ts",
+        "packages/adapter-otel-logs/test/action-policy-live.test.ts",
+        "packages/adapter-otel-logs/test/injected-scan-config-live.test.ts"
       ]
     },
     {
@@ -191,7 +200,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
@@ -214,7 +223,11 @@
         "packages/adapter-ai-context/test/budget.test.ts",
         "packages/adapter-ai-context/test/scan-options.test.ts",
         "packages/adapter-ai-context/test/occurrence.test.ts",
-        "packages/adapter-ai-context/test/occurrence-live.test.ts"
+        "packages/adapter-ai-context/test/occurrence-live.test.ts",
+        "packages/adapter-ai-context/test/action-policy.test.ts",
+        "packages/adapter-ai-context/test/action-policy-live.test.ts",
+        "packages/adapter-ai-context/test/policy-overlays-live.test.ts",
+        "packages/adapter-ai-context/test/policy-overlays-pii-live.test.ts"
       ]
     },
     {
@@ -225,32 +238,32 @@
       "requires": [
         {
           "name": "@modelcontextprotocol/client",
-          "range": ">=2.0.0 <=2.1.0",
+          "range": ">=2.0.0 <=2.3.1",
           "kind": "peerDependency (optional)",
-          "endpoints": { "lowest": "2.0.0", "highest": "2.1.0" }
+          "endpoints": { "lowest": "2.0.0", "highest": "2.3.1" }
         },
         {
           "name": "@modelcontextprotocol/sdk",
-          "range": ">=1.26.0 <=1.30.1",
+          "range": ">=1.26.0 <=1.32.1",
           "kind": "peerDependency (optional)",
-          "endpoints": { "lowest": "1.26.0", "highest": "1.30.1" }
+          "endpoints": { "lowest": "1.26.0", "highest": "1.32.1" }
         },
         {
           "name": "@modelcontextprotocol/server",
-          "range": ">=2.0.0 <=2.1.0",
+          "range": ">=2.0.0 <=2.3.1",
           "kind": "peerDependency (optional)",
-          "endpoints": { "lowest": "2.0.0", "highest": "2.1.0" }
+          "endpoints": { "lowest": "2.0.0", "highest": "2.3.1" }
         },
         {
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
         "the core's mcp-boundary conformance fixture and runner, vendored at a pinned core commit, replayed through the public API on the real core before and after initialize()",
-        "the same fixture carried by real SDK 1.x and 2.x clients and servers over stdio (child process) and Streamable HTTP (127.0.0.1), protocol 2025-11-25 (1.26.0, 1.30.1, 2.0.0, 2.1.0)",
+        "the same fixture carried by real SDK 1.x and 2.x clients and servers over stdio (child process) and Streamable HTTP (127.0.0.1), protocol 2025-11-25 (1.26.0, 1.32.1, 2.0.0, 2.3.1)",
         "resources/read (redact-secret/redact-secret#843): the core's mcp-resources-read fixture and runner, vendored at the same pinned core commit, replayed through the public API before and after initialize(), and carried by real SDK 1.x and 2.x clients and servers over stdio and Streamable HTTP at both endpoints of each line: host placement around client.readResource, and wrapResourceReadHandler on the low-level Server and McpServer.registerResource (fixed URI and URI template) sending exactly the fixed JSON-RPC error",
         "opt-in argument sanitation before dispatch: a blocked argument set never reaches the server",
         "server wrappers on the low-level Server and McpServer.registerTool: a throwing handler caught before the SDK converts its message",
@@ -270,7 +283,10 @@
         "packages/adapter-mcp/test/vault-token.test.ts",
         "packages/adapter/test/activation-live.test.ts",
         "packages/adapter-mcp/test/budget.test.ts",
-        "packages/adapter-mcp/test/occurrence.test.ts"
+        "packages/adapter-mcp/test/occurrence.test.ts",
+        "packages/adapter-mcp/test/action-policy-live.test.ts",
+        "packages/adapter-mcp/test/policy-overlays-live.test.ts",
+        "packages/adapter-mcp/test/injected-scan-config.test.ts"
       ]
     },
     {
@@ -283,7 +299,7 @@
           "name": "redact-secret",
           "range": ">=0.1.0b6,<0.2",
           "kind": "dependency",
-          "endpoints": { "lowest": "0.1.0b6", "highest": "0.1.0b13" }
+          "endpoints": { "lowest": "0.1.0b6", "highest": "0.1.0b14" }
         },
         {
           "name": "opentelemetry-sdk",
@@ -315,7 +331,8 @@
         "python/tests/test_pii_activation.py",
         "python/tests/test_key_context.py",
         "python/tests/test_budget.py",
-        "python/tests/test_scan_options.py"
+        "python/tests/test_scan_options.py",
+        "python/tests/test_action_policy.py"
       ]
     }
   ],
@@ -376,15 +393,15 @@
     },
     {
       "host": "@modelcontextprotocol/sdk",
-      "versions": "<1.26.0 or >1.30.1",
+      "versions": "<1.26.0 or >1.32.1",
       "enforcement": "refused",
-      "how": "optional peerDependency >=1.26.0 <=1.30.1 on adapter-mcp: when the SDK is installed, npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it. The cap is the highest tested release: a newer one is unqualified until it is added as an endpoint here. The floor is 1.26.0, the first release clear of the high-severity advisories GHSA-w48q-cv73-mx4w, GHSA-8r9q-7v3j-jr4g and GHSA-345p-7cg4-v4c7: an older SDK is refused rather than qualified with them (#83)"
+      "how": "optional peerDependency >=1.26.0 <=1.32.1 on adapter-mcp: when the SDK is installed, npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it. The cap is the highest tested release: a newer one is unqualified until it is added as an endpoint here. The floor is 1.26.0, the first release clear of the high-severity advisories GHSA-w48q-cv73-mx4w, GHSA-8r9q-7v3j-jr4g and GHSA-345p-7cg4-v4c7: an older SDK is refused rather than qualified with them (#83)"
     },
     {
       "host": "@modelcontextprotocol/client and @modelcontextprotocol/server",
-      "versions": "<2.0.0 or >2.1.0",
+      "versions": "<2.0.0 or >2.3.1",
       "enforcement": "refused",
-      "how": "optional peerDependencies >=2.0.0 <=2.1.0 on adapter-mcp: npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it"
+      "how": "optional peerDependencies >=2.0.0 <=2.3.1 on adapter-mcp: npm 7 and later stop with ERESOLVE on a version outside it unless --legacy-peer-deps or --force overrides it"
     },
     {
       "host": "opentelemetry-sdk",

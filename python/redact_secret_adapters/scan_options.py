@@ -9,6 +9,23 @@ policy: it validates the *shape* of what a caller asked for, takes a
 scan, so the adapter's own limits (traversal, aggregate budget) stay separate
 from what the core is asked to enforce.
 
+Declarative ``action_policy`` (redact-secret-adapters#217). The core's
+declarative action policy: the first matching rule decides, an unmatched
+finding keeps the default action. It is a ``dict``, or the JSON document as
+``str``, ``bytes`` or ``bytearray``, and is handed to the core **intact**:
+this module neither parses nor evaluates it, and a document the core refuses
+raises its own ``INVALID_ACTION_POLICY`` (reported as ``CORE_OPTION_REJECTED``
+with that ``core_code``, never with the core's message). The one thing done
+here is the snapshot: a ``dict`` is serialized once with the standard compact
+JSON encoder, as the core does for a call, and a ``bytearray`` is copied to
+``bytes``, so what every scan sends is fixed at construction. ``policy`` and
+``action_policy`` are mutually exclusive: both is a ``TypeError`` before any
+core is loaded or text scanned. An older core would ignore the keyword
+argument or fail with an unrelated ``TypeError``, so ``verify_scan_options``
+refuses it by name instead (``SCAN_OPTION_CORE_FLOORS``). Whole-input scans
+only: the logging filter and the OpenTelemetry processors use no incremental
+session.
+
 Names. ``limits`` is already the adapter's *walk* limits, so the core's
 whole-input limits are ``scan_limits``: a mapping with ``max_input_bytes`` and
 ``max_findings`` (or an object with those attributes, such as
@@ -30,8 +47,8 @@ ruleset is copied to immutable ``bytes``, so mutating the caller's object
 afterwards changes nothing. A ``policy`` and a ``placeholder_formatter`` are
 callbacks and are held by reference.
 
-Availability. Whole-input scans only; every option is available from the
-declared core floor (``SCAN_OPTION_CORE_FLOORS``). The live factories check the
+Availability. Whole-input scans only; each option has the oldest core it was
+verified against (``SCAN_OPTION_CORE_FLOORS``). The live factories check the
 installed core's ``VERSION`` against it and probe the options with one scan
 of the empty text, so an unsupported core or a ruleset that does not parse is a fixed,
 input-free :class:`CoreOptionsError` at construction, never a silently ignored
@@ -40,6 +57,7 @@ option.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -60,6 +78,10 @@ SCAN_OPTION_CORE_FLOORS: dict[str, str] = {
     "scan_limits": "0.1.0-beta.6",
     "ruleset": "0.1.0-beta.6",
     "placeholder_formatter": "0.1.0-beta.6",
+    # Published ``redact-secret`` 0.1.0b14 is the first release whose
+    # ``scan_and_redact`` takes ``action_policy``; source presence in the core
+    # repository is not what this records.
+    "action_policy": "0.1.0-beta.14",
 }
 
 
@@ -68,7 +90,7 @@ class ScanConfig:
     """A validated snapshot of a caller's scan options: exactly the arguments
     passed to ``scan_and_redact`` after the text, built once. ``kwargs`` holds
     only the options that were requested (``formatter``, ``limits``,
-    ``ruleset``), so a scanner that takes ``(text, policy)`` keeps working when
+    ``ruleset``, ``action_policy``), so a scanner that takes ``(text, policy)`` keeps working when
     none was."""
 
     policy: Any = None
@@ -79,6 +101,37 @@ class ScanConfig:
 _EMPTY = ScanConfig()
 
 
+def scan_config_of(
+    scan_config: Optional[ScanConfig],
+    policy: Optional[Any] = None,
+    scan_limits: Optional[Any] = None,
+    ruleset: Optional[Any] = None,
+    placeholder_formatter: Optional[Callable[..., Any]] = None,
+    action_policy: Optional[Any] = None,
+    *,
+    limits_type: Optional[Callable[..., Any]] = None,
+) -> ScanConfig:
+    """The one scan configuration a caller asks for. Without ``scan_config`` that
+    is :func:`resolve_scan_config` of the loose options. An injected
+    ``scan_config`` is already bound to its policy, action policy, limits,
+    ruleset and formatter, so any of those given beside it is a conflict,
+    rejected with a fixed, input-free ``TypeError``: never a precedence rule and
+    never an ignored argument. ``pii`` is not part of a ``ScanConfig``; it is the
+    process-wide activation, checked separately."""
+    if scan_config is None:
+        return resolve_scan_config(
+            policy, scan_limits, ruleset, placeholder_formatter, action_policy, limits_type=limits_type
+        )
+    if not isinstance(scan_config, ScanConfig):
+        raise TypeError("scan_config must be a value returned by resolve_scan_config")
+    if any(v is not None for v in (policy, scan_limits, ruleset, placeholder_formatter, action_policy)):
+        raise TypeError(
+            "scan_config already fixes the scan options: do not pass policy, action_policy, "
+            "scan_limits, ruleset or placeholder_formatter with it"
+        )
+    return scan_config
+
+
 def _is_count(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
@@ -87,11 +140,28 @@ def _read(source: Any, name: str) -> Any:
     return source.get(name) if isinstance(source, Mapping) else getattr(source, name, None)
 
 
+def _snapshot_action_policy(action_policy: Any) -> Any:
+    """Text is immutable and kept, a byte buffer is copied, a ``dict`` is serialized
+    once as the core would. Only the *form* is checked: the core decides whether
+    it is a valid document."""
+    if isinstance(action_policy, str):
+        return action_policy
+    if isinstance(action_policy, (bytes, bytearray)):
+        return bytes(action_policy)
+    if isinstance(action_policy, dict):
+        try:
+            return json.dumps(action_policy, separators=(",", ":"))
+        except (TypeError, ValueError, RecursionError):
+            raise TypeError("action_policy must be serializable as JSON") from None
+    raise TypeError("action_policy must be a dict, a JSON str, bytes or bytearray")
+
+
 def resolve_scan_config(
     policy: Optional[Any] = None,
     scan_limits: Optional[Any] = None,
     ruleset: Optional[Any] = None,
     placeholder_formatter: Optional[Callable[..., Any]] = None,
+    action_policy: Optional[Any] = None,
     *,
     limits_type: Optional[Callable[..., Any]] = None,
 ) -> ScanConfig:
@@ -100,10 +170,15 @@ def resolve_scan_config(
     of the three options given the result passes only ``policy``, as the
     adapters always have. ``limits_type`` builds the core's own limits object
     from the two numbers (the live factories pass ``redact_secret.WholeInputLimits``)."""
-    if scan_limits is None and ruleset is None and placeholder_formatter is None:
+    if policy is not None and action_policy is not None:
+        raise TypeError("policy and action_policy are mutually exclusive: pass one")
+    if scan_limits is None and ruleset is None and placeholder_formatter is None and action_policy is None:
         return _EMPTY if policy is None else ScanConfig(policy=policy)
     kwargs: dict[str, Any] = {}
     requested: list[str] = []
+    if action_policy is not None:
+        kwargs["action_policy"] = _snapshot_action_policy(action_policy)
+        requested.append("action_policy")
     if scan_limits is not None:
         max_input_bytes = _read(scan_limits, "max_input_bytes")
         max_findings = _read(scan_limits, "max_findings")
@@ -156,7 +231,7 @@ class CoreOptionsError(Exception):
         ),
         "CORE_OPTION_REJECTED": (
             "verify_scan_options: the core rejected a requested scan option "
-            "(a ruleset that does not parse, invalid limits, a failing callback); see core_code"
+            "(a ruleset or action policy that does not parse, invalid limits, a failing callback); see core_code"
         ),
     }
 
@@ -177,6 +252,7 @@ _FORWARDED_CORE_CODES = frozenset(
         "PLACEHOLDER_FAILURE",
         "POLICY_FAILURE",
         "INVALID_POLICY_ACTION",
+        "INVALID_ACTION_POLICY",
     }
 )
 

@@ -96,7 +96,7 @@ limits:
 ## Options
 
 ```js
-await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLimits, lineLimits, scanLimits, ruleset, placeholderFormatter });
+await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLimits, lineLimits, scanLimits, ruleset, placeholderFormatter, actionPolicy });
 ```
 
 | Option | What it does |
@@ -107,6 +107,7 @@ await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLim
 | `policy` | The core's policy, passed through unchanged. It replaces the core's built-in policy for every finding, a `ruleset` detector's included |
 | `scanLimits` | The core's whole-input limits, `{ maxInputBytes, maxFindings }`, for every scan of both hooks. See [Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options) |
 | `ruleset` | A declarative detector ruleset (text or bytes), whole-input scans |
+| `actionPolicy` | The core's declarative action policy (object, JSON text or bytes), for every scan of both hooks. Mutually exclusive with `policy`; needs core `0.1.0-beta.14` or later, else construction rejects with `CoreOptionsError`. See [Declarative `actionPolicy`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#declarative-actionpolicy) |
 | `placeholderFormatter` | The core's placeholder formatter |
 | `limits` | Override the walk limits (`DEFAULT_LIMITS` in `@redact-secret/adapter`) |
 | `operationLimits` | Override the aggregate budget of **one log record**, shared by both hooks. See below |
@@ -149,8 +150,15 @@ one more is refused. A refused line is replaced by the fixed, valid
 `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` line (`PINO_LIMIT_LINE`) with the
 original's newline, **never** by the original line and never because a parser
 failed: `lineReplaced` is `true`, and the `limited` counter (not `failed`) counts
-it. A line that is malformed or has an unterminated string is still the fixed
-`{"msg":"[REDACTED:ERROR]"}` line (`PINO_ERROR_LINE`). The hook reads only the
+it. A line that is not one valid JSON value is the fixed
+`{"msg":"[REDACTED:ERROR]"}` line (`PINO_ERROR_LINE`), counted as `failed`: an
+unterminated string, an unterminated object, text outside any string literal,
+trailing text after the object, or a plain-text line. pino itself always emits
+valid JSON, so only a host `streamWrite` hook that runs before this one can
+produce such a line; it is refused rather than forwarded, because the hook
+masks string literals only and could not mask text outside them. The check is
+one `JSON.parse` of the line, after the ceilings above, so it is bounded by
+`maxLineLength`. The hook reads only the
 finished string and calls no serialization hook of the host's. Because redaction
 runs last, a host `streamWrite` that grows the line is measured after it grew.
 
@@ -243,7 +251,7 @@ const hooks = await createRedactingHooks({
   than `findings` whenever a finding leaves text alone. The counts are defined
   in
   [`@redact-secret/adapter`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#outcome-counters).
-- `lineReplaced` means the `streamWrite` hook could not parse the line and
+- `lineReplaced` means the `streamWrite` hook could not parse the line (or it was not valid JSON) and
   wrote the fixed `[REDACTED:ERROR]` line instead. **It is not a claim that
   the destination accepted anything**: whether a destination or transport
   succeeded is not something this adapter learns.

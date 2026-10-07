@@ -114,6 +114,7 @@ class RedactSecretFilter(logging.Filter):
         scan_limits: Optional[Any] = None,
         ruleset: Optional[Any] = None,
         placeholder_formatter: Optional[Callable[..., Any]] = None,
+        action_policy: Optional[Any] = None,
         on_outcome: Optional[Callable[[LogRecordOutcome], None]] = None,
         pii: Optional[Sequence[str]] = None,
     ) -> None:
@@ -154,6 +155,7 @@ class RedactSecretFilter(logging.Filter):
             scan_limits,
             ruleset,
             placeholder_formatter,
+            action_policy,
             limits_type=None if live_core is None else live_core.WholeInputLimits,
         )
         if live_core is not None:

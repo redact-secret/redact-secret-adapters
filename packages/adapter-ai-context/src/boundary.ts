@@ -19,11 +19,15 @@
  */
 
 import {
+  type ActionPolicyInput,
   createOperationBudget,
   isStrictWalkLimits,
   type OperationBudget,
   type OperationLimits,
+  type Policy,
   resolveOperationLimits,
+  resolveScanConfig,
+  type ScanConfig,
   type StrictVisit,
   scanLeafInKeyContext,
   utf8ByteLength,
@@ -278,8 +282,10 @@ function validateOptions(options: AiContextBoundaryOptions): void {
   // Named, not ignored (redact-secret/redact-secret-adapters#175): the core has
   // no ruleset for an incremental session, so one boundary cannot offer it on
   // `sanitizeText` and not on `openStream`; and its whole-input limits are
-  // `wholeInputLimits` here, beside `incrementalLimits`.
-  for (const name of ["ruleset", "scanLimits"] as const) {
+  // `wholeInputLimits` here, beside `incrementalLimits`. A whole-input
+  // `scanConfig` (resolveScanConfig) is likewise not an incremental-session
+  // configuration: the boundary resolves its own from `policy`/`actionPolicy`.
+  for (const name of ["ruleset", "scanLimits", "scanConfig"] as const) {
     if (name in options) {
       throw new TypeError(`createAiContextBoundary: ${name} is not supported by the AI-context boundary`);
     }
@@ -304,6 +310,27 @@ function operationLimitsFor(
 }
 
 /**
+ * Validates and snapshots the `actionPolicy` of `options` once (a callback
+ * `policy` beside it, or a value that cannot be a document, is a `TypeError`
+ * with a fixed message). Only the form is checked: the core parses it.
+ */
+export function resolveActionPolicyConfig(options: {
+  readonly policy?: unknown;
+  readonly actionPolicy?: ActionPolicyInput | undefined;
+}): ScanConfig {
+  try {
+    return resolveScanConfig({
+      ...(options.policy === undefined ? {} : { policy: options.policy as Policy }),
+      actionPolicy: options.actionPolicy,
+    });
+  } catch (error) {
+    throw new TypeError(
+      `createAiContextBoundary: ${error instanceof TypeError ? error.message : "actionPolicy is invalid"}`,
+    );
+  }
+}
+
+/**
  * Creates the boundary over an injected core. `core.scanAndRedact` must not
  * be called before the core is initialized; if it is, the core's own
  * `NOT_INITIALIZED` error makes every operation fail closed as
@@ -316,8 +343,14 @@ function operationLimitsFor(
 export function createAiContextBoundaryWith(core: AiContextCore, options: AiContextBoundaryOptions): AiContextBoundary {
   validateOptions(options);
   const { wholeInputLimits, incrementalLimits, traversalLimits, policy, placeholderFormatter, onFinding } = options;
-  const wholeInputOptions = Object.freeze({ policy, placeholderFormatter, limits: wholeInputLimits });
-  const incrementalOptions = Object.freeze({ policy, placeholderFormatter, limits: incrementalLimits });
+  // The declarative action policy is validated (against a callback `policy`)
+  // and snapshotted once, here, and the one snapshot goes to every whole-input
+  // scan and every incremental session: a later change to the caller's object
+  // or buffer changes nothing. The core parses it; this boundary never reads it.
+  const actionPolicy = resolveActionPolicyConfig(options).options.actionPolicy;
+  const withPolicy = actionPolicy === undefined ? {} : { actionPolicy };
+  const wholeInputOptions = Object.freeze({ policy, placeholderFormatter, limits: wholeInputLimits, ...withPolicy });
+  const incrementalOptions = Object.freeze({ policy, placeholderFormatter, limits: incrementalLimits, ...withPolicy });
   const operationLimits = operationLimitsFor(options.operationLimits, wholeInputLimits);
 
   /** One fresh operation: a new aggregate budget and, when the operation repeats texts, a memo. */

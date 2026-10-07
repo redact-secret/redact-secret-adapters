@@ -14,6 +14,19 @@ not moved by a prerelease ([RELEASING.md § Prereleases and npm dist-tags](../..
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-07
+
+### Changed
+
+- Requires `@redact-secret/adapter-ai-context` `^0.1.5` (was `^0.1.3`) for `actionPolicy` and the `scanConfig` rejection. Backed by `test/action-policy-live.test.ts`, `test/injected-scan-config.test.ts` and CI's `published-combination` job.
+- Verified against `@redact-secret/core` 0.1.0-beta.14. The declared core range is unchanged.
+- Ranges widened, each backed by `test/e2e.test.ts`, `test/transport.test.ts` and `test/resources-transport.test.ts` run at the new ceilings (the full suite, typecheck and build pass with `npm run range-endpoint -- highest`): optional peers `@modelcontextprotocol/sdk` `>=1.26.0 <=1.30.1` to `>=1.26.0 <=1.32.1` and `@modelcontextprotocol/client` / `server` `>=2.0.0 <=2.1.0` to `>=2.0.0 <=2.3.1`. The lower bounds are unchanged.
+- A whole-input `scanConfig` is named and rejected (`scanConfig is not supported by the AI-context boundary`) like `ruleset` and `scanLimits`, instead of being ignored (redact-secret-adapters#213); the boundary resolves its own configuration from `policy` / `actionPolicy`.
+
+### Added
+
+- `createMcpBoundary` takes `actionPolicy` through `createAiContextBoundary` (redact-secret-adapters#217): one snapshot, whole-input and streamed tool results, resources and arguments, the same capability check and rejection of an older core. Boundary outcomes are unchanged (`block` is the fixed blocked result). Test: `test/action-policy-live.test.ts`.
+
 ## [0.1.5] - 2026-10-03
 ### Changed
 

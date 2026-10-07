@@ -219,7 +219,7 @@ their tested endpoints, already held equal to the manifests by
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-pino",
       "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "tested": ["20", "22", "24"] },
       "core": { "name": "@redact-secret/core", "range": "^0.1.0-beta.6", "kind": "peerDependency", "optional": false,
-                "tested": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" } },
+                "tested": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" } },
       "hosts": [{ "name": "pino", "range": "^10.0.0", "kind": "peerDependency", "optional": false,
                   "tested": { "lowest": "10.0.0", "highest": "10.3.1" } }],
       "dependsOn": [{ "name": "@redact-secret/adapter", "range": "^0.1.3" }]
@@ -341,9 +341,8 @@ entry are in place. Its first version, `0.1.0-beta.2`, was published by hand
 (access public, dist-tag `beta`), so the plan reads it as already on the
 registry: it skips the publish, `finalize` still tags
 `adapter-otel-logs@0.1.0-beta.2`, and reconcile passes. A prerelease `beta`
-maps to dist-tag `beta` (`distTagFor`). It requires `@redact-secret/adapter`
-`^0.1.7`, which publishes in the next train; until then the package does not
-install from the registry. Its later versions publish from `release.yml` via
+maps to dist-tag `beta` (`distTagFor`). It requires `@redact-secret/adapter`, whose floor is raised in the PR that
+bumps this package whenever it needs a newer adapter. Its later versions publish from `release.yml` via
 the trusted publisher.
 
 Once the re-export is on npm, mark the old name deprecated on the registry:
