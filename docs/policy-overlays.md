@@ -120,7 +120,7 @@ a fixed `blocked` outcome, never a partial release.
 | Source | `redact-secret/redact-secret-adapters` `develop` at `378b148` plus this change (PR for #215) |
 | Artifact under test | workspace build of this checkout (`npm run build`), not a published tarball |
 | Core | `@redact-secret/core` `0.1.0-beta.14`, lockfile integrity `sha512-1h5NxUto2ZEqQD5hfIgbzwDZkmu6WXdlmtF0waG3FcKDhpCEoUphgj4B4VGRyhVhjJOFT58/TrER+3EL1bCnag==`; native addon `@redact-secret/node-darwin-x64` `0.1.0-beta.14` |
-| Hosts | pino `10.3.1`, `@modelcontextprotocol/sdk` `1.30.1`; the supported ranges are in [compatibility.md](./compatibility.md) |
+| Hosts | pino `10.3.1`, `@modelcontextprotocol/sdk` `1.32.1`; the supported ranges are in [compatibility.md](./compatibility.md) |
 | Runtime | Node `v22.23.1`, macOS (darwin x64) |
 | Command | `npx vitest run packages/adapter-ai-context/test/policy-overlays packages/adapter-pino/test/policy-overlays packages/adapter-mcp/test/policy-overlays`, then `npm run build && npm run typecheck && npm test && npm run compat:check` |
 | Outcome | local run 2026-10-07: build, typecheck, `compat:check` and `examples:check` clean; `npm test` 118 files, 1429 passed, 7 skipped (the 15 new tests ran and passed: 7 AI-context, 7 pino, 1 MCP). The new files are listed under `qualifiedBy` in `compatibility.json`, so CI also runs them at the declared core endpoints (they are skipped below the `actionPolicy` floor) |

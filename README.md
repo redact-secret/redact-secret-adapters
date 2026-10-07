@@ -300,7 +300,7 @@ has an options table.
 | --- | --- |
 | `adapter-pino` | pino `^10.0.0` |
 | `adapter-otel-trace` | `@opentelemetry/sdk-trace-base` `^2.0.0` |
-| `adapter-mcp` | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.30.1`, or `@modelcontextprotocol/client` / `server` `>=2.0.0 <=2.1.0` |
+| `adapter-mcp` | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.32.1`, or `@modelcontextprotocol/client` / `server` `>=2.0.0 <=2.3.1` |
 | `redact-secret-adapters` | CPython `>=3.10`; `opentelemetry-sdk>=1.16.0,<2` for the `[otel]` extra |
 | all of them | `@redact-secret/core` `^0.1.0-beta.6` / `redact-secret>=0.1.0b6,<0.2` |
 
