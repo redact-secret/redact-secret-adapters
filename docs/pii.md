@@ -124,7 +124,7 @@ const CONFIGURATIONS = {
 };
 ```
 
-What the runs show, with the pinned core `0.1.0-beta.12`:
+What the runs show, with the pinned core `0.1.0-beta.14`:
 
 | Configuration | Credential | Email next to a context word (PII, high) | `password=...` (a `warn`) |
 | --- | --- | --- | --- |
@@ -143,9 +143,10 @@ What the runs show, with the pinned core `0.1.0-beta.12`:
   record in two hooks), so it is not a count of distinct secrets. An `ok` result, or a
   clean counter, is not a guarantee that nothing was missed.
 - The examples use only options in released adapters (`pii` and `policy` in the npm
-  adapters, `redact_secret.initialize(pii=...)` and `policy=` in Python 0.1.3). Newer
-  options such as `scanLimits`, `ruleset`, `placeholderFormatter` or the Python `pii=`
-  factory argument have no example until they are published.
+  adapters, `redact_secret.initialize(pii=...)` and `policy=` in Python). Other
+  released options, such as `scanLimits`, `ruleset`, `placeholderFormatter`,
+  `actionPolicy` or the Python `pii=` factory argument, have no example here; the
+  [policy overlays guide](./policy-overlays.md) covers `actionPolicy`.
 
 ## Building your own integration
 

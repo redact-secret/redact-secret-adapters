@@ -4,8 +4,8 @@ PII detection is a separate switch from masking. This example runs the **same** 
 input under three configurations and shows what each one does, using `adapter-ai-context`
 (which exposes findings and their actions) and `adapter-pino` (which exposes counters).
 
-- Runtime: Node.js 20, 22 or 24 (ESM).
-- Installs: `@redact-secret/adapter-ai-context` 0.1.2, `@redact-secret/adapter-pino` 0.1.3, `@redact-secret/core` 0.1.0-beta.12, `pino` 10.3.1.
+- Runtime: Node.js 22 or 24 (ESM).
+- Installs: `@redact-secret/adapter-ai-context` 0.1.5, `@redact-secret/adapter-pino` 0.1.6, `@redact-secret/core` 0.1.0-beta.14, `pino` 10.3.1.
 - Needs no network service and no credentials.
 
 ## Run it
@@ -131,9 +131,9 @@ option is used, with finding metadata the core passes in (type, confidence), nev
 
 ## Options this example does not use
 
-`scanLimits`, `ruleset` and `placeholderFormatter` are accepted by the repository's newer adapter code but
-are not in the released adapters pinned here, so no example uses them yet. This README will be extended
-once they are published.
+`scanLimits`, `ruleset`, `placeholderFormatter` and the declarative `actionPolicy` are accepted by the adapters
+pinned here (`actionPolicy` needs core `0.1.0-beta.14`, which is pinned), but this example does not use them.
+[Policy overlays and what is tested](../../docs/policy-overlays.md) shows `actionPolicy` and the callback policy side by side.
 
 ## Next
 

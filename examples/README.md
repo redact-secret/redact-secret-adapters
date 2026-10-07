@@ -7,13 +7,13 @@ package registry.
 
 | Example | Shows | Runtime |
 | --- | --- | --- |
-| [`pino`](./pino) | The quickstart: a synthetic token never reaches a pino log line | Node.js 20, 22 or 24 |
+| [`pino`](./pino) | The quickstart: a synthetic token never reaches a pino log line | Node.js 22 or 24 |
 | [`python-logging`](./python-logging) | The quickstart: a synthetic token never reaches a Python `logging` handler | Python 3.10+ |
-| [`ai-context`](./ai-context) | The quickstart: a model context built without calling a model | Node.js 20, 22 or 24 |
-| [`placement-js`](./placement-js) | Verify **your** pino and OpenTelemetry output path, with negative controls | Node.js 20, 22 or 24 |
+| [`ai-context`](./ai-context) | The quickstart: a model context built without calling a model | Node.js 22 or 24 |
+| [`placement-js`](./placement-js) | Verify **your** pino and OpenTelemetry output path, with negative controls | Node.js 22 or 24 |
 | [`placement-python`](./placement-python) | Verify **your** Python handlers and OpenTelemetry output path, with negative controls | Python 3.10+ |
-| [`troubleshooting`](./troubleshooting) | Each fail-closed outcome reproduced, with its correction checked | Node.js 20, 22 or 24 |
-| [`policy-js`](./policy-js) | The same input under credentials-only, PII activated, and an explicit policy | Node.js 20, 22 or 24 |
+| [`troubleshooting`](./troubleshooting) | Each fail-closed outcome reproduced, with its correction checked | Node.js 22 or 24 |
+| [`policy-js`](./policy-js) | The same input under credentials-only, PII activated, and an explicit policy | Node.js 22 or 24 |
 | [`policy-python`](./policy-python) | The same comparison for Python `logging` | Python 3.10+ |
 
 ## Run one
@@ -42,13 +42,13 @@ what failed and never includes the log line, span or context it checked.
 The pins are the latest **released** combination that was verified, not the
 newest code in this repository:
 
-- npm: `@redact-secret/core` `0.1.0-beta.12` (a beta; the core has no stable
+- npm: `@redact-secret/core` `0.1.0-beta.14` (a beta; the core has no stable
   release yet, so it is pinned explicitly), `@redact-secret/adapter-pino`
-  `0.1.3`, `@redact-secret/adapter-otel-trace` `0.1.1`,
-  `@redact-secret/adapter-ai-context` `0.1.2`, `pino` `10.3.1`,
+  `0.1.6`, `@redact-secret/adapter-otel-trace` `0.1.4`,
+  `@redact-secret/adapter-ai-context` `0.1.5`, `pino` `10.3.1`,
   `@opentelemetry/sdk-trace-base` `2.11.0`.
-- PyPI: `redact-secret` `0.1.0b12` (a beta, so `pip` needs the exact pin),
-  `redact-secret-adapters` `0.1.3`, `opentelemetry-sdk` `1.45.0`.
+- PyPI: `redact-secret` `0.1.0b14` (a beta, so `pip` needs the exact pin),
+  `redact-secret-adapters` `0.1.6`, `opentelemetry-sdk` `1.45.0`.
 
 Newer repository features are not used here until they are published. The
 [policy examples](./policy-js#options-this-example-does-not-use) say which.

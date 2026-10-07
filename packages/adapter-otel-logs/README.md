@@ -4,12 +4,10 @@ Keep secrets out of OpenTelemetry **logs**. Wrap the log record processor you
 already have, and each log record's body, severity text, event name and
 attribute values are redacted before they reach your exporter.
 
-> **Status: beta.** `0.1.0-beta.2` is on npm under the dist-tag `beta`
+> **Status: beta.** `0.1.0-beta.4` is on npm under the dist-tag `beta`
 > (`npm install @redact-secret/adapter-otel-logs@beta`). It depends on
-> `@redact-secret/adapter` `^0.1.7`, which is not on npm yet and publishes in
-> the next release train, so the install fails to resolve until then. The
-> qualification below is unchanged from before publishing; a beta carries no
-> stability promise. Nothing in this README is a promise about a release date.
+> `@redact-secret/adapter` `^0.1.9`, which is on npm, so it installs. A beta
+> carries no stability promise. Nothing in this README is a promise about a release date.
 > `@redact-secret/adapter-otel-trace` does **not** cover logs and never did;
 > this is the package that does.
 
@@ -18,7 +16,7 @@ core, which does the detection.
 
 ## Quick start
 
-Needs Node.js 20, 22 or 24, `@opentelemetry/sdk-logs` `>=0.200.0 <=0.222.0`
+Needs Node.js 22 or 24, `@opentelemetry/sdk-logs` `>=0.200.0 <=0.222.0`
 and `@redact-secret/core` `^0.1.0-beta.6`. ESM only.
 
 ```js

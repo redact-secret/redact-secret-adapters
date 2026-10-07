@@ -49,7 +49,8 @@ version: package versions stay per package.
 | Train tag + GitHub Release | `train/<train>` | `train/2026.09.22` |
 
 Package tags: `adapter`, `adapter-pino`, `adapter-otel-trace`, `adapter-otel`,
-`adapter-ai-context`, `adapter-mcp`, and `redact-secret-adapters` (PyPI).
+`adapter-otel-logs`, `adapter-ai-context`, `adapter-mcp`, and
+`redact-secret-adapters` (PyPI).
 
 ### Prereleases and npm dist-tags
 
@@ -203,7 +204,7 @@ their tested endpoints, already held equal to the manifests by
 ```json
 {
   "schemaVersion": "redact-secret-adapters.release-feed/v1",
-  "generatedAt": "2026-09-28T00:00:00Z",
+  "generatedAt": "2026-10-07T00:00:00Z",
   "repository": "https://github.com/redact-secret/redact-secret-adapters",
   "sources": ["scripts/release-plan.mjs", "compatibility.json", "packages/adapter/package.json", "..."],
   "packages": [
@@ -211,18 +212,18 @@ their tested endpoints, already held equal to the manifests by
       "id": "adapter-pino",
       "ecosystem": "npm",
       "name": "@redact-secret/adapter-pino",
-      "version": "0.1.2",
+      "version": "0.1.7",
       "channel": "latest",
       "prerelease": false,
-      "gitTag": "adapter-pino@0.1.2",
+      "gitTag": "adapter-pino@0.1.7",
       "sourcePath": "packages/adapter-pino",
       "registryUrl": "https://www.npmjs.com/package/@redact-secret/adapter-pino",
-      "runtime": { "name": "node", "range": "20.x || 22.x || 24.x", "tested": ["20", "22", "24"] },
+      "runtime": { "name": "node", "range": "22.x || 24.x", "tested": ["22", "24"] },
       "core": { "name": "@redact-secret/core", "range": "^0.1.0-beta.6", "kind": "peerDependency", "optional": false,
                 "tested": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" } },
       "hosts": [{ "name": "pino", "range": "^10.0.0", "kind": "peerDependency", "optional": false,
                   "tested": { "lowest": "10.0.0", "highest": "10.3.1" } }],
-      "dependsOn": [{ "name": "@redact-secret/adapter", "range": "^0.1.3" }]
+      "dependsOn": [{ "name": "@redact-secret/adapter", "range": "^0.1.9" }]
     }
   ]
 }
@@ -319,20 +320,15 @@ steps above; `@redact-secret/adapter-ai-context` and
 release, `0.1.0-alpha` (`adapter-mcp` depends on `adapter-ai-context`, so
 that one publishes first).
 
-`@redact-secret/adapter-otel-trace` (#49) is on `develop` the same way:
-`"private": true` at `0.1.0` and absent from `PACKAGES`, so no train plans
-it and trains for other packages are unaffected. Its publish job, rehearsal
-dry run, tags, report row and release notes are already wired and stay
-inert. To release it, in one PR into `develop`: drop `"private"`, add its
-`PACKAGES` entry (the commented one in `scripts/release-plan.mjs`, before
-`adapter_otel`), move its CHANGELOG `Unreleased` entries under
-`## [0.1.0] - YYYY-MM-DD`, and run `npm run feed:generate`; then bootstrap it
-by hand as in steps 1–3 above
-(`npm publish --workspace @redact-secret/adapter-otel-trace --access public --tag latest`).
+`@redact-secret/adapter-otel-trace` (#49) landed on `develop` the same way
+(`"private": true` at `0.1.0`, absent from `PACKAGES`) and was released by
+dropping `"private"`, adding its `PACKAGES` entry, moving its CHANGELOG
+`Unreleased` entries under `## [0.1.0] - YYYY-MM-DD`, running
+`npm run feed:generate`, and bootstrapping it by hand as in steps 1–3 above.
 `@redact-secret/adapter-otel` re-exports it, and the release plan refuses a
 train that would publish `adapter-otel` before `adapter-otel-trace` is
-released. Bump `adapter-otel` (to `0.1.3`, say) in the same train or a later
-one to ship the re-export; its publish job waits for `adapter-otel-trace`'s.
+released.
+
 `@redact-secret/adapter-otel-logs` (#178), the OpenTelemetry Logs adapter, went
 through the same path and is now wired: its `PACKAGES` entry (after `adapter`,
 which it depends on), publish job (`needs` `publish-adapter`, `--provenance`,

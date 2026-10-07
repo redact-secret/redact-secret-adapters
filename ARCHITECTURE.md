@@ -296,11 +296,10 @@ up to `0.1.2`; that name is now a compatibility package that re-exports
 `adapter-otel-trace` unchanged and marks every export `@deprecated`, so
 existing imports keep working. Logs have their own package,
 `adapter-otel-logs` (below): a `LogRecordProcessor`, a separate peer
-(`@opentelemetry/sdk-logs`) and a separate qualification. It is on `develop`
-unreleased (`"private": true`, absent from the release plan), so nothing
-installable protects Logs yet. The choice and its
+(`@opentelemetry/sdk-logs`) and a separate qualification. It is published as a
+beta (below). The choice and its
 release consequences are recorded in
-[docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md](docs/decisions/2026-09-30-name-the-otel-trace-adapter-for-what-it-covers.md).
+[docs/decisions/name-the-otel-trace-adapter-for-what-it-covers.md](docs/decisions/name-the-otel-trace-adapter-for-what-it-covers.md).
 
 The processor wraps any object shaped like a `SpanProcessor` and, in `onEnd`
 before delegating, redacts every free-text field an exporter sends: the span
@@ -337,11 +336,11 @@ test checks all of this at both ends of the Python SDK's declared range.
 `LogRecordProcessor` over `@opentelemetry/sdk-logs`, a separate package with
 its own peer range (`>=0.200.0 <=0.222.0`, an explicit span because the SDK is
 `0.x`) and its own qualification. It is published as
-`0.1.0-beta.2` under the dist-tag `beta` (first publish by hand, then wired into
-the release plan) and requires `@redact-secret/adapter` `^0.1.7`, which ships
-in the next train. The SDK probe, the chosen
+`0.1.0-beta.5` under the dist-tag `beta` (`0.1.0-beta.2` was a first publish by
+hand, then wired into the release plan) and requires `@redact-secret/adapter`
+`^0.1.9`. The SDK probe, the chosen
 endpoints and the alternatives are in
-[docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md](docs/decisions/2026-10-01-otel-logs-adapter-design-and-sdk-probe.md).
+[docs/decisions/otel-logs-adapter-design-and-sdk-probe.md](docs/decisions/otel-logs-adapter-design-and-sdk-probe.md).
 
 The SDK documents that a processor "may freely modify logRecord for the
 duration of the OnEmit call", and makes the record read-only once `emit`
@@ -606,7 +605,7 @@ packages/
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
   adapter-otel-trace/   @redact-secret/adapter-otel-trace  L3 + live wrapper, traces only
   adapter-otel/         @redact-secret/adapter-otel     deprecated name: re-exports adapter-otel-trace
-  adapter-otel-logs/    @redact-secret/adapter-otel-logs  LogRecordProcessor + live wrapper, logs only; 0.1.0-beta.2 (beta)
+  adapter-otel-logs/    @redact-secret/adapter-otel-logs  LogRecordProcessor + live wrapper, logs only; 0.1.0-beta.5 (beta)
   adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper
   adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context
 python/

@@ -22,7 +22,7 @@ core, which does the detection.
 npm install @redact-secret/core @redact-secret/adapter-pino pino
 ```
 
-Needs Node.js 20, 22 or 24 and pino `^10.0.0`. ESM only.
+Needs Node.js 22 or 24 and pino `^10.0.0`. ESM only.
 
 ## Quick start
 

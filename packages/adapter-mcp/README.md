@@ -23,7 +23,7 @@ does the detection.
 npm install @redact-secret/adapter-mcp @redact-secret/core
 ```
 
-Needs Node.js 20, 22 or 24. ESM only. The core is a required peer. The MCP SDK
+Needs Node.js 22 or 24. ESM only. The core is a required peer. The MCP SDK
 you already use is an optional peer: this package imports no MCP SDK, at
 runtime or for types.
 
@@ -360,11 +360,11 @@ const response = toReadResourceResponse(outcome); // { result } | { error } | nu
 | --- | --- |
 | TypeScript SDK, 1.x | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.32.1` (optional peer) |
 | TypeScript SDK, 2.x | `@modelcontextprotocol/client` and `@modelcontextprotocol/server` `>=2.0.0 <=2.3.1` (optional peers) |
-| Protocol revisions | `2025-11-25` (negotiated by 1.26.0, 1.30.1, 2.0.0, 2.1.0) |
+| Protocol revisions | `2025-06-18` and `2025-11-25`; the tests assert that every tested SDK endpoint negotiates one of them |
 | Transports | stdio and Streamable HTTP |
 | MCP messages | `tools/call` and `resources/read`, over every line, protocol, and transport above |
 | Core | `@redact-secret/core ^0.1.0-beta.6` (required peer) |
-| Runtime | Node.js 20, 22, 24 |
+| Runtime | Node.js 22, 24 |
 
 The SDK peer ranges are capped at the highest tested version, so npm refuses
 an untested SDK instead of installing it.

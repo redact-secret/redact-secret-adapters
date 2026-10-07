@@ -207,7 +207,7 @@ jobs:
           npm publish --workspace @redact-secret/adapter-otel-trace --access public --provenance --tag "$DIST_TAG"
 
   publish-adapter-otel-logs:
-    # Depends on @redact-secret/adapter (^0.1.7), so it publishes after it.
+    # Depends on @redact-secret/adapter, so it publishes after it.
     # Its first version cannot come from here: npm only accepts a trusted
     # publisher on a package that already exists, so 0.1.0-beta.2 was
     # published by hand (RELEASING.md, A brand-new npm package) and the plan

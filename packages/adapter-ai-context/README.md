@@ -24,7 +24,7 @@ does the detection.
 npm install @redact-secret/adapter-ai-context @redact-secret/core
 ```
 
-Needs Node.js 20, 22 or 24. ESM only. The core is a required peer.
+Needs Node.js 22 or 24. ESM only. The core is a required peer.
 
 ## Quick start
 

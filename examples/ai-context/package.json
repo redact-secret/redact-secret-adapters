@@ -4,13 +4,13 @@
   "type": "module",
   "description": "Standalone quickstart: build a model context without a synthetic token. No model is called.",
   "engines": {
-    "node": "20.x || 22.x || 24.x"
+    "node": "22.x || 24.x"
   },
   "scripts": {
     "start": "node check.mjs"
   },
   "dependencies": {
-    "@redact-secret/adapter-ai-context": "0.1.2",
-    "@redact-secret/core": "0.1.0-beta.12"
+    "@redact-secret/adapter-ai-context": "0.1.5",
+    "@redact-secret/core": "0.1.0-beta.14"
   }
 }

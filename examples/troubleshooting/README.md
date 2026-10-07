@@ -5,8 +5,8 @@ with a synthetic input, then applies the smallest safe correction and shows the 
 The reference is [docs/troubleshooting](../../docs/troubleshooting.md); this folder is the
 proof that its corrections work against released packages.
 
-- Runtime: Node.js 20, 22 or 24 (ESM).
-- Installs: `@redact-secret/adapter-ai-context` 0.1.2, `@redact-secret/adapter-pino` 0.1.3, `@redact-secret/core` 0.1.0-beta.12, `pino` 10.3.1.
+- Runtime: Node.js 22 or 24 (ESM).
+- Installs: `@redact-secret/adapter-ai-context` 0.1.5, `@redact-secret/adapter-pino` 0.1.6, `@redact-secret/core` 0.1.0-beta.14, `pino` 10.3.1.
 - Needs no network service and no credentials. Nothing here is a secret.
 
 ## Run it

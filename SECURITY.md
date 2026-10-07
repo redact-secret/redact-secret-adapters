@@ -33,7 +33,7 @@ and carries its answer back out, never second-guessing it.
 Each package in this repository — `@redact-secret/adapter`,
 `@redact-secret/adapter-pino`, `@redact-secret/adapter-otel-trace`,
 `@redact-secret/adapter-otel` (its deprecated name, a re-export),
-`@redact-secret/adapter-ai-context`, `@redact-secret/adapter-mcp` (npm), and
+`@redact-secret/adapter-otel-logs` (beta), `@redact-secret/adapter-ai-context`, `@redact-secret/adapter-mcp` (npm), and
 `redact-secret-adapters` (PyPI) — is versioned and released independently;
 see [ARCHITECTURE.md § Versioning](./ARCHITECTURE.md#versioning). Security
 fixes target the latest published version of each package. Older versions
