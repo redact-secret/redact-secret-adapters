@@ -19,12 +19,11 @@ Find your symptom:
 
 ## What is released
 
-Several limit and provenance features are in this repository's `develop` branch
-and not in the versions on the registry at the time of writing (`adapter` 0.1.6,
-`adapter-pino` 0.1.3, `adapter-otel-trace` 0.1.1, `adapter-ai-context` 0.1.2,
-`redact-secret-adapters` 0.1.3). They are marked **next release** below. Check the
-`CHANGELOG.md` of the package you run before relying on one, and do not look for a
-behavior marked next release in an older version.
+Every behavior in this guide is in the versions on the registry on 2026-10-07
+(`adapter` 0.1.9, `adapter-pino` 0.1.6, `adapter-otel-trace` 0.1.4,
+`adapter-ai-context` 0.1.5, `adapter-mcp` 0.1.6, `redact-secret-adapters` 0.1.6).
+A newer limit or provenance feature may be missing from an older version, so check
+the `CHANGELOG.md` of the package you run before relying on one.
 
 ## Logs and spans: markers
 
@@ -39,7 +38,7 @@ lines, span fields and the output of a masking callback.
 | `[REDACTED:LIMIT_EXCEEDED]` | A value was past a size limit and was **not scanned and not passed through**. See [which limit](#limits-which-one-did-i-hit) | Is the value a whole payload, a large array, or a deep structure? Counters: `limited` is non-zero | Log a bounded summary (an identifier, a length, a count) instead of the value. Raise a limit only to a bound you can justify | [limits](../packages/adapter#fail-closed-markers) |
 | `[REDACTED:CYCLE]` | A self-referencing object | Does an object hold a reference back to itself, such as a parent link? | Log the fields you need instead of the object | [fail-closed markers](../packages/adapter#fail-closed-markers) |
 | `{"msg":"[REDACTED:ERROR]"}` as a whole pino line | The finished line was not one valid JSON value (an unterminated object or string, text outside a string, trailing text, plain text), or a key literal was not valid JSON. The line is refused, never forwarded, and counted as `failed`. Exported as `PINO_ERROR_LINE` | Did a custom `streamWrite` (it runs first and sees pino's line unmasked) change the line into something that is not JSON? | Remove what produces a non-JSON line, or put it after the redacting hooks | [adapter-pino](../packages/adapter-pino#readme) |
-| `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` as a whole pino line | **Next release.** The line is past a pre-processing ceiling or the record's aggregate budget was already spent. Exported as `PINO_LIMIT_LINE`. The counter `limited` rises, not `failed` | Is a single line megabytes long, or made of very many string values? | Log less per record | [adapter-pino](../packages/adapter-pino#readme) |
+| `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` as a whole pino line | The line is past a pre-processing ceiling or the record's aggregate budget was already spent. Exported as `PINO_LIMIT_LINE`. The counter `limited` rises, not `failed` | Is a single line megabytes long, or made of very many string values? | Log less per record | [adapter-pino](../packages/adapter-pino#readme) |
 | A span is missing from the exporter | The redacting processor could not write a masked value back (for example, an earlier processor froze the attributes), so the span is dropped. A one-time warning `REDACT_SECRET_SPAN_DROPPED` names the field, never its value | Does a processor ahead of this one freeze attributes? | Register the redacting processor so that nothing freezes the span first | [adapter-otel-trace](../packages/adapter-otel-trace#a-span-that-cannot-be-redacted-is-dropped) |
 | The text is unchanged but the counters show a finding | The finding's action is `warn`, which leaves text alone | Compare `findings` with `redacted` | Supply your own core `policy` if that finding must be masked; see [credentials, PII and policy](./pii.md#see-the-difference) | [counters](../packages/adapter#outcome-counters) |
 
@@ -75,7 +74,7 @@ result for every non-`ok` outcome, see
 | `blocked` / `policy` | A finding resolved to `block`, or an object **key** has a `redact`/`block` finding (a key cannot be rewritten without changing the shape) | Which part of the input carried it? Is the key itself a secret? | Do not send that content to the model. Rename or remove the key. Do not change the policy to let it through | n/a: depends on content |
 | `blocked` / `unsupported_value` | The value is not JSON-shaped: `undefined`, `NaN`, a `Date`, a `Map`, a class instance, an `Error`, an array hole, a throwing getter, binary or encoded content, or a cycle | Find the value; `typeof` and `instanceof` tell you | Convert it yourself so what is scanned is exactly what you send: `date.toISOString()`, `Object.fromEntries(map)`, omit `undefined` fields, `{ name: error.name }` for an error you may share. The boundary will not convert for you | [example](../examples/troubleshooting#unsupported-value) |
 | `blocked` / `limit_exceeded` with a `code` | The core's whole-input or incremental bound: `INPUT_LIMIT_EXCEEDED`, `FINDING_LIMIT_EXCEEDED`, `BUFFER_LIMIT_EXCEEDED`, `TOKEN_LIMIT_EXCEEDED`, `MULTILINE_LIMIT_EXCEEDED` | Compare the input's UTF-8 size with `wholeInputLimits`/`incrementalLimits` | Send less. If the default is truly too small, replace the **complete** set, starting from `AI_CONTEXT_DEFAULT_LIMITS` | [example](../examples/troubleshooting#a-limit-is-exceeded) |
-| `blocked` / `limit_exceeded`, no `code` | The adapter's own bound: `traversalLimits` (`maxDepth`, `maxNodes`), or **next release** the aggregate `operationLimits` | Is the value deeper than 16 levels or larger than 4,096 nodes (the defaults)? | Flatten or trim the value. Raise `traversalLimits` as a complete set only to a bound you can justify | [Limits](../packages/adapter-ai-context#limits) |
+| `blocked` / `limit_exceeded`, no `code` | The adapter's own bound: `traversalLimits` (`maxDepth`, `maxNodes`), or the aggregate `operationLimits` | Is the value deeper than 16 levels or larger than 4,096 nodes (the defaults)? | Flatten or trim the value. Raise `traversalLimits` as a complete set only to a bound you can justify | [Limits](../packages/adapter-ai-context#limits) |
 | `blocked` / `lifecycle` | A stream was misused: a second `finalize`, or another invalid-state call | Is one stream shared by two consumers, or reused after `finalize`? | Open a new stream for each text | [example](../examples/troubleshooting#streams-are-single-use) |
 | `blocked` / `core_error` + `INVALID_OPTIONS` or `INVALID_LIMITS` | A limit set is partial or inconsistent. A set you pass is used exactly as given and is not merged with the defaults | Does the set have every key? | Start from the exported defaults and change one field | [example](../examples/troubleshooting#a-partial-limit-set) |
 | `blocked` / `core_error` + `UNPAIRED_SURROGATE` | The text holds a lone UTF-16 surrogate, which the core refuses to read | Where did the text come from (a truncated string, a broken decode)? | Call `text.toWellFormed()` first. The replacement character is what is scanned and sent | [example](../examples/troubleshooting#a-lone-surrogate) |
@@ -98,11 +97,11 @@ wrong one changes nothing.
 
 | Kind | Bounds | Unit | Over the limit | Option |
 | --- | --- | --- | --- | --- |
-| **Core whole-input** | one `scanAndRedact` call: input size and findings | UTF-8 bytes; finding count | AI context: `blocked` / `limit_exceeded` + `code`. Logging and tracing: that leaf is `[REDACTED:ERROR]` (a core failure) | `wholeInputLimits` (AI context, MCP), `scanLimits` (**next release** for logging and tracing) |
+| **Core whole-input** | one `scanAndRedact` call: input size and findings | UTF-8 bytes; finding count | AI context: `blocked` / `limit_exceeded` + `code`. Logging and tracing: that leaf is `[REDACTED:ERROR]` (a core failure) | `wholeInputLimits` (AI context, MCP), `scanLimits` (logging and tracing) |
 | **Core incremental** | one streamed session: total input, buffered text, a token, a multiline span | the core documents all four as UTF-8 byte ceilings despite their `...CodeUnits` names | `blocked` / `limit_exceeded` + `code`; the stream stops accepting | `incrementalLimits` |
 | **Adapter traversal** | the walk over a value tree: depth, array length, keys, string length, leaves, nodes | counts of values; `maxStringLength` in UTF-16 code units | the value, or the rest of it, is `[REDACTED:LIMIT_EXCEEDED]` (logging, tracing), or `blocked` / `limit_exceeded` with no code (AI context) | `limits` (logging, tracing, `mask`), `traversalLimits` (AI context) |
-| **Aggregate operation budget** (**next release**) | everything one log record, span or context does together: scanned bytes, scans, nodes, keys, leaves, findings, summed | UTF-8 bytes for `maxBytes`; **calls** for bytes and scans; **occurrences** for nodes, keys, leaves and findings | the remainder is `[REDACTED:LIMIT_EXCEEDED]` (logging, tracing) or the whole operation is `blocked` / `limit_exceeded`; once spent it stays spent | `operationLimits` |
-| **pino line ceilings** (**next release**) | lexing and decoding the finished line before the walker runs | UTF-16 code units | the whole line becomes `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` | `lineLimits` |
+| **Aggregate operation budget** | everything one log record, span or context does together: scanned bytes, scans, nodes, keys, leaves, findings, summed | UTF-8 bytes for `maxBytes`; **calls** for bytes and scans; **occurrences** for nodes, keys, leaves and findings | the remainder is `[REDACTED:LIMIT_EXCEEDED]` (logging, tracing) or the whole operation is `blocked` / `limit_exceeded`; once spent it stays spent | `operationLimits` |
+| **pino line ceilings** | lexing and decoding the finished line before the walker runs | UTF-16 code units | the whole line becomes `{"msg":"[REDACTED:LIMIT_EXCEEDED]"}` | `lineLimits` |
 
 Things that decide which one you hit:
 
@@ -151,10 +150,10 @@ stream there reads two of three chunks, sees `accepting` turn `false`, and gets
 | Every AI-context operation is `blocked` / `core_error` + `INITIALIZATION_FAILED` or `NOT_INITIALIZED` | The boundary resolved, but the core could not load or initialize. It fails closed on each call instead of throwing at startup | Fix the core install (`@redact-secret/core`, a supported Node and platform), then call the factory again |
 | A logging or tracing factory rejects at construction with `PII_ACTIVATION_NOT_ACTIVE` or `PII_ACTIVATION_UNSUPPORTED` | The `pii` selection you asked for is not the one active, or the installed core is too old to report an activation. Needs core `0.1.0-beta.10` or later | Activate the same selection first, or upgrade the core. See [PII](./pii.md#the-rules) |
 | `PII_ACTIVATION_CONFLICT` (`PiiActivationConflictError` in Python) | A different selection was already activated. The first one wins, process-wide | Use one selection per process. See [PII](./pii.md#the-rules) |
-| `CoreOptionsError` with `CORE_OPTION_UNSUPPORTED` or `CORE_OPTION_REJECTED` | **Next release.** The core does not support a scan option (`actionPolicy` needs core `0.1.0-beta.14` or later), or refused a `ruleset`, limits or `actionPolicy` you passed (`coreCode` `INVALID_RULESET`, `INVALID_LIMITS`, `INVALID_ACTION_POLICY`). The option names are given, never a value | Upgrade the core, or fix the option. A ruleset's or policy document's text never appears in the error |
+| `CoreOptionsError` with `CORE_OPTION_UNSUPPORTED` or `CORE_OPTION_REJECTED` | The core does not support a scan option (`actionPolicy` needs core `0.1.0-beta.14` or later), or refused a `ruleset`, limits or `actionPolicy` you passed (`coreCode` `INVALID_RULESET`, `INVALID_LIMITS`, `INVALID_ACTION_POLICY`). The option names are given, never a value | Upgrade the core, or fix the option. A ruleset's or policy document's text never appears in the error |
 | `TypeError`: `policy and actionPolicy are mutually exclusive` | A callback `policy` and a declarative `actionPolicy` were both given. One policy decides | Pass one. The check runs before the core is loaded or any text is scanned |
 | Python records are fine but PII is never redacted | PII was activated after a handler already emitted. There is no error and no counter that tells it apart from "nothing found" | Call `redact_secret.initialize(pii=[...])` before attaching handlers. See [PII](./pii.md#python) |
-| Python `CoreActivationError` with `PII_ACTIVATION_NOT_ACTIVE`, `PII_ACTIVATION_UNAVAILABLE` or `PII_ACTIVATION_UNSUPPORTED` | **Next release** of `redact-secret-adapters`: a factory given `pii=` could not show that it took effect | Same as the JavaScript rows |
+| Python `CoreActivationError` with `PII_ACTIVATION_NOT_ACTIVE`, `PII_ACTIVATION_UNAVAILABLE` or `PII_ACTIVATION_UNSUPPORTED` | A factory given `pii=` could not show that it took effect | Same as the JavaScript rows |
 
 No error carries a selector, an input, a ruleset, a policy document or the core's own message.
 
@@ -218,7 +217,7 @@ whatever was scanned. In AI context that is not always the whole text:
   match: the offsets were mapped back to the leaf.
 - For a stream they are absolute offsets into the stream's logical text across chunks.
 
-**Next release:** `findingOccurrences(outcome)` returns one entry per finding, in the
+`findingOccurrences(outcome)` returns one entry per finding, in the
 same order as `ok.findings`, with `partIndex`, `rangeScope` (`"text"`, `"leaf"`, `"stream"`,
 or `"key"` for telemetry only), `rangeUnit` (`"utf16-code-units"`) and a zero-based
 `leafOrdinal` or `keyOrdinal`. It contains no key, path, value or score. A `finding.id` is

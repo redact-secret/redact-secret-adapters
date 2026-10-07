@@ -7,13 +7,13 @@ package registry.
 
 | Example | Shows | Runtime |
 | --- | --- | --- |
-| [`pino`](./pino) | The quickstart: a synthetic token never reaches a pino log line | Node.js 20, 22 or 24 |
+| [`pino`](./pino) | The quickstart: a synthetic token never reaches a pino log line | Node.js 22 or 24 |
 | [`python-logging`](./python-logging) | The quickstart: a synthetic token never reaches a Python `logging` handler | Python 3.10+ |
-| [`ai-context`](./ai-context) | The quickstart: a model context built without calling a model | Node.js 20, 22 or 24 |
-| [`placement-js`](./placement-js) | Verify **your** pino and OpenTelemetry output path, with negative controls | Node.js 20, 22 or 24 |
+| [`ai-context`](./ai-context) | The quickstart: a model context built without calling a model | Node.js 22 or 24 |
+| [`placement-js`](./placement-js) | Verify **your** pino and OpenTelemetry output path, with negative controls | Node.js 22 or 24 |
 | [`placement-python`](./placement-python) | Verify **your** Python handlers and OpenTelemetry output path, with negative controls | Python 3.10+ |
-| [`troubleshooting`](./troubleshooting) | Each fail-closed outcome reproduced, with its correction checked | Node.js 20, 22 or 24 |
-| [`policy-js`](./policy-js) | The same input under credentials-only, PII activated, and an explicit policy | Node.js 20, 22 or 24 |
+| [`troubleshooting`](./troubleshooting) | Each fail-closed outcome reproduced, with its correction checked | Node.js 22 or 24 |
+| [`policy-js`](./policy-js) | The same input under credentials-only, PII activated, and an explicit policy | Node.js 22 or 24 |
 | [`policy-python`](./policy-python) | The same comparison for Python `logging` | Python 3.10+ |
 
 ## Run one

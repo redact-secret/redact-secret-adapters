@@ -44,12 +44,10 @@ Current versions:
 [![adapter-mcp](https://img.shields.io/npm/v/@redact-secret/adapter-mcp?label=adapter-mcp)](https://www.npmjs.com/package/@redact-secret/adapter-mcp)
 [![redact-secret-adapters](https://img.shields.io/pypi/v/redact-secret-adapters?label=redact-secret-adapters%20%28PyPI%29)](https://pypi.org/project/redact-secret-adapters/)
 
-Not covered by anything you can install today: OpenTelemetry metrics and model
-output. A Logs adapter,
+Not covered: OpenTelemetry metrics and model output. A Logs adapter,
 [`adapter-otel-logs`](./packages/adapter-otel-logs#readme), is published as
-`0.1.0-beta.2` under the npm dist-tag `beta`; it depends on
-`@redact-secret/adapter` `^0.1.7`, which ships in the next release train, so it
-does not install from npm until then. `adapter-otel-trace` never covers logs. `@redact-secret/adapter-otel` is the deprecated old name of
+`0.1.0-beta.4` under the npm dist-tag `beta` (`npm i @redact-secret/adapter-otel-logs@beta`).
+`adapter-otel-trace` never covers logs. `@redact-secret/adapter-otel` is the deprecated old name of
 `adapter-otel-trace`; existing imports keep working.
 
 ## Quick start
@@ -300,6 +298,7 @@ has an options table.
 | --- | --- |
 | `adapter-pino` | pino `^10.0.0` |
 | `adapter-otel-trace` | `@opentelemetry/sdk-trace-base` `^2.0.0` |
+| `adapter-otel-logs` (beta) | `@opentelemetry/sdk-logs` `>=0.200.0 <=0.222.0` |
 | `adapter-mcp` | `@modelcontextprotocol/sdk` `>=1.26.0 <=1.32.1`, or `@modelcontextprotocol/client` / `server` `>=2.0.0 <=2.3.1` |
 | `redact-secret-adapters` | CPython `>=3.10`; `opentelemetry-sdk>=1.16.0,<2` for the `[otel]` extra |
 | all of them | `@redact-secret/core` `^0.1.0-beta.6` / `redact-secret>=0.1.0b6,<0.2` |
