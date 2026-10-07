@@ -1,6 +1,6 @@
 {
   "name": "@redact-secret/adapter-otel-logs",
-  "version": "0.1.0-beta.4",
+  "version": "0.1.0-beta.5",
   "description": "A redacting OpenTelemetry JS LogRecordProcessor (logs only) over the Redact Secret core.",
   "license": "MIT",
   "type": "module",

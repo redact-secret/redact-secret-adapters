@@ -336,7 +336,7 @@ test checks all of this at both ends of the Python SDK's declared range.
 `LogRecordProcessor` over `@opentelemetry/sdk-logs`, a separate package with
 its own peer range (`>=0.200.0 <=0.222.0`, an explicit span because the SDK is
 `0.x`) and its own qualification. It is published as
-`0.1.0-beta.4` under the dist-tag `beta` (`0.1.0-beta.2` was a first publish by
+`0.1.0-beta.5` under the dist-tag `beta` (`0.1.0-beta.2` was a first publish by
 hand, then wired into the release plan) and requires `@redact-secret/adapter`
 `^0.1.9`. The SDK probe, the chosen
 endpoints and the alternatives are in
@@ -605,7 +605,7 @@ packages/
   adapter-pino/         @redact-secret/adapter-pino     L3 + live wrapper
   adapter-otel-trace/   @redact-secret/adapter-otel-trace  L3 + live wrapper, traces only
   adapter-otel/         @redact-secret/adapter-otel     deprecated name: re-exports adapter-otel-trace
-  adapter-otel-logs/    @redact-secret/adapter-otel-logs  LogRecordProcessor + live wrapper, logs only; 0.1.0-beta.4 (beta)
+  adapter-otel-logs/    @redact-secret/adapter-otel-logs  LogRecordProcessor + live wrapper, logs only; 0.1.0-beta.5 (beta)
   adapter-ai-context/   @redact-secret/adapter-ai-context  AI-context boundary + live wrapper
   adapter-mcp/          @redact-secret/adapter-mcp      MCP boundary over adapter-ai-context
 python/

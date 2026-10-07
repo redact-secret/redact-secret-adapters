@@ -1,6 +1,6 @@
 {
   "name": "@redact-secret/adapter-ai-context",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A framework-neutral AI-context boundary over the Redact Secret core: sanitize user input, tool results, constructed context, and streamed text before it reaches a model.",
   "license": "MIT",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@redact-secret/adapter-pino",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Value-based secret redaction for pino, via hooks.logMethod, over the Redact Secret core.",
   "license": "MIT",
   "type": "module",
