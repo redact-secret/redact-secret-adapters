@@ -5,7 +5,7 @@ under three configurations through Python `logging` and shows what each one does
 filter's supported `on_outcome` counters. Nothing here reads finding details the API does not expose.
 
 - Runtime: Python 3.10 or later.
-- Installs: `redact-secret-adapters` 0.1.3 and `redact-secret` 0.1.0b12 (a beta, pinned exactly).
+- Installs: `redact-secret-adapters` 0.1.6 and `redact-secret` 0.1.0b14 (a beta, pinned exactly).
 - Needs no network service and no credentials.
 
 ## Run it
@@ -58,8 +58,8 @@ logger.info(SAMPLE)
 # outcomes[0].values: scanned, findings, redacted, blocked, limited, failed. No values, no details.
 ```
 
-`redact_secret.initialize(pii=...)` is the released activation path. The `pii=` argument of
-`RedactSecretFilter` is newer than the pinned `redact-secret-adapters` 0.1.3 and is not used.
+`redact_secret.initialize(pii=...)` is the activation path this example uses. `RedactSecretFilter(pii=[...])`
+(released in `redact-secret-adapters` 0.1.4) does the same and verifies the activation, but is not used here.
 Where you put the `initialize` line is the whole rule: see the [PII guide](../../docs/pii.md#python).
 
 ## Expected output

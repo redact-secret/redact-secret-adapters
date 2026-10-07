@@ -1,4 +1,4 @@
 # Exact pins. redact-secret is a beta release, so it must be named explicitly.
 # Needs only released APIs: redact_secret.initialize(pii=...) and RedactSecretFilter(policy=, on_outcome=).
-redact-secret==0.1.0b12
-redact-secret-adapters==0.1.3
+redact-secret==0.1.0b14
+redact-secret-adapters==0.1.6

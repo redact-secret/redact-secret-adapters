@@ -10,8 +10,8 @@
     "start": "node check.mjs"
   },
   "dependencies": {
-    "@redact-secret/adapter-pino": "0.1.3",
-    "@redact-secret/core": "0.1.0-beta.12",
+    "@redact-secret/adapter-pino": "0.1.6",
+    "@redact-secret/core": "0.1.0-beta.14",
     "pino": "10.3.1"
   }
 }
