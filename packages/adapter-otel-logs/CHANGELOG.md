@@ -18,6 +18,14 @@ publishes in that train. See
 
 ## [Unreleased]
 
+### Added
+
+- `actionPolicy` on `createRedactingLogRecordProcessor`, applied to every string of a log record, with the shared snapshot, callback-conflict and capability checks of `@redact-secret/adapter` (redact-secret-adapters#217). Needs `@redact-secret/core` 0.1.0-beta.14 or later (the first published release that accepts it); an older core is rejected by name with `CoreOptionsError` (`CORE_OPTION_UNSUPPORTED`) and every other option keeps working on the declared floor. The package range is unchanged; the new tests in `compatibility.json` run at both endpoints (the option applies at the upper one, is rejected at the lower one). Test: `test/action-policy-live.test.ts` (the exported record for each action).
+
+### Fixed
+
+- The processor now resolves one scan configuration at construction and passes it to every leaf, so `scanLimits`, `ruleset` and `placeholderFormatter` (typed by `MaskLeafOptions` but previously not forwarded to the core by this package) now reach the core, and the live factory rejects an unsupported or refused option with `CoreOptionsError` as the pino and trace adapters do. Only `policy` was forwarded before.
+
 ## [0.1.0-beta.3] - 2026-10-03
 ### Changed
 

@@ -64,7 +64,12 @@ test("the option names are scanLimits / ruleset / placeholderFormatter, and requ
   expect(config.requested).toEqual(["scanLimits", "ruleset", "placeholderFormatter"]);
   expect(Object.isFrozen(config)).toBe(true);
   expect(Object.isFrozen(config.options)).toBe(true);
-  expect(Object.keys(SCAN_OPTION_CORE_FLOORS).sort()).toEqual(["placeholderFormatter", "ruleset", "scanLimits"]);
+  expect(Object.keys(SCAN_OPTION_CORE_FLOORS).sort()).toEqual([
+    "actionPolicy",
+    "placeholderFormatter",
+    "ruleset",
+    "scanLimits",
+  ]);
 });
 
 test("the snapshot is taken at resolution: mutating the caller's limits object or ruleset bytes changes nothing", () => {

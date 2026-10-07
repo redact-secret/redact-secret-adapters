@@ -232,6 +232,11 @@ serialization of it or of the wire result contains the credential.
 - **Python.** `logging` and OpenTelemetry follow the same markers (see the
   [README](../README.md#fail-closed-behavior)), but the truth table is not run
   against the Python package here.
+- **A declarative `actionPolicy` (#217).** It changes which action the core
+  returns for a finding, never what a boundary does with an action, so this table
+  applies to it unchanged: each `actionPolicy` host test (`action-policy-live.test.ts`
+  beside the truth-table tests) asserts the same spelled-out output as the
+  callback `policy` for the same action. Rule syntax and evaluation are the core's.
 - **Policies written for a custom `ruleset`, PII selections, or a
   `placeholderFormatter`.** The credential used here is a built-in detection;
   those change what is found or what a `redact` looks like, not what a boundary

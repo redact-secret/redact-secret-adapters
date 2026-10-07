@@ -117,7 +117,7 @@ assertion is not optional.
 ## Options
 
 ```js
-await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLength, operationLimits, scanLimits, ruleset, placeholderFormatter });
+await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLength, operationLimits, scanLimits, ruleset, placeholderFormatter, actionPolicy });
 ```
 
 | Option | What it does |
@@ -128,6 +128,7 @@ await createRedactingSpanProcessor(next, { pii, onOutcome, policy, maxStringLeng
 | `scanLimits` | The core's whole-input limits, `{ maxInputBytes, maxFindings }`, for every scan. See [Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options) |
 | `ruleset` | A declarative detector ruleset (text or bytes) |
 | `placeholderFormatter` | The core's placeholder formatter |
+| `actionPolicy` | The core's declarative action policy (object, JSON text or bytes), for every string of a span. Mutually exclusive with `policy`; needs core `0.1.0-beta.14` or later, else construction rejects with `CoreOptionsError`. See [Declarative `actionPolicy`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#declarative-actionpolicy) |
 | `maxStringLength` | Strings longer than this become `[REDACTED:LIMIT_EXCEEDED]` unscanned |
 | `operationLimits` | Override the aggregate budget of **one span**. See below |
 

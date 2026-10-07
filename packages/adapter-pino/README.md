@@ -96,7 +96,7 @@ limits:
 ## Options
 
 ```js
-await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLimits, lineLimits, scanLimits, ruleset, placeholderFormatter });
+await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLimits, lineLimits, scanLimits, ruleset, placeholderFormatter, actionPolicy });
 ```
 
 | Option | What it does |
@@ -107,6 +107,7 @@ await createRedactingHooks({ hooks, pii, onOutcome, policy, limits, operationLim
 | `policy` | The core's policy, passed through unchanged. It replaces the core's built-in policy for every finding, a `ruleset` detector's included |
 | `scanLimits` | The core's whole-input limits, `{ maxInputBytes, maxFindings }`, for every scan of both hooks. See [Core scan options](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#core-scan-options) |
 | `ruleset` | A declarative detector ruleset (text or bytes), whole-input scans |
+| `actionPolicy` | The core's declarative action policy (object, JSON text or bytes), for every scan of both hooks. Mutually exclusive with `policy`; needs core `0.1.0-beta.14` or later, else construction rejects with `CoreOptionsError`. See [Declarative `actionPolicy`](https://github.com/redact-secret/redact-secret-adapters/tree/main/packages/adapter#declarative-actionpolicy) |
 | `placeholderFormatter` | The core's placeholder formatter |
 | `limits` | Override the walk limits (`DEFAULT_LIMITS` in `@redact-secret/adapter`) |
 | `operationLimits` | Override the aggregate budget of **one log record**, shared by both hooks. See below |

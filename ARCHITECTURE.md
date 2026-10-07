@@ -65,8 +65,8 @@ an inline placeholder.
 The list is about what an adapter *reads from a result*, and it does not grow.
 What an adapter may *pass in* is the options the core's own `scanAndRedact`
 documents, and only when the caller asked (#175): `policy` always, and
-`scanLimits` (the core's `limits`), `ruleset` and `placeholderFormatter` when
-given, validated and snapshotted once by `resolveScanConfig`
+`scanLimits` (the core's `limits`), `ruleset`, `placeholderFormatter` and, since
+#217, the declarative `actionPolicy` when given, validated and snapshotted once by `resolveScanConfig`
 (`packages/adapter/src/scan-options.ts`; Python: `scan_options.py`). Asking for
 one adds the only other read of the core, its `VERSION`, in the live factories,
 which check it against `SCAN_OPTION_CORE_FLOORS` and probe the options with one
@@ -77,7 +77,19 @@ passed, so the declared floor keeps working. They are whole-input options: the
 core has no ruleset for an incremental session, so `adapter-ai-context` rejects
 `ruleset` and `scanLimits` by name instead of claiming them. One policy decides:
 the caller's `policy` replaces the core's built-in policy, ruleset findings
-included, and is never combined with another.
+included, and is never combined with another: `actionPolicy` is a second way to
+state that one policy, as data, and is mutually exclusive with the callback
+(`TypeError` before any scan). The adapter snapshots it (an object is serialized
+once, bytes are copied) and passes it intact: the Rust core is the only parser and
+evaluator, and no adapter adds a detector or a policy evaluator. `actionPolicy`
+is the one option that also reaches the incremental sessions of
+`adapter-ai-context` (and so `adapter-mcp`). Its verified core floor is
+`0.1.0-beta.14`, the first *published* core that accepts it (`SCAN_OPTION_CORE_FLOORS`),
+stricter than the package range; the live factories reject an older core by name
+rather than let it ignore the key, and the injected `...With` APIs cannot check a
+version. An empty-text option probe shows the option is accepted, not that a
+policy decides correctly: decisions are asserted per host in the `action-policy`
+tests against the real core.
 
 **The one exception: `@redact-secret/adapter-ai-context`.** The core's
 [AI-context boundary contract](https://github.com/redact-secret/redact-secret/blob/main/docs/reference/ai-context-boundary.md)

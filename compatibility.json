@@ -1,7 +1,7 @@
 {
   "schema": "redact-secret-adapters/compatibility-v1",
   "description": "What each package here is qualified against, and how an unqualified host is refused or disclosed (#11). A range is qualified only because CI installs both of its endpoints from the registry on every push and pull request (range-endpoints, python-range-endpoints) and runs the real-host tests listed under qualifiedBy against them. `npm run compat:check` fails when this record, the package manifests, and CI disagree. Endpoints are the versions the range resolved to on endpointsResolvedAt; `npm run compat:check -- --resolve` re-resolves them.",
-  "endpointsResolvedAt": "2026-09-29",
+  "endpointsResolvedAt": "2026-10-07",
   "packages": [
     {
       "name": "@redact-secret/adapter",
@@ -13,7 +13,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "qualifiedBy": [
@@ -26,7 +26,9 @@
         "packages/adapter/test/key-context-live.test.ts",
         "packages/adapter/test/budget.test.ts",
         "packages/adapter/test/scan-options-live.test.ts",
-        "packages/adapter/test/scan-options.test.ts"
+        "packages/adapter/test/scan-options.test.ts",
+        "packages/adapter/test/action-policy.test.ts",
+        "packages/adapter/test/action-policy-live.test.ts"
       ]
     },
     {
@@ -39,7 +41,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         },
         {
           "name": "pino",
@@ -66,7 +68,8 @@
         "packages/adapter-pino/test/key-context-live.test.ts",
         "packages/adapter-pino/test/budget.test.ts",
         "packages/adapter-pino/test/line-limits.test.ts",
-        "packages/adapter-pino/test/scan-options-live.test.ts"
+        "packages/adapter-pino/test/scan-options-live.test.ts",
+        "packages/adapter-pino/test/action-policy-live.test.ts"
       ]
     },
     {
@@ -85,7 +88,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
@@ -106,7 +109,8 @@
         "packages/adapter/test/activation-live.test.ts",
         "packages/adapter-otel-trace/test/key-context-live.test.ts",
         "packages/adapter-otel-trace/test/budget.test.ts",
-        "packages/adapter-otel-trace/test/scan-options-live.test.ts"
+        "packages/adapter-otel-trace/test/scan-options-live.test.ts",
+        "packages/adapter-otel-trace/test/action-policy-live.test.ts"
       ]
     },
     {
@@ -125,7 +129,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
@@ -157,7 +161,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
@@ -178,7 +182,8 @@
         "packages/adapter-otel-logs/test/exporter-bytes.test.ts",
         "packages/adapter-otel-logs/test/log-record-processor.test.ts",
         "packages/adapter-otel-logs/test/pii-live.test.ts",
-        "packages/adapter-otel-logs/test/pii-activation.test.ts"
+        "packages/adapter-otel-logs/test/pii-activation.test.ts",
+        "packages/adapter-otel-logs/test/action-policy-live.test.ts"
       ]
     },
     {
@@ -191,7 +196,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
@@ -214,7 +219,9 @@
         "packages/adapter-ai-context/test/budget.test.ts",
         "packages/adapter-ai-context/test/scan-options.test.ts",
         "packages/adapter-ai-context/test/occurrence.test.ts",
-        "packages/adapter-ai-context/test/occurrence-live.test.ts"
+        "packages/adapter-ai-context/test/occurrence-live.test.ts",
+        "packages/adapter-ai-context/test/action-policy.test.ts",
+        "packages/adapter-ai-context/test/action-policy-live.test.ts"
       ]
     },
     {
@@ -245,7 +252,7 @@
           "name": "@redact-secret/core",
           "range": "^0.1.0-beta.6",
           "kind": "peerDependency",
-          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.13" }
+          "endpoints": { "lowest": "0.1.0-beta.6", "highest": "0.1.0-beta.14" }
         }
       ],
       "lifecycle": [
@@ -270,7 +277,8 @@
         "packages/adapter-mcp/test/vault-token.test.ts",
         "packages/adapter/test/activation-live.test.ts",
         "packages/adapter-mcp/test/budget.test.ts",
-        "packages/adapter-mcp/test/occurrence.test.ts"
+        "packages/adapter-mcp/test/occurrence.test.ts",
+        "packages/adapter-mcp/test/action-policy-live.test.ts"
       ]
     },
     {
@@ -283,7 +291,7 @@
           "name": "redact-secret",
           "range": ">=0.1.0b6,<0.2",
           "kind": "dependency",
-          "endpoints": { "lowest": "0.1.0b6", "highest": "0.1.0b13" }
+          "endpoints": { "lowest": "0.1.0b6", "highest": "0.1.0b14" }
         },
         {
           "name": "opentelemetry-sdk",
@@ -315,7 +323,8 @@
         "python/tests/test_pii_activation.py",
         "python/tests/test_key_context.py",
         "python/tests/test_budget.py",
-        "python/tests/test_scan_options.py"
+        "python/tests/test_scan_options.py",
+        "python/tests/test_action_policy.py"
       ]
     }
   ],
