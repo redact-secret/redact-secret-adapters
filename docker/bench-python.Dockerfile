@@ -4,7 +4,7 @@
 # The Python adapter-overhead harness in a pinned environment (#97). Build and
 # run it with `npm run bench:docker -- --python`. Same contract as
 # bench.Dockerfile: the image fixes the software, not the hardware.
-FROM python:3.14-slim-bookworm@sha256:c8137f4c460908c8763f281c8f22c431eb5c538514ba9553fc3a89c06b7cfb88
+FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
