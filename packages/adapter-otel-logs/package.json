@@ -38,13 +38,13 @@
     "@redact-secret/adapter": "^0.1.9"
   },
   "peerDependencies": {
-    "@opentelemetry/sdk-logs": ">=0.200.0 <=0.222.0",
+    "@opentelemetry/sdk-logs": ">=0.200.0 <=0.224.0",
     "@redact-secret/core": "^0.1.0-beta.6"
   },
   "devDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/otlp-transformer": "^0.222.0",
-    "@opentelemetry/sdk-logs": ">=0.200.0 <=0.222.0",
+    "@opentelemetry/otlp-transformer": "^0.223.0",
+    "@opentelemetry/sdk-logs": ">=0.200.0 <=0.224.0",
     "@redact-secret/core": "^0.1.0-beta.6"
   }
 }
