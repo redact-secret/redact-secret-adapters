@@ -38,9 +38,9 @@
     "@redact-secret/adapter-ai-context": "^0.1.5"
   },
   "peerDependencies": {
-    "@modelcontextprotocol/client": ">=2.0.0 <=2.3.1",
-    "@modelcontextprotocol/sdk": ">=1.26.0 <=1.32.1",
-    "@modelcontextprotocol/server": ">=2.0.0 <=2.3.1",
+    "@modelcontextprotocol/client": ">=2.0.0 <=2.4.1",
+    "@modelcontextprotocol/sdk": ">=1.26.0 <=1.32.3",
+    "@modelcontextprotocol/server": ">=2.0.0 <=2.4.1",
     "@redact-secret/core": "^0.1.0-beta.6"
   },
   "peerDependenciesMeta": {
@@ -55,9 +55,9 @@
     }
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": ">=2.0.0 <=2.3.1",
-    "@modelcontextprotocol/sdk": ">=1.26.0 <=1.32.1",
-    "@modelcontextprotocol/server": ">=2.0.0 <=2.3.1",
+    "@modelcontextprotocol/client": ">=2.0.0 <=2.4.1",
+    "@modelcontextprotocol/sdk": ">=1.26.0 <=1.32.3",
+    "@modelcontextprotocol/server": ">=2.0.0 <=2.4.1",
     "@redact-secret/core": "^0.1.0-beta.6"
   }
 }
